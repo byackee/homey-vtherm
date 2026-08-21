@@ -1,0 +1,155 @@
+{
+  "triggers": [
+    {
+      "id": "boiler_started",
+      "title": {
+        "en": "The boiler is started",
+        "fr": "La chaudière est démarrée",
+        "nl": "De ketel wordt gestart"
+      },
+      "tokens": [
+        {
+          "name": "emitters",
+          "type": "number",
+          "title": {
+            "en": "Emitters calling",
+            "fr": "Émetteurs en demande",
+            "nl": "Verwarmingen die vragen"
+          },
+          "example": 3
+        }
+      ]
+    },
+    {
+      "id": "boiler_stopped",
+      "title": {
+        "en": "The boiler is stopped",
+        "fr": "La chaudière est arrêtée",
+        "nl": "De ketel wordt gestopt"
+      }
+    }
+  ],
+  "conditions": [
+    {
+      "id": "boiler_is_active",
+      "title": {
+        "en": "The boiler !{{is|is not}} running",
+        "fr": "La chaudière !{{tourne|ne tourne pas}}",
+        "nl": "De ketel !{{draait|draait niet}}"
+      }
+    },
+    {
+      "id": "central_mode_is",
+      "title": {
+        "en": "The central mode !{{is|is not}}",
+        "fr": "Le mode central !{{est|n'est pas}}",
+        "nl": "De centrale modus !{{is|is niet}}"
+      },
+      "titleFormatted": {
+        "en": "The central mode !{{is|is not}} [[mode]]",
+        "fr": "Le mode central !{{est|n'est pas}} [[mode]]",
+        "nl": "De centrale modus !{{is|is niet}} [[mode]]"
+      },
+      "args": [
+        {
+          "name": "mode",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "auto",
+              "label": {
+                "en": "Automatic",
+                "fr": "Automatique",
+                "nl": "Automatisch"
+              }
+            },
+            {
+              "id": "stopped",
+              "label": {
+                "en": "All stopped",
+                "fr": "Tout arrêté",
+                "nl": "Alles gestopt"
+              }
+            },
+            {
+              "id": "heat_only",
+              "label": {
+                "en": "Heating only",
+                "fr": "Chauffage seul",
+                "nl": "Alleen verwarmen"
+              }
+            },
+            {
+              "id": "frost",
+              "label": {
+                "en": "Frost protection",
+                "fr": "Hors-gel",
+                "nl": "Vorstbeveiliging"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "set_central_mode",
+      "title": {
+        "en": "Set the central mode",
+        "fr": "Régler le mode central",
+        "nl": "Centrale modus instellen"
+      },
+      "titleFormatted": {
+        "en": "Set the central mode to [[mode]]",
+        "fr": "Régler le mode central sur [[mode]]",
+        "nl": "Zet de centrale modus op [[mode]]"
+      },
+      "hint": {
+        "en": "Applies to every thermostat that opted in, in its settings.",
+        "fr": "S'applique à tous les thermostats qui l'ont accepté dans leurs réglages.",
+        "nl": "Geldt voor elke thermostaat die dat in zijn instellingen heeft geaccepteerd."
+      },
+      "args": [
+        {
+          "name": "mode",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "auto",
+              "label": {
+                "en": "Automatic",
+                "fr": "Automatique",
+                "nl": "Automatisch"
+              }
+            },
+            {
+              "id": "stopped",
+              "label": {
+                "en": "All stopped",
+                "fr": "Tout arrêté",
+                "nl": "Alles gestopt"
+              }
+            },
+            {
+              "id": "heat_only",
+              "label": {
+                "en": "Heating only",
+                "fr": "Chauffage seul",
+                "nl": "Alleen verwarmen"
+              }
+            },
+            {
+              "id": "frost",
+              "label": {
+                "en": "Frost protection",
+                "fr": "Hors-gel",
+                "nl": "Vorstbeveiliging"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

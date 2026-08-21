@@ -1,0 +1,23 @@
+{
+  "type": "number",
+  "title": {
+    "en": "Temperature slope",
+    "fr": "Pente de température",
+    "nl": "Temperatuurhelling"
+  },
+  "desc": {
+    "en": "How fast the room is warming or cooling. A sharp drop is how open-window detection works.",
+    "fr": "Vitesse à laquelle la pièce se réchauffe ou se refroidit. Une chute franche déclenche la détection d'ouverture.",
+    "nl": "Hoe snel de kamer opwarmt of afkoelt. Een scherpe daling activeert de raamdetectie."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "units": {
+    "en": "°C/h"
+  },
+  "min": -120,
+  "max": 120,
+  "decimals": 2,
+  "insights": true
+}

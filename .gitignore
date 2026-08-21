@@ -1,0 +1,6 @@
+node_modules/
+.homeybuild/
+.testbuild/
+.omc/
+*.log
+.DS_Store

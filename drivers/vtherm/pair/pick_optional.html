@@ -1,0 +1,94 @@
+<!-- Sources facultatives. Chacune peut rester vide : le thermostat fonctionne sans. -->
+<script type="text/javascript" src="/homey.js" data-origin="pair"></script>
+<style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           margin: 0; padding: 16px; color: #1f2933; }
+    h2 { font-size: 17px; margin: 0 0 4px; }
+    p.lead { font-size: 13px; color: #62707d; margin: 0 0 16px; line-height: 1.45; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { border: 1px solid #dfe4e8; border-radius: 10px; padding: 11px 13px; margin-bottom: 8px;
+         cursor: pointer; display: flex; align-items: center; gap: 11px; transition: border-color .12s; }
+    li:hover { border-color: #b9c2ca; }
+    li.selected { border-color: #E8590C; background: #fff6f0; }
+    li .radio { width: 17px; height: 17px; border-radius: 50%; border: 2px solid #c3cbd2; flex: 0 0 auto; }
+    li.selected .radio { border-color: #E8590C; border-width: 5px; }
+    li .body { min-width: 0; }
+    li .name { font-size: 14px; font-weight: 600; }
+    li .meta { font-size: 12px; color: #7b8794; margin-top: 2px; }
+    .skip { font-size: 13px; color: #62707d; text-align: center; margin-top: 14px; }
+    .skip a { color: #E8590C; text-decoration: none; cursor: pointer; }
+    .empty { border: 1px dashed #dfe4e8; border-radius: 10px; padding: 20px; text-align: center;
+             color: #7b8794; font-size: 13px; line-height: 1.5; }
+
+    section { margin-bottom: 22px; }
+    h3 { font-size: 14px; margin: 0 0 3px; }
+    p.hint { font-size: 12px; color: #7b8794; margin: 0 0 9px; line-height: 1.45; }
+</style>
+
+<h2 data-i18n="pair.optional.title"></h2>
+<p class="lead" data-i18n="pair.optional.lead"></p>
+
+<section>
+  <h3 data-i18n="pair.optional.outdoor"></h3>
+  <p class="hint" data-i18n="pair.optional.outdoor_hint"></p>
+  <div class="slot" id="outdoor"></div>
+</section>
+<section>
+  <h3 data-i18n="pair.optional.window"></h3>
+  <p class="hint" data-i18n="pair.optional.window_hint"></p>
+  <div class="slot" id="window"></div>
+</section>
+<section>
+  <h3 data-i18n="pair.optional.motion"></h3>
+  <p class="hint" data-i18n="pair.optional.motion_hint"></p>
+  <div class="slot" id="motion"></div>
+</section>
+<section>
+  <h3 data-i18n="pair.optional.presence"></h3>
+  <p class="hint" data-i18n="pair.optional.presence_hint"></p>
+  <div class="slot" id="presence"></div>
+</section>
+
+<script type="text/javascript">
+    var SLOTS = [
+      { key: 'outdoor',  capability: 'measure_temperature', event: 'select_outdoor' },
+      { key: 'window',   capability: 'alarm_contact',       event: 'select_window' },
+      { key: 'motion',   capability: 'alarm_motion',        event: 'select_motion' },
+      { key: 'presence', capability: 'alarm_motion',        event: 'select_presence' }
+    ];
+
+    function renderSlot(slot, devices) {
+      var root = document.getElementById(slot.key);
+      var ul = document.createElement('ul');
+      var all = [{ id: null, name: Homey.__('pair.optional.none'), zoneName: null }].concat(devices);
+      all.forEach(function (d) {
+        var li = document.createElement('li');
+        if (d.id === null) li.classList.add('selected');
+        li.onclick = function () {
+          var items = root.querySelectorAll('li');
+          for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
+          li.classList.add('selected');
+          Homey.emit(slot.event, d.id).catch(function (e) { Homey.alert(e.message || String(e)); });
+        };
+        var r = document.createElement('div'); r.className = 'radio';
+        var b = document.createElement('div'); b.className = 'body';
+        var n = document.createElement('div'); n.className = 'name'; n.textContent = d.name;
+        b.appendChild(n);
+        if (d.zoneName) { var m = document.createElement('div'); m.className = 'meta'; m.textContent = d.zoneName; b.appendChild(m); }
+        li.appendChild(r); li.appendChild(b);
+        ul.appendChild(li);
+      });
+      root.innerHTML = '';
+      root.appendChild(ul);
+    }
+
+    function onHomeyReady(Homey) {
+      window.Homey = Homey;
+      Homey.setNavigationNext(true);
+      Promise.all(SLOTS.map(function (s) {
+        return Homey.emit('list_candidates', { capability: s.capability })
+          .then(function (devices) { renderSlot(s, devices); });
+      })).then(function () { Homey.ready(); })
+        .catch(function (err) { Homey.alert(err.message || String(err)); Homey.ready(); });
+    }
+</script>

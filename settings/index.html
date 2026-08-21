@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
+  <style>
+    .lead { font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
+    .lead-list { font-size: 13px; line-height: 1.5; margin: 0 0 18px; padding-left: 20px; }
+    .hint { font-size: 12px; color: #6b7280; margin: 4px 0 0; }
+    .status { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; font-size: 14px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #9ca3af; flex: none; }
+    .dot.on { background: #2ea043; }
+    .dot.off { background: #d1242f; }
+    .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+    .message { font-size: 13px; line-height: 1.5; min-height: 18px; margin-top: 12px; }
+    .message.error { color: #b91c1c; }
+    .message.ok { color: #1a7f37; }
+    .message.warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <header class="homey-header">
+    <h1 class="homey-title" data-i18n="settings.title"></h1>
+    <p class="homey-subtitle" data-i18n="settings.subtitle"></p>
+  </header>
+
+  <p class="lead" data-i18n="settings.lead"></p>
+  <ul class="lead-list">
+    <li data-i18n="settings.lead_valve"></li>
+    <li data-i18n="settings.lead_sensor"></li>
+  </ul>
+  <p class="lead" data-i18n="settings.lead_without"></p>
+
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">…</span>
+  </div>
+
+  <fieldset class="homey-form-fieldset">
+    <legend class="homey-form-legend" data-i18n="settings.broker"></legend>
+
+    <div class="homey-form-group">
+      <label class="homey-form-checkbox">
+        <input type="checkbox" id="enabled" />
+        <span class="homey-form-checkmark"></span>
+        <span class="homey-form-checkbox-text" data-i18n="settings.enabled"></span>
+      </label>
+      <p class="hint" data-i18n="settings.enabled_hint"></p>
+    </div>
+
+    <div class="homey-form-group">
+      <label class="homey-form-label" for="host" data-i18n="settings.host"></label>
+      <input class="homey-form-input" id="host" type="text" placeholder="192.168.1.50"
+        autocapitalize="off" autocorrect="off" spellcheck="false" />
+      <p class="hint" data-i18n="settings.host_hint"></p>
+    </div>
+
+    <div class="homey-form-group">
+      <label class="homey-form-label" for="port" data-i18n="settings.port"></label>
+      <input class="homey-form-input" id="port" type="number" value="1883" min="1" max="65535" />
+    </div>
+
+    <div class="homey-form-group">
+      <label class="homey-form-label" for="username" data-i18n="settings.username"></label>
+      <input class="homey-form-input" id="username" type="text"
+        autocapitalize="off" autocorrect="off" spellcheck="false" />
+      <p class="hint" data-i18n="settings.username_hint"></p>
+    </div>
+
+    <div class="homey-form-group">
+      <label class="homey-form-label" for="password" data-i18n="settings.password"></label>
+      <input class="homey-form-input" id="password" type="password" autocomplete="new-password" />
+      <p class="hint" id="passwordHint"></p>
+    </div>
+
+    <div class="homey-form-group">
+      <label class="homey-form-label" for="baseTopic" data-i18n="settings.base_topic"></label>
+      <input class="homey-form-input" id="baseTopic" type="text" placeholder="zigbee2mqtt"
+        autocapitalize="off" autocorrect="off" spellcheck="false" />
+      <p class="hint" data-i18n="settings.base_topic_hint"></p>
+    </div>
+  </fieldset>
+
+  <div class="actions">
+    <button class="homey-button-primary-full" id="save" data-i18n="settings.save"></button>
+    <button class="homey-button-secondary-full" id="test" data-i18n="settings.test"></button>
+  </div>
+  <p class="message" id="message"></p>
+
+  <script type="text/javascript">
+    function onHomeyReady(Homey) {
+      const $ = id => document.getElementById(id);
+      const DEFAULT_PORT = 1883;
+      const DEFAULT_BASE_TOPIC = 'zigbee2mqtt';
+
+      /**
+       * Le mot de passe n'est jamais relu : l'API ne le renvoie pas, et ce champ reste vide même
+       * quand un mot de passe est enregistré. Laisser vide conserve celui qui est stocké.
+       */
+      let hasPassword = false;
+
+      function setMessage(text, kind) {
+        $('message').textContent = text;
+        $('message').className = 'message' + (kind ? ' ' + kind : '');
+      }
+
+      function renderStatus(status) {
+        const enabled = status.enabled === true;
+        const available = status.available;
+        $('dot').className = 'dot ' + (enabled && available === true ? 'on' : (enabled ? 'off' : ''));
+        if (!enabled) {
+          $('statusText').textContent = Homey.__('settings.state_disabled');
+        } else if (available === true) {
+          $('statusText').textContent = Homey.__('settings.state_connected');
+        } else if (available === false) {
+          $('statusText').textContent = Homey.__('settings.state_disconnected');
+        } else {
+          $('statusText').textContent = Homey.__('settings.state_unknown');
+        }
+      }
+
+      function renderPasswordHint() {
+        $('passwordHint').textContent = hasPassword
+          ? Homey.__('settings.password_stored')
+          : Homey.__('settings.password_hint');
+      }
+
+      function fill(status) {
+        $('enabled').checked = status.enabled === true;
+        $('host').value = status.host || '';
+        $('port').value = status.port || DEFAULT_PORT;
+        $('username').value = status.username || '';
+        $('baseTopic').value = status.baseTopic || DEFAULT_BASE_TOPIC;
+        hasPassword = status.hasPassword === true;
+        renderPasswordHint();
+        renderStatus(status);
+      }
+
+      function currentFields() {
+        const port = parseInt($('port').value, 10);
+        return {
+          host: $('host').value.trim(),
+          port: isNaN(port) ? DEFAULT_PORT : port,
+          username: $('username').value.trim(),
+          password: $('password').value,
+          baseTopic: $('baseTopic').value.trim() || DEFAULT_BASE_TOPIC,
+        };
+      }
+
+      /** Traduit le diagnostic de `POST /broker/test` en une phrase qui dit quoi corriger. */
+      function describeOutcome(result) {
+        switch (result && result.status) {
+          case 'ok':
+            return [Homey.__('settings.test_ok', { count: result.deviceCount }), 'ok'];
+          case 'no_devices':
+            return [Homey.__('settings.test_no_devices'), 'warn'];
+          case 'auth_failed':
+            return [Homey.__('settings.test_auth_failed'), 'error'];
+          case 'refused':
+            return [Homey.__('settings.test_refused', { detail: result.detail || '' }), 'error'];
+          case 'timeout':
+            return [Homey.__('settings.test_timeout'), 'error'];
+          case 'invalid_config':
+            return [Homey.__('settings.test_invalid_config'), 'error'];
+          default:
+            return [Homey.__('settings.test_unknown'), 'error'];
+        }
+      }
+
+      Homey.api('GET', '/broker/status', null, (err, result) => {
+        if (err) return setMessage(err.message || String(err), 'error');
+        fill(result);
+      });
+
+      $('save').addEventListener('click', () => {
+        const fields = currentFields();
+        setMessage('');
+        $('save').disabled = true;
+
+        const writes = [
+          ['broker.enabled', $('enabled').checked],
+          ['broker.host', fields.host],
+          ['broker.port', fields.port],
+          ['broker.username', fields.username],
+          ['broker.baseTopic', fields.baseTopic],
+        ];
+        // Un champ vide conserve le mot de passe enregistré : la page ne peut pas le relire pour
+        // le réécrire, l'effacer par inadvertance couperait la dorsale sans le dire.
+        if (fields.password !== '') writes.push(['broker.password', fields.password]);
+
+        let pending = writes.length;
+        let failed = null;
+        writes.forEach(([key, value]) => {
+          Homey.set(key, value, (setErr) => {
+            if (setErr && !failed) failed = setErr;
+            if (--pending > 0) return;
+            $('save').disabled = false;
+            if (failed) return setMessage(failed.message || String(failed), 'error');
+            if (fields.password !== '') {
+              hasPassword = true;
+              $('password').value = '';
+              renderPasswordHint();
+            }
+            setMessage(Homey.__('settings.saved'), 'ok');
+            Homey.api('GET', '/broker/status', null, (statusErr, status) => {
+              if (!statusErr) renderStatus(status);
+            });
+          });
+        });
+      });
+
+      $('test').addEventListener('click', () => {
+        setMessage(Homey.__('settings.testing'));
+        $('test').disabled = true;
+
+        Homey.api('POST', '/broker/test', currentFields(), (err, result) => {
+          $('test').disabled = false;
+          if (err) return setMessage(err.message || String(err), 'error');
+          const [text, kind] = describeOutcome(result);
+          setMessage(text, kind);
+        });
+      });
+
+      Homey.ready();
+    }
+  </script>
+</body>
+</html>

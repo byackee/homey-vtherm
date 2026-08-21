@@ -1,0 +1,111 @@
+{
+  "name": {
+    "en": "Thermostat",
+    "fr": "Thermostat",
+    "nl": "Thermostaat"
+  },
+  "class": "thermostat",
+  "capabilities": [
+    "onoff",
+    "target_temperature",
+    "measure_temperature",
+    "vtherm_preset",
+    "vtherm_state",
+    "vtherm_regulated_setpoint",
+    "vtherm_power_percent",
+    "vtherm_valve_open",
+    "vtherm_slope",
+    "alarm_contact",
+    "alarm_motion",
+    "measure_battery"
+  ],
+  "capabilitiesOptions": {
+    "target_temperature": {
+      "min": 5,
+      "max": 35,
+      "step": 0.5,
+      "decimals": 1,
+      "title": {
+        "en": "Target",
+        "fr": "Consigne",
+        "nl": "Doel"
+      }
+    },
+    "measure_temperature": {
+      "title": {
+        "en": "Room",
+        "fr": "Pièce",
+        "nl": "Kamer"
+      }
+    },
+    "alarm_contact": {
+      "title": {
+        "en": "Window",
+        "fr": "Fenêtre",
+        "nl": "Raam"
+      }
+    },
+    "measure_battery": {
+      "title": {
+        "en": "Emitter battery",
+        "fr": "Pile de l'émetteur",
+        "nl": "Batterij verwarming"
+      }
+    }
+  },
+  "platforms": [
+    "local"
+  ],
+  "images": {
+    "small": "/drivers/vtherm/assets/images/small.png",
+    "large": "/drivers/vtherm/assets/images/large.png",
+    "xlarge": "/drivers/vtherm/assets/images/xlarge.png"
+  },
+  "pair": [
+    {
+      "id": "pick_room_sensor",
+      "navigation": {
+        "next": "pick_emitter"
+      }
+    },
+    {
+      "id": "pick_emitter",
+      "navigation": {
+        "prev": "pick_room_sensor",
+        "next": "pick_optional"
+      }
+    },
+    {
+      "id": "pick_optional",
+      "navigation": {
+        "prev": "pick_emitter",
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ],
+  "repair": [
+    {
+      "id": "pick_room_sensor",
+      "navigation": {
+        "next": "pick_emitter"
+      }
+    },
+    {
+      "id": "pick_emitter",
+      "navigation": {
+        "prev": "pick_room_sensor",
+        "next": "pick_optional"
+      }
+    },
+    {
+      "id": "pick_optional",
+      "navigation": {
+        "prev": "pick_emitter"
+      }
+    }
+  ]
+}

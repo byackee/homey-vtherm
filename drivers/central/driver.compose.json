@@ -1,0 +1,38 @@
+{
+  "name": {
+    "en": "Central configuration",
+    "fr": "Configuration centrale",
+    "nl": "Centrale configuratie"
+  },
+  "class": "other",
+  "capabilities": [
+    "vtherm_central_mode",
+    "vtherm_boiler_active",
+    "vtherm_nb_active"
+  ],
+  "platforms": [
+    "local"
+  ],
+  "images": {
+    "small": "/drivers/central/assets/images/small.png",
+    "large": "/drivers/central/assets/images/large.png",
+    "xlarge": "/drivers/central/assets/images/xlarge.png"
+  },
+  "pair": [
+    {
+      "id": "pick_boiler",
+      "navigation": {
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ],
+  "repair": [
+    {
+      "id": "pick_boiler"
+    }
+  ]
+}

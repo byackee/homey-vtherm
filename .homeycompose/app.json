@@ -1,0 +1,77 @@
+{
+  "id": "com.dataweavelabs.vtherm",
+  "version": "1.0.0",
+  "compatibility": ">=12.7.0",
+  "sdk": 3,
+  "platforms": [
+    "local"
+  ],
+  "brandColor": "#E8590C",
+  "name": {
+    "en": "Adaptive Thermostat",
+    "fr": "Adaptive Thermostat",
+    "nl": "Adaptive Thermostat"
+  },
+  "description": {
+    "en": "Turn any temperature sensor and any heater into a thermostat that actually regulates",
+    "fr": "Transformez n'importe quel capteur et n'importe quel émetteur en thermostat qui régule vraiment",
+    "nl": "Maak van elke temperatuursensor en verwarming een thermostaat die echt regelt"
+  },
+  "category": [
+    "climate"
+  ],
+  "permissions": [
+    "homey:manager:api"
+  ],
+  "api": {
+    "getBrokerStatus": {
+      "method": "GET",
+      "path": "/broker/status"
+    },
+    "testBroker": {
+      "method": "POST",
+      "path": "/broker/test"
+    }
+  },
+  "tags": {
+    "en": [
+      "thermostat",
+      "heating",
+      "tpi",
+      "radiator valve",
+      "boiler",
+      "radiator",
+      "trv",
+      "proportional"
+    ],
+    "fr": [
+      "thermostat",
+      "chauffage",
+      "tpi",
+      "vanne",
+      "chaudière",
+      "radiateur",
+      "trv",
+      "proportionnel"
+    ],
+    "nl": [
+      "thermostaat",
+      "verwarming",
+      "tpi",
+      "radiatorkraan",
+      "ketel",
+      "radiator",
+      "proportioneel"
+    ]
+  },
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "author": {
+    "name": "DataWeave Labs",
+    "email": "admin@dataweavelabs.com"
+  },
+  "support": "mailto:admin@dataweavelabs.com"
+}

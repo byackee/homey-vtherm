@@ -1,0 +1,23 @@
+{
+  "type": "number",
+  "title": {
+    "en": "Valve opening",
+    "fr": "Ouverture de vanne",
+    "nl": "Klepopening"
+  },
+  "desc": {
+    "en": "How far the valve is commanded open. Requires the Zigbee2MQTT backend.",
+    "fr": "Ouverture commandée à la vanne. Nécessite la dorsale Zigbee2MQTT.",
+    "nl": "Hoe ver de klep wordt geopend. Vereist de Zigbee2MQTT-backend."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "units": {
+    "en": "%"
+  },
+  "min": 0,
+  "max": 100,
+  "decimals": 0,
+  "insights": true
+}

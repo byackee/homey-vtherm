@@ -1,0 +1,51 @@
+{
+  "type": "enum",
+  "title": {
+    "en": "Central mode",
+    "fr": "Mode central",
+    "nl": "Centrale modus"
+  },
+  "desc": {
+    "en": "Overrides every thermostat that opted in to central control.",
+    "fr": "Prime sur tous les thermostats qui ont accepté le pilotage central.",
+    "nl": "Heeft voorrang op elke thermostaat die centrale sturing accepteert."
+  },
+  "getable": true,
+  "setable": true,
+  "uiComponent": "picker",
+  "insights": true,
+  "values": [
+    {
+      "id": "auto",
+      "title": {
+        "en": "Automatic",
+        "fr": "Automatique",
+        "nl": "Automatisch"
+      }
+    },
+    {
+      "id": "stopped",
+      "title": {
+        "en": "All stopped",
+        "fr": "Tout arrêté",
+        "nl": "Alles gestopt"
+      }
+    },
+    {
+      "id": "heat_only",
+      "title": {
+        "en": "Heating only",
+        "fr": "Chauffage seul",
+        "nl": "Alleen verwarmen"
+      }
+    },
+    {
+      "id": "frost",
+      "title": {
+        "en": "Frost protection",
+        "fr": "Hors-gel",
+        "nl": "Vorstbeveiliging"
+      }
+    }
+  ]
+}

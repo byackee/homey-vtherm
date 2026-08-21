@@ -1,0 +1,23 @@
+{
+  "type": "number",
+  "title": {
+    "en": "Heating power",
+    "fr": "Puissance de chauffe",
+    "nl": "Verwarmingsvermogen"
+  },
+  "desc": {
+    "en": "Share of the cycle the emitter is asked to heat, as computed by the proportional algorithm.",
+    "fr": "Part du cycle pendant laquelle l'émetteur doit chauffer, calculée par l'algorithme proportionnel.",
+    "nl": "Deel van de cyclus waarin de verwarming moet verwarmen, berekend door het proportionele algoritme."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "units": {
+    "en": "%"
+  },
+  "min": 0,
+  "max": 100,
+  "decimals": 0,
+  "insights": true
+}

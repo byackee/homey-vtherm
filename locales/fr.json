@@ -1,0 +1,66 @@
+{
+  "pair": {
+    "empty": "Aucun appareil adapté trouvé. Ajoutez-en un à Homey, puis revenez ici.",
+    "room_sensor": {
+      "title": "Quel capteur mesure cette pièce ?",
+      "lead": "Choisissez le thermomètre qui lit la température qui vous intéresse vraiment — celui de la pièce, pas celui intégré à la vanne du radiateur. Tout ce que fait le thermostat découle de cette mesure."
+    },
+    "emitter": {
+      "title": "Qu'est-ce qui chauffe cette pièce ?",
+      "lead": "La vanne, le thermostat ou le radiateur que ce thermostat va piloter. Il doit accepter une consigne de température."
+    },
+    "boiler": {
+      "title": "Quel interrupteur démarre la chaudière ?",
+      "lead": "Cet appareil est allumé quand assez de pièces demandent de la chaleur, et éteint dès qu'aucune n'en demande. Vérifiez que votre chaudière a ses propres sécurités avant de laisser quoi que ce soit la piloter."
+    },
+    "optional": {
+      "title": "Autre chose pour l'aider à décider ?",
+      "lead": "Tout ceci est facultatif. Laissez vide et le thermostat fonctionne quand même — chaque source le rend simplement plus fin.",
+      "none": "Aucun",
+      "outdoor": "Température extérieure",
+      "outdoor_hint": "Permet à l'algorithme d'anticiper les déperditions au lieu de seulement les subir. Sans elle, l'auto-régulation reste inactive.",
+      "window": "Contact d'ouverture",
+      "window_hint": "Cesse de chauffer une pièce qu'on aère, après un délai pour qu'une ouverture brève ne compte pas.",
+      "motion": "Détecteur de mouvement",
+      "motion_hint": "Active le preset Activité, qui suit le mouvement dans cette pièce.",
+      "presence": "Capteur de présence",
+      "presence_hint": "Quand personne n'est là, chaque preset bascule sur sa température d'absence."
+    }
+  },
+  "settings": {
+    "title": "Dorsale Zigbee2MQTT",
+    "subtitle": "Facultatif. Débloque le contrôle direct de vanne sur les SONOFF TRVZB et similaires.",
+    "lead": "L'app Zigbee2MQTT pour Homey n'expose pas tout ce que sait faire une vanne thermostatique : quatre des propriétés dont ce thermostat a besoin n'existent tout simplement pas en capability Homey. Si vous lui donnez l'accès à votre broker MQTT, l'app publie elle-même vers Zigbee2MQTT et débloque deux choses :",
+    "lead_valve": "L'ouverture directe de la vanne — l'algorithme fixe l'ouverture au lieu de la piloter indirectement par une consigne.",
+    "lead_sensor": "L'injection de la température de pièce — la vanne régule sur votre capteur de pièce, et non sur son propre thermomètre, collé au radiateur et toujours trop chaud.",
+    "lead_without": "Tout le reste fonctionne sans ça. Laissez désactivé et ces deux fonctions sont simplement indisponibles — chaque pièce est régulée quand même, par consigne décalée. Indiquez ici le broker qu'utilise déjà votre installation Zigbee2MQTT.",
+    "broker": "Broker MQTT",
+    "enabled": "Activer la dorsale Zigbee2MQTT",
+    "enabled_hint": "Prend effet au redémarrage de l'app.",
+    "host": "Adresse",
+    "host_hint": "Nom d'hôte ou adresse IP du broker. Un schéma et un port peuvent être inclus, par exemple mqtts://broker.local:8883.",
+    "port": "Port",
+    "username": "Identifiant",
+    "username_hint": "Laissez vide si votre broker accepte les connexions anonymes.",
+    "password": "Mot de passe",
+    "password_hint": "Laissez vide si votre broker accepte les connexions anonymes.",
+    "password_stored": "Un mot de passe est enregistré. Laissez vide pour le conserver, ou saisissez-en un nouveau pour le remplacer.",
+    "base_topic": "Topic de base",
+    "base_topic_hint": "Le topic de base de votre installation Zigbee2MQTT. Par défaut : zigbee2mqtt.",
+    "save": "Enregistrer",
+    "saved": "Enregistré.",
+    "test": "Tester la connexion",
+    "testing": "Connexion en cours…",
+    "state_disabled": "Dorsale désactivée.",
+    "state_connected": "Dorsale connectée.",
+    "state_disconnected": "Dorsale non connectée.",
+    "state_unknown": "État inconnu — l'app n'a pas encore démarré la dorsale.",
+    "test_ok": "Connecté. {{count}} appareils vus sur ce topic de base.",
+    "test_no_devices": "Connecté au broker, mais rien n'est arrivé sur <topic de base>/bridge/devices. Le topic de base est presque certainement faux.",
+    "test_auth_failed": "Le broker a refusé les identifiants. Vérifiez l'identifiant et le mot de passe.",
+    "test_refused": "Le broker est injoignable ({{detail}}). Vérifiez l'adresse et le port.",
+    "test_timeout": "Aucune réponse du broker en dix secondes. Vérifiez l'adresse, le port, et que le broker est joignable depuis Homey.",
+    "test_invalid_config": "Ces réglages sont incomplets ou invalides. Vérifiez l'adresse, le port et le topic de base.",
+    "test_unknown": "Le test a renvoyé une réponse inattendue."
+  }
+}

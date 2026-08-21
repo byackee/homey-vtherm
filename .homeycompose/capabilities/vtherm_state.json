@@ -1,0 +1,91 @@
+{
+  "type": "enum",
+  "title": {
+    "en": "Status",
+    "fr": "État",
+    "nl": "Status"
+  },
+  "desc": {
+    "en": "What the thermostat is actually doing right now, which may override the preset you chose.",
+    "fr": "Ce que le thermostat fait réellement, ce qui peut primer sur le preset demandé.",
+    "nl": "Wat de thermostaat nu werkelijk doet, wat voorrang kan hebben op het gekozen preset."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "insights": true,
+  "values": [
+    {
+      "id": "off",
+      "title": {
+        "en": "Off",
+        "fr": "Éteint",
+        "nl": "Uit"
+      }
+    },
+    {
+      "id": "idle",
+      "title": {
+        "en": "Idle",
+        "fr": "Au repos",
+        "nl": "Inactief"
+      }
+    },
+    {
+      "id": "heating",
+      "title": {
+        "en": "Heating",
+        "fr": "En chauffe",
+        "nl": "Verwarmen"
+      }
+    },
+    {
+      "id": "window",
+      "title": {
+        "en": "Window open",
+        "fr": "Fenêtre ouverte",
+        "nl": "Raam open"
+      }
+    },
+    {
+      "id": "away",
+      "title": {
+        "en": "Away",
+        "fr": "Absence",
+        "nl": "Afwezig"
+      }
+    },
+    {
+      "id": "activity",
+      "title": {
+        "en": "Activity",
+        "fr": "Activité",
+        "nl": "Activiteit"
+      }
+    },
+    {
+      "id": "central",
+      "title": {
+        "en": "Central mode",
+        "fr": "Mode central",
+        "nl": "Centrale modus"
+      }
+    },
+    {
+      "id": "safety",
+      "title": {
+        "en": "Safety",
+        "fr": "Sécurité",
+        "nl": "Veiligheid"
+      }
+    },
+    {
+      "id": "power",
+      "title": {
+        "en": "Load shedding",
+        "fr": "Délestage",
+        "nl": "Belastingafschakeling"
+      }
+    }
+  ]
+}

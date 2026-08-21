@@ -1,0 +1,19 @@
+{
+  "type": "number",
+  "title": {
+    "en": "Emitters calling for heat",
+    "fr": "Émetteurs en demande",
+    "nl": "Verwarmingen die warmte vragen"
+  },
+  "desc": {
+    "en": "Counted in emitters, not in thermostats — one thermostat can drive several.",
+    "fr": "Compté en émetteurs, pas en thermostats — un thermostat peut en piloter plusieurs.",
+    "nl": "Geteld in verwarmingen, niet in thermostaten — één thermostaat kan er meerdere aansturen."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "min": 0,
+  "decimals": 0,
+  "insights": true
+}

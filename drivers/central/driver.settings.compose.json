@@ -1,0 +1,93 @@
+[
+  {
+    "type": "group",
+    "label": {
+      "en": "Boiler",
+      "fr": "Chaudière",
+      "nl": "Ketel"
+    },
+    "children": [
+      {
+        "id": "boiler_threshold",
+        "type": "number",
+        "label": {
+          "en": "Emitters needed to start the boiler",
+          "fr": "Émetteurs nécessaires pour démarrer la chaudière",
+          "nl": "Verwarmingen nodig om de ketel te starten"
+        },
+        "value": 1,
+        "min": 1,
+        "max": 20,
+        "step": 1,
+        "hint": {
+          "en": "Counted in emitters, not thermostats.",
+          "fr": "Compté en émetteurs, pas en thermostats.",
+          "nl": "Geteld in verwarmingen, niet thermostaten."
+        }
+      },
+      {
+        "id": "boiler_activation_delay",
+        "type": "number",
+        "label": {
+          "en": "Delay before starting",
+          "fr": "Délai avant démarrage",
+          "nl": "Vertraging voor starten"
+        },
+        "value": 0,
+        "min": 0,
+        "max": 600,
+        "step": 5,
+        "units": {
+          "en": "s"
+        },
+        "hint": {
+          "en": "Shutdown is never delayed. That is deliberate: a boiler running against closed valves builds pressure.",
+          "fr": "L'extinction n'est jamais retardée. C'est délibéré : une chaudière qui tourne vannes fermées monte en pression.",
+          "nl": "Uitschakelen wordt nooit vertraagd. Dat is bewust."
+        }
+      },
+      {
+        "id": "boiler_min_dwell",
+        "type": "number",
+        "label": {
+          "en": "Minimum time before restarting",
+          "fr": "Délai minimal avant un nouvel allumage",
+          "nl": "Minimale tijd voor herstart"
+        },
+        "value": 60,
+        "min": 60,
+        "max": 1800,
+        "step": 10,
+        "units": {
+          "en": "s"
+        },
+        "hint": {
+          "en": "Guards against a burst of events pulsing the boiler. Cannot be set below 60 seconds.",
+          "fr": "Protège d'une rafale d'événements qui pulserait la chaudière. Ne peut pas descendre sous 60 secondes.",
+          "nl": "Beschermt tegen pulseren van de ketel. Kan niet onder 60 seconden."
+        }
+      },
+      {
+        "id": "boiler_keepalive",
+        "type": "number",
+        "label": {
+          "en": "Repeat the start command every",
+          "fr": "Répéter l'ordre de démarrage toutes les",
+          "nl": "Herhaal het startcommando elke"
+        },
+        "value": 0,
+        "min": 0,
+        "max": 3600,
+        "step": 30,
+        "units": {
+          "en": "s"
+        },
+        "hint": {
+          "en": "Zero disables it. Useful only if your relay can miss a command.",
+          "fr": "Zéro désactive. Utile seulement si votre relais peut rater un ordre.",
+          "nl": "Nul schakelt uit."
+        }
+      }
+    ]
+  }
+]

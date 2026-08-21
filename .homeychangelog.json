@@ -1,0 +1,7 @@
+{
+  "1.0.0": {
+    "en": "First release. Turns any temperature sensor and any heater into a proportional thermostat, with presets, window detection, presence and motion, and central boiler control.",
+    "fr": "Première version. Transforme n'importe quel capteur et n'importe quel émetteur en thermostat proportionnel, avec presets, détection d'ouverture, présence et mouvement, et pilotage de chaudière centrale.",
+    "nl": "Eerste release. Maakt van elke temperatuursensor en verwarming een proportionele thermostaat, met presets, raamdetectie, aanwezigheid en beweging, en centrale ketelsturing."
+  }
+}

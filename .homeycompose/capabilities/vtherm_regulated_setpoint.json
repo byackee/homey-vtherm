@@ -1,0 +1,23 @@
+{
+  "type": "number",
+  "title": {
+    "en": "Regulated setpoint",
+    "fr": "Consigne régulée",
+    "nl": "Gereguleerd setpoint"
+  },
+  "desc": {
+    "en": "The setpoint actually sent to the emitter, offset included. Differs from your target on purpose.",
+    "fr": "La consigne réellement envoyée à l'émetteur, offset compris. Elle diffère volontairement de la vôtre.",
+    "nl": "Het setpoint dat werkelijk naar de verwarming gaat, inclusief offset. Wijkt bewust af."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "units": {
+    "en": "°C"
+  },
+  "min": 0,
+  "max": 40,
+  "decimals": 1,
+  "insights": true
+}

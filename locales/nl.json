@@ -1,0 +1,66 @@
+{
+  "pair": {
+    "empty": "Geen geschikt apparaat gevonden. Voeg er eerst een toe aan Homey en kom dan terug.",
+    "room_sensor": {
+      "title": "Welke sensor meet deze kamer?",
+      "lead": "Kies de thermometer die de temperatuur meet waar het u om gaat — die in de kamer, niet die in de radiatorkraan. Alles wat de thermostaat doet volgt uit deze meting."
+    },
+    "emitter": {
+      "title": "Wat verwarmt deze kamer?",
+      "lead": "De radiatorkraan, thermostaat of verwarming die deze thermostaat aanstuurt. Hij moet een doeltemperatuur accepteren."
+    },
+    "boiler": {
+      "title": "Welke schakelaar start de ketel?",
+      "lead": "Dit apparaat wordt ingeschakeld wanneer genoeg kamers warmte vragen, en uitgeschakeld zodra geen enkele dat doet. Controleer of uw ketel eigen beveiligingen heeft."
+    },
+    "optional": {
+      "title": "Nog iets om mee te beslissen?",
+      "lead": "Dit is allemaal optioneel. Laat het leeg en de thermostaat werkt gewoon — elke bron maakt hem alleen slimmer.",
+      "none": "Geen",
+      "outdoor": "Buitentemperatuur",
+      "outdoor_hint": "Laat het algoritme warmteverlies anticiperen in plaats van er alleen op te reageren. Zonder deze blijft zelfregulering uit.",
+      "window": "Raam- of deurcontact",
+      "window_hint": "Stopt het verwarmen van een kamer die gelucht wordt, na een vertraging.",
+      "motion": "Bewegingssensor",
+      "motion_hint": "Activeert het Activiteit-preset, dat beweging in deze kamer volgt.",
+      "presence": "Aanwezigheidssensor",
+      "presence_hint": "Als niemand thuis is, valt elk preset terug op zijn afwezigheidstemperatuur."
+    }
+  },
+  "settings": {
+    "title": "Zigbee2MQTT-ruggengraat",
+    "subtitle": "Optioneel. Ontgrendelt directe kraanbesturing op SONOFF TRVZB en vergelijkbare kranen.",
+    "lead": "De Zigbee2MQTT-app voor Homey toont niet alles wat een thermostaatkraan kan: vier van de eigenschappen die deze thermostaat nodig heeft bestaan simpelweg niet als Homey-capability. Geeft u toegang tot uw MQTT-broker, dan publiceert de app zelf naar Zigbee2MQTT en ontgrendelt twee dingen:",
+    "lead_valve": "Directe kraanopening — het algoritme bepaalt hoe ver de kraan opengaat, in plaats van dat indirect via een doeltemperatuur te sturen.",
+    "lead_sensor": "Injectie van de kamertemperatuur — de kraan regelt op uw kamersensor in plaats van op zijn eigen thermometer, die tegen de radiator zit en altijd te warm meet.",
+    "lead_without": "Al het andere werkt hier zonder. Laat dit uit en die twee functies zijn eenvoudigweg niet beschikbaar — elke kamer wordt nog steeds geregeld, met een verschoven doeltemperatuur. Wijs dit naar dezelfde broker die uw Zigbee2MQTT-installatie al gebruikt.",
+    "broker": "MQTT-broker",
+    "enabled": "Zigbee2MQTT-ruggengraat inschakelen",
+    "enabled_hint": "Wordt van kracht zodra de app herstart.",
+    "host": "Adres",
+    "host_hint": "Hostnaam of IP-adres van de broker. Een schema en een poort mogen erbij, bijvoorbeeld mqtts://broker.local:8883.",
+    "port": "Poort",
+    "username": "Gebruikersnaam",
+    "username_hint": "Laat leeg als uw broker anonieme verbindingen accepteert.",
+    "password": "Wachtwoord",
+    "password_hint": "Laat leeg als uw broker anonieme verbindingen accepteert.",
+    "password_stored": "Er is een wachtwoord opgeslagen. Laat dit leeg om het te behouden, of typ een nieuw wachtwoord om het te vervangen.",
+    "base_topic": "Basistopic",
+    "base_topic_hint": "Het basistopic van uw Zigbee2MQTT-installatie. Standaard: zigbee2mqtt.",
+    "save": "Opslaan",
+    "saved": "Opgeslagen.",
+    "test": "Verbinding testen",
+    "testing": "Verbinden…",
+    "state_disabled": "Ruggengraat uitgeschakeld.",
+    "state_connected": "Ruggengraat verbonden.",
+    "state_disconnected": "Ruggengraat niet verbonden.",
+    "state_unknown": "Status onbekend — de app heeft de ruggengraat nog niet gestart.",
+    "test_ok": "Verbonden. {{count}} apparaten gezien op dit basistopic.",
+    "test_no_devices": "Verbonden met de broker, maar er kwam niets binnen op <basistopic>/bridge/devices. Het basistopic klopt vrijwel zeker niet.",
+    "test_auth_failed": "De broker heeft de inloggegevens geweigerd. Controleer de gebruikersnaam en het wachtwoord.",
+    "test_refused": "De broker is niet bereikbaar ({{detail}}). Controleer het adres en de poort.",
+    "test_timeout": "Geen antwoord van de broker binnen tien seconden. Controleer het adres en de poort, en of de broker vanaf Homey bereikbaar is.",
+    "test_invalid_config": "Deze instellingen zijn onvolledig of ongeldig. Controleer het adres, de poort en het basistopic.",
+    "test_unknown": "De test gaf een onverwacht antwoord."
+  }
+}

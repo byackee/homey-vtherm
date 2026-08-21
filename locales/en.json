@@ -1,0 +1,66 @@
+{
+  "pair": {
+    "empty": "No suitable device found. Add one to Homey first, then come back.",
+    "room_sensor": {
+      "title": "Which sensor measures this room?",
+      "lead": "Pick the thermometer that reads the temperature you actually care about — the one in the room, not the one built into the radiator valve. Everything the thermostat does follows from this reading."
+    },
+    "emitter": {
+      "title": "What heats this room?",
+      "lead": "The radiator valve, thermostat or heater this thermostat will drive. It must accept a target temperature."
+    },
+    "boiler": {
+      "title": "Which switch starts the boiler?",
+      "lead": "This device is turned on when enough rooms call for heat, and off as soon as none do. Check that your boiler has its own safety cut-out before letting anything drive it."
+    },
+    "optional": {
+      "title": "Anything else to help it decide?",
+      "lead": "All of these are optional. Leave them empty and the thermostat still works — each one simply makes it smarter.",
+      "none": "None",
+      "outdoor": "Outdoor temperature",
+      "outdoor_hint": "Lets the algorithm anticipate heat loss instead of only reacting to it. Without it, self-regulation stays off.",
+      "window": "Window or door contact",
+      "window_hint": "Stops heating a room that is being aired, after a delay so a quick opening does not count.",
+      "motion": "Motion sensor",
+      "motion_hint": "Enables the Activity preset, which follows movement in this room.",
+      "presence": "Presence sensor",
+      "presence_hint": "When nobody is home, every preset falls back to its away temperature."
+    }
+  },
+  "settings": {
+    "title": "Zigbee2MQTT backbone",
+    "subtitle": "Optional. Unlocks direct valve control on SONOFF TRVZB and similar valves.",
+    "lead": "The Homey Zigbee2MQTT app does not expose everything a thermostatic valve can do: four of the properties this thermostat needs simply do not exist as Homey capabilities. If you give it access to your MQTT broker, the app publishes to Zigbee2MQTT itself and unlocks two things:",
+    "lead_valve": "Direct valve opening — the algorithm sets how far the valve opens, instead of steering it indirectly with a setpoint.",
+    "lead_sensor": "Room temperature injection — the valve regulates on your room sensor instead of its own thermometer, which sits against the radiator and always reads too warm.",
+    "lead_without": "Everything else works without this. Leave it off and those two features are simply unavailable — every room is still regulated, using an offset setpoint. Point this at the same broker your Zigbee2MQTT installation already uses.",
+    "broker": "MQTT broker",
+    "enabled": "Enable the Zigbee2MQTT backbone",
+    "enabled_hint": "Takes effect when the app restarts.",
+    "host": "Address",
+    "host_hint": "Host name or IP address of the broker. A scheme and a port may be included, for example mqtts://broker.local:8883.",
+    "port": "Port",
+    "username": "Username",
+    "username_hint": "Leave empty if your broker accepts anonymous connections.",
+    "password": "Password",
+    "password_hint": "Leave empty if your broker accepts anonymous connections.",
+    "password_stored": "A password is stored. Leave this empty to keep it, or type a new one to replace it.",
+    "base_topic": "Base topic",
+    "base_topic_hint": "The base topic of your Zigbee2MQTT installation. Default: zigbee2mqtt.",
+    "save": "Save",
+    "saved": "Saved.",
+    "test": "Test the connection",
+    "testing": "Connecting…",
+    "state_disabled": "Backbone disabled.",
+    "state_connected": "Backbone connected.",
+    "state_disconnected": "Backbone not connected.",
+    "state_unknown": "State unknown — the app has not started the backbone yet.",
+    "test_ok": "Connected. {{count}} devices seen on this base topic.",
+    "test_no_devices": "Connected to the broker, but nothing arrived on <base topic>/bridge/devices. The base topic is almost certainly wrong.",
+    "test_auth_failed": "The broker refused the credentials. Check the username and the password.",
+    "test_refused": "The broker could not be reached ({{detail}}). Check the address and the port.",
+    "test_timeout": "No answer from the broker within ten seconds. Check the address and the port, and that the broker is reachable from Homey.",
+    "test_invalid_config": "These settings are incomplete or invalid. Check the address, the port and the base topic.",
+    "test_unknown": "The test returned an unexpected answer."
+  }
+}

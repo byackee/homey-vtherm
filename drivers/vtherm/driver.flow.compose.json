@@ -1,0 +1,475 @@
+{
+  "triggers": [
+    {
+      "id": "demand_started",
+      "title": {
+        "en": "It starts calling for heat",
+        "fr": "Il commence à demander de la chaleur",
+        "nl": "Hij begint warmte te vragen"
+      },
+      "hint": {
+        "en": "Fires when this thermostat goes from not needing heat to needing it. Useful to drive a boiler yourself instead of using the central configuration.",
+        "fr": "Se déclenche quand ce thermostat passe de « pas besoin » à « besoin de chaleur ». Utile pour piloter une chaudière soi-même plutôt que par la configuration centrale.",
+        "nl": "Wordt geactiveerd wanneer deze thermostaat warmte gaat vragen."
+      },
+      "tokens": [
+        {
+          "name": "power_percent",
+          "type": "number",
+          "title": {
+            "en": "Heating power",
+            "fr": "Puissance de chauffe",
+            "nl": "Verwarmingsvermogen"
+          },
+          "example": 45
+        }
+      ]
+    },
+    {
+      "id": "demand_stopped",
+      "title": {
+        "en": "It stops calling for heat",
+        "fr": "Il cesse de demander de la chaleur",
+        "nl": "Hij stopt met warmte vragen"
+      }
+    },
+    {
+      "id": "window_opened",
+      "title": {
+        "en": "An open window is detected",
+        "fr": "Une ouverture est détectée",
+        "nl": "Een open raam wordt gedetecteerd"
+      },
+      "hint": {
+        "en": "Fires once the detection is confirmed, after the configured delay — not the instant the contact opens.",
+        "fr": "Se déclenche une fois la détection confirmée, après le délai configuré — pas à l'instant où le contact s'ouvre.",
+        "nl": "Wordt geactiveerd zodra de detectie is bevestigd, na de ingestelde vertraging."
+      }
+    },
+    {
+      "id": "window_closed",
+      "title": {
+        "en": "The window is closed again",
+        "fr": "L'ouverture est refermée",
+        "nl": "Het raam is weer dicht"
+      }
+    },
+    {
+      "id": "sensor_went_quiet",
+      "title": {
+        "en": "The room sensor goes quiet",
+        "fr": "Le capteur de pièce se tait",
+        "nl": "De kamersensor valt stil"
+      },
+      "hint": {
+        "en": "Fires when no fresh reading has arrived for too long. The thermostat stops asking for heat rather than regulating on a dead value — this is your warning that a battery is flat.",
+        "fr": "Se déclenche quand aucune mesure fraîche n'est arrivée depuis trop longtemps. Le thermostat cesse alors de demander de la chaleur plutôt que de réguler sur une valeur morte — c'est votre avertissement qu'une pile est vide.",
+        "nl": "Wordt geactiveerd wanneer er te lang geen verse meting is. De thermostaat stopt met warmte vragen."
+      }
+    }
+  ],
+  "conditions": [
+    {
+      "id": "preset_is",
+      "title": {
+        "en": "The preset !{{is|is not}}",
+        "fr": "Le preset !{{est|n'est pas}}",
+        "nl": "Het preset !{{is|is niet}}"
+      },
+      "titleFormatted": {
+        "en": "The preset !{{is|is not}} [[preset]]",
+        "fr": "Le preset !{{est|n'est pas}} [[preset]]",
+        "nl": "Het preset !{{is|is niet}} [[preset]]"
+      },
+      "args": [
+        {
+          "name": "preset",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "frost",
+              "label": {
+                "en": "Frost protection",
+                "fr": "Hors-gel",
+                "nl": "Vorstbeveiliging"
+              }
+            },
+            {
+              "id": "eco",
+              "label": {
+                "en": "Eco",
+                "fr": "Éco",
+                "nl": "Eco"
+              }
+            },
+            {
+              "id": "comfort",
+              "label": {
+                "en": "Comfort",
+                "fr": "Confort",
+                "nl": "Comfort"
+              }
+            },
+            {
+              "id": "boost",
+              "label": {
+                "en": "Boost",
+                "fr": "Boost",
+                "nl": "Boost"
+              }
+            },
+            {
+              "id": "activity",
+              "label": {
+                "en": "Activity",
+                "fr": "Activité",
+                "nl": "Activiteit"
+              }
+            },
+            {
+              "id": "none",
+              "label": {
+                "en": "Manual",
+                "fr": "Manuel",
+                "nl": "Handmatig"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "window_is_open",
+      "title": {
+        "en": "A window !{{is|is not}} detected open",
+        "fr": "Une ouverture !{{est|n'est pas}} détectée",
+        "nl": "Een raam !{{is|is niet}} open"
+      }
+    },
+    {
+      "id": "is_calling_for_heat",
+      "title": {
+        "en": "It !{{is|is not}} calling for heat",
+        "fr": "Il !{{demande|ne demande pas}} de la chaleur",
+        "nl": "Hij !{{vraagt|vraagt geen}} warmte"
+      }
+    },
+    {
+      "id": "someone_is_home",
+      "title": {
+        "en": "Someone !{{is|is not}} home",
+        "fr": "Quelqu'un !{{est|n'est pas}} présent",
+        "nl": "Iemand !{{is|is niet}} thuis"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "set_preset",
+      "title": {
+        "en": "Set the preset",
+        "fr": "Régler le preset",
+        "nl": "Preset instellen"
+      },
+      "titleFormatted": {
+        "en": "Set the preset to [[preset]]",
+        "fr": "Régler le preset sur [[preset]]",
+        "nl": "Zet het preset op [[preset]]"
+      },
+      "args": [
+        {
+          "name": "preset",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "frost",
+              "label": {
+                "en": "Frost protection",
+                "fr": "Hors-gel",
+                "nl": "Vorstbeveiliging"
+              }
+            },
+            {
+              "id": "eco",
+              "label": {
+                "en": "Eco",
+                "fr": "Éco",
+                "nl": "Eco"
+              }
+            },
+            {
+              "id": "comfort",
+              "label": {
+                "en": "Comfort",
+                "fr": "Confort",
+                "nl": "Comfort"
+              }
+            },
+            {
+              "id": "boost",
+              "label": {
+                "en": "Boost",
+                "fr": "Boost",
+                "nl": "Boost"
+              }
+            },
+            {
+              "id": "activity",
+              "label": {
+                "en": "Activity",
+                "fr": "Activité",
+                "nl": "Activiteit"
+              }
+            },
+            {
+              "id": "none",
+              "label": {
+                "en": "Manual",
+                "fr": "Manuel",
+                "nl": "Handmatig"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "set_preset_timed",
+      "title": {
+        "en": "Set the preset for a while",
+        "fr": "Régler le preset pour un moment",
+        "nl": "Preset tijdelijk instellen"
+      },
+      "titleFormatted": {
+        "en": "Set the preset to [[preset]] for [[minutes]] minutes",
+        "fr": "Régler le preset sur [[preset]] pendant [[minutes]] minutes",
+        "nl": "Zet het preset op [[preset]] voor [[minutes]] minuten"
+      },
+      "hint": {
+        "en": "The previous preset comes back on its own when the time is up. It survives a restart of the app.",
+        "fr": "Le preset précédent revient tout seul à l'échéance. Cela survit à un redémarrage de l'app.",
+        "nl": "Het vorige preset komt vanzelf terug. Dit overleeft een herstart van de app."
+      },
+      "args": [
+        {
+          "name": "preset",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "frost",
+              "label": {
+                "en": "Frost protection",
+                "fr": "Hors-gel",
+                "nl": "Vorstbeveiliging"
+              }
+            },
+            {
+              "id": "eco",
+              "label": {
+                "en": "Eco",
+                "fr": "Éco",
+                "nl": "Eco"
+              }
+            },
+            {
+              "id": "comfort",
+              "label": {
+                "en": "Comfort",
+                "fr": "Confort",
+                "nl": "Comfort"
+              }
+            },
+            {
+              "id": "boost",
+              "label": {
+                "en": "Boost",
+                "fr": "Boost",
+                "nl": "Boost"
+              }
+            },
+            {
+              "id": "activity",
+              "label": {
+                "en": "Activity",
+                "fr": "Activité",
+                "nl": "Activiteit"
+              }
+            },
+            {
+              "id": "none",
+              "label": {
+                "en": "Manual",
+                "fr": "Manuel",
+                "nl": "Handmatig"
+              }
+            }
+          ]
+        },
+        {
+          "name": "minutes",
+          "type": "number",
+          "min": 1,
+          "max": 1440,
+          "step": 1,
+          "placeholder": {
+            "en": "60",
+            "fr": "60",
+            "nl": "60"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cancel_timed_preset",
+      "title": {
+        "en": "Cancel the timed preset",
+        "fr": "Annuler le preset temporisé",
+        "nl": "Tijdelijk preset annuleren"
+      }
+    },
+    {
+      "id": "set_target_temperature",
+      "title": {
+        "en": "Set the target temperature",
+        "fr": "Régler la consigne",
+        "nl": "Doeltemperatuur instellen"
+      },
+      "titleFormatted": {
+        "en": "Set the target to [[temperature]] °C",
+        "fr": "Régler la consigne à [[temperature]] °C",
+        "nl": "Zet het doel op [[temperature]] °C"
+      },
+      "hint": {
+        "en": "Switches the preset to Manual, like turning the dial by hand.",
+        "fr": "Bascule le preset sur Manuel, comme si vous tourniez la molette.",
+        "nl": "Zet het preset op Handmatig."
+      },
+      "args": [
+        {
+          "name": "temperature",
+          "type": "number",
+          "min": 5,
+          "max": 35,
+          "step": 0.5
+        }
+      ]
+    },
+    {
+      "id": "set_window_bypass",
+      "title": {
+        "en": "Ignore the window detection",
+        "fr": "Ignorer la détection d'ouverture",
+        "nl": "Raamdetectie negeren"
+      },
+      "titleFormatted": {
+        "en": "[[bypass]] the window detection",
+        "fr": "[[bypass]] la détection d'ouverture",
+        "nl": "Raamdetectie [[bypass]]"
+      },
+      "hint": {
+        "en": "Keeps heating even with a window detected open. Useful for a room that is aired all day on purpose.",
+        "fr": "Continue de chauffer malgré une ouverture détectée. Utile pour une pièce volontairement aérée en continu.",
+        "nl": "Blijft verwarmen ondanks een gedetecteerd open raam."
+      },
+      "args": [
+        {
+          "name": "bypass",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "on",
+              "label": {
+                "en": "Ignore",
+                "fr": "Ignorer",
+                "nl": "Negeren"
+              }
+            },
+            {
+              "id": "off",
+              "label": {
+                "en": "Stop ignoring",
+                "fr": "Cesser d'ignorer",
+                "nl": "Niet meer negeren"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "force_presence",
+      "title": {
+        "en": "Force the presence state",
+        "fr": "Forcer l'état de présence",
+        "nl": "Aanwezigheid forceren"
+      },
+      "titleFormatted": {
+        "en": "Force presence to [[presence]]",
+        "fr": "Forcer la présence à [[presence]]",
+        "nl": "Forceer aanwezigheid op [[presence]]"
+      },
+      "args": [
+        {
+          "name": "presence",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "home",
+              "label": {
+                "en": "Home",
+                "fr": "Présent",
+                "nl": "Thuis"
+              }
+            },
+            {
+              "id": "away",
+              "label": {
+                "en": "Away",
+                "fr": "Absent",
+                "nl": "Afwezig"
+              }
+            },
+            {
+              "id": "auto",
+              "label": {
+                "en": "Back to the sensor",
+                "fr": "Revenir au capteur",
+                "nl": "Terug naar de sensor"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "set_tpi_parameters",
+      "title": {
+        "en": "Tune the proportional algorithm",
+        "fr": "Régler l'algorithme proportionnel",
+        "nl": "Proportioneel algoritme afstellen"
+      },
+      "titleFormatted": {
+        "en": "Set the indoor coefficient to [[coef_int]] and the outdoor one to [[coef_ext]]",
+        "fr": "Régler le coefficient intérieur à [[coef_int]] et l'extérieur à [[coef_ext]]",
+        "nl": "Zet de binnencoëfficiënt op [[coef_int]] en de buitencoëfficiënt op [[coef_ext]]"
+      },
+      "advanced": true,
+      "args": [
+        {
+          "name": "coef_int",
+          "type": "number",
+          "min": 0,
+          "max": 2,
+          "step": 0.01
+        },
+        {
+          "name": "coef_ext",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "step": 0.001
+        }
+      ]
+    }
+  ]
+}

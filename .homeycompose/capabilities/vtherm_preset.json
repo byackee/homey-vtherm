@@ -1,0 +1,67 @@
+{
+  "type": "enum",
+  "title": {
+    "en": "Preset",
+    "fr": "Preset",
+    "nl": "Preset"
+  },
+  "desc": {
+    "en": "The comfort level you asked for. What the thermostat actually does may differ — see Status.",
+    "fr": "Le niveau de confort demandé. Ce que le thermostat fait réellement peut différer — voir État.",
+    "nl": "Het gevraagde comfortniveau. Wat de thermostaat werkelijk doet kan afwijken — zie Status."
+  },
+  "getable": true,
+  "setable": true,
+  "uiComponent": "picker",
+  "insights": true,
+  "values": [
+    {
+      "id": "frost",
+      "title": {
+        "en": "Frost protection",
+        "fr": "Hors-gel",
+        "nl": "Vorstbeveiliging"
+      }
+    },
+    {
+      "id": "eco",
+      "title": {
+        "en": "Eco",
+        "fr": "Éco",
+        "nl": "Eco"
+      }
+    },
+    {
+      "id": "comfort",
+      "title": {
+        "en": "Comfort",
+        "fr": "Confort",
+        "nl": "Comfort"
+      }
+    },
+    {
+      "id": "boost",
+      "title": {
+        "en": "Boost",
+        "fr": "Boost",
+        "nl": "Boost"
+      }
+    },
+    {
+      "id": "activity",
+      "title": {
+        "en": "Activity",
+        "fr": "Activité",
+        "nl": "Activiteit"
+      }
+    },
+    {
+      "id": "none",
+      "title": {
+        "en": "Manual",
+        "fr": "Manuel",
+        "nl": "Handmatig"
+      }
+    }
+  ]
+}
