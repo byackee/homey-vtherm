@@ -131,6 +131,14 @@ export interface DeviceSummary {
    */
   setable: Record<string, boolean>;
   available: boolean;
+  /**
+   * URI du driver propriétaire, du genre `homey:app:com.gruijter.zigbee2mqtt:device`.
+   *
+   * Sert à ce qu'un thermostat de cette app ne puisse pas être proposé comme émetteur d'un autre :
+   * le désigner créerait une boucle de régulation où chacun écrit la consigne que l'autre relit.
+   * `null` quand l'API ne le donne pas — dans ce cas on ne filtre rien plutôt que de tout masquer.
+   */
+  driverUri: string | null;
 }
 
 export interface WriteRequest extends WriteOptions {
@@ -667,6 +675,7 @@ export class HomeyApiHub {
       capabilities,
       setable,
       available: device.available !== false,
+      driverUri: readDriverUri(device),
     };
   }
 
@@ -716,4 +725,14 @@ export class HomeyApiHub {
 
     this.events.removeAllListeners();
   }
+}
+
+/**
+ * L'URI du driver n'a pas le même nom selon la version de l'API : `driverUri` sur les Homey
+ * récents, `driverId` auparavant. On accepte les deux plutôt que de dépendre d'une seule.
+ */
+function readDriverUri(device: unknown): string | null {
+  const record = device as { driverUri?: unknown; driverId?: unknown };
+  const value = record.driverUri ?? record.driverId;
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }

@@ -17,7 +17,7 @@
     "vtherm_slope",
     "alarm_contact",
     "alarm_motion",
-    "measure_battery"
+    "vtherm_emitter_battery"
   ],
   "capabilitiesOptions": {
     "target_temperature": {
@@ -43,13 +43,6 @@
         "en": "Window",
         "fr": "Fenêtre",
         "nl": "Raam"
-      }
-    },
-    "measure_battery": {
-      "title": {
-        "en": "Emitter battery",
-        "fr": "Pile de l'émetteur",
-        "nl": "Batterij verwarming"
       }
     }
   },

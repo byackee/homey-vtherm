@@ -1,0 +1,23 @@
+{
+  "type": "number",
+  "title": {
+    "en": "Emitter battery",
+    "fr": "Pile de l'émetteur",
+    "nl": "Batterij verwarming"
+  },
+  "desc": {
+    "en": "Battery level of the radiator valve or thermostat this device drives. This device has no battery of its own.",
+    "fr": "Niveau de pile de la vanne ou du thermostat que cet appareil pilote. Cet appareil n'a pas de pile propre.",
+    "nl": "Batterijniveau van de radiatorkraan die dit apparaat aanstuurt. Dit apparaat heeft zelf geen batterij."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "units": {
+    "en": "%"
+  },
+  "min": 0,
+  "max": 100,
+  "decimals": 0,
+  "insights": true
+}

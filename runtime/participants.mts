@@ -313,7 +313,11 @@ export class VThermParticipant implements Tickable {
 
     const battery = this.emitter.readBattery(nowMs);
     if (battery !== null && !battery.stale) {
-      await this.publish('measure_battery', battery.value);
+      // Volontairement PAS `measure_battery` : cette pile est celle de l'émetteur d'une autre app,
+      // pas de notre appareil virtuel. La déclarer en `measure_battery` obligerait à annoncer un
+      // `energy.batteries` — c'est-à-dire à affirmer que ce thermostat contient des piles, ce qui
+      // est faux et fausserait le bilan énergétique de Homey.
+      await this.publish('vtherm_emitter_battery', battery.value);
     }
 
     // L'ouverture d'abord : en contrôle direct de vanne c'est elle qui commande, la consigne

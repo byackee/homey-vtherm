@@ -1,0 +1,2365 @@
+{
+  "_comment": "This file is generated. Please edit .homeycompose/app.json instead.",
+  "id": "com.dataweavelabs.vtherm",
+  "version": "1.0.0",
+  "compatibility": ">=12.7.0",
+  "sdk": 3,
+  "platforms": [
+    "local"
+  ],
+  "brandColor": "#E8590C",
+  "name": {
+    "en": "Adaptive Thermostat",
+    "fr": "Adaptive Thermostat",
+    "nl": "Adaptive Thermostat"
+  },
+  "description": {
+    "en": "Turn any temperature sensor and any heater into a thermostat that actually regulates",
+    "fr": "Transformez n'importe quel capteur et n'importe quel émetteur en thermostat qui régule vraiment",
+    "nl": "Maak van elke temperatuursensor en verwarming een thermostaat die echt regelt"
+  },
+  "category": [
+    "climate"
+  ],
+  "permissions": [
+    "homey:manager:api"
+  ],
+  "api": {
+    "getBrokerStatus": {
+      "method": "GET",
+      "path": "/broker/status"
+    },
+    "testBroker": {
+      "method": "POST",
+      "path": "/broker/test"
+    }
+  },
+  "tags": {
+    "en": [
+      "thermostat",
+      "heating",
+      "tpi",
+      "radiator valve",
+      "boiler",
+      "radiator",
+      "trv",
+      "proportional"
+    ],
+    "fr": [
+      "thermostat",
+      "chauffage",
+      "tpi",
+      "vanne",
+      "chaudière",
+      "radiateur",
+      "trv",
+      "proportionnel"
+    ],
+    "nl": [
+      "thermostaat",
+      "verwarming",
+      "tpi",
+      "radiatorkraan",
+      "ketel",
+      "radiator",
+      "proportioneel"
+    ]
+  },
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "author": {
+    "name": "DataWeave Labs",
+    "email": "admin@dataweavelabs.com"
+  },
+  "support": "mailto:admin@dataweavelabs.com",
+  "esm": true,
+  "flow": {
+    "triggers": [
+      {
+        "id": "boiler_started",
+        "title": {
+          "en": "The boiler is started",
+          "fr": "La chaudière est démarrée",
+          "nl": "De ketel wordt gestart"
+        },
+        "tokens": [
+          {
+            "name": "emitters",
+            "type": "number",
+            "title": {
+              "en": "Emitters calling",
+              "fr": "Émetteurs en demande",
+              "nl": "Verwarmingen die vragen"
+            },
+            "example": 3
+          }
+        ],
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=central"
+          }
+        ]
+      },
+      {
+        "id": "boiler_stopped",
+        "title": {
+          "en": "The boiler is stopped",
+          "fr": "La chaudière est arrêtée",
+          "nl": "De ketel wordt gestopt"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=central"
+          }
+        ]
+      },
+      {
+        "id": "demand_started",
+        "title": {
+          "en": "It starts calling for heat",
+          "fr": "Il commence à demander de la chaleur",
+          "nl": "Hij begint warmte te vragen"
+        },
+        "hint": {
+          "en": "Fires when this thermostat goes from not needing heat to needing it. Useful to drive a boiler yourself instead of using the central configuration.",
+          "fr": "Se déclenche quand ce thermostat passe de « pas besoin » à « besoin de chaleur ». Utile pour piloter une chaudière soi-même plutôt que par la configuration centrale.",
+          "nl": "Wordt geactiveerd wanneer deze thermostaat warmte gaat vragen."
+        },
+        "tokens": [
+          {
+            "name": "power_percent",
+            "type": "number",
+            "title": {
+              "en": "Heating power",
+              "fr": "Puissance de chauffe",
+              "nl": "Verwarmingsvermogen"
+            },
+            "example": 45
+          }
+        ],
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      },
+      {
+        "id": "demand_stopped",
+        "title": {
+          "en": "It stops calling for heat",
+          "fr": "Il cesse de demander de la chaleur",
+          "nl": "Hij stopt met warmte vragen"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      },
+      {
+        "id": "window_opened",
+        "title": {
+          "en": "An open window is detected",
+          "fr": "Une ouverture est détectée",
+          "nl": "Een open raam wordt gedetecteerd"
+        },
+        "hint": {
+          "en": "Fires once the detection is confirmed, after the configured delay — not the instant the contact opens.",
+          "fr": "Se déclenche une fois la détection confirmée, après le délai configuré — pas à l'instant où le contact s'ouvre.",
+          "nl": "Wordt geactiveerd zodra de detectie is bevestigd, na de ingestelde vertraging."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      },
+      {
+        "id": "window_closed",
+        "title": {
+          "en": "The window is closed again",
+          "fr": "L'ouverture est refermée",
+          "nl": "Het raam is weer dicht"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      },
+      {
+        "id": "sensor_went_quiet",
+        "title": {
+          "en": "The room sensor goes quiet",
+          "fr": "Le capteur de pièce se tait",
+          "nl": "De kamersensor valt stil"
+        },
+        "hint": {
+          "en": "Fires when no fresh reading has arrived for too long. The thermostat stops asking for heat rather than regulating on a dead value — this is your warning that a battery is flat.",
+          "fr": "Se déclenche quand aucune mesure fraîche n'est arrivée depuis trop longtemps. Le thermostat cesse alors de demander de la chaleur plutôt que de réguler sur une valeur morte — c'est votre avertissement qu'une pile est vide.",
+          "nl": "Wordt geactiveerd wanneer er te lang geen verse meting is. De thermostaat stopt met warmte vragen."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "id": "boiler_is_active",
+        "title": {
+          "en": "The boiler !{{is|is not}} running",
+          "fr": "La chaudière !{{tourne|ne tourne pas}}",
+          "nl": "De ketel !{{draait|draait niet}}"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=central"
+          }
+        ]
+      },
+      {
+        "id": "central_mode_is",
+        "title": {
+          "en": "The central mode !{{is|is not}}",
+          "fr": "Le mode central !{{est|n'est pas}}",
+          "nl": "De centrale modus !{{is|is niet}}"
+        },
+        "titleFormatted": {
+          "en": "The central mode !{{is|is not}} [[mode]]",
+          "fr": "Le mode central !{{est|n'est pas}} [[mode]]",
+          "nl": "De centrale modus !{{is|is niet}} [[mode]]"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=central"
+          },
+          {
+            "name": "mode",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "auto",
+                "label": {
+                  "en": "Automatic",
+                  "fr": "Automatique",
+                  "nl": "Automatisch"
+                }
+              },
+              {
+                "id": "stopped",
+                "label": {
+                  "en": "All stopped",
+                  "fr": "Tout arrêté",
+                  "nl": "Alles gestopt"
+                }
+              },
+              {
+                "id": "heat_only",
+                "label": {
+                  "en": "Heating only",
+                  "fr": "Chauffage seul",
+                  "nl": "Alleen verwarmen"
+                }
+              },
+              {
+                "id": "frost",
+                "label": {
+                  "en": "Frost protection",
+                  "fr": "Hors-gel",
+                  "nl": "Vorstbeveiliging"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "preset_is",
+        "title": {
+          "en": "The preset !{{is|is not}}",
+          "fr": "Le preset !{{est|n'est pas}}",
+          "nl": "Het preset !{{is|is niet}}"
+        },
+        "titleFormatted": {
+          "en": "The preset !{{is|is not}} [[preset]]",
+          "fr": "Le preset !{{est|n'est pas}} [[preset]]",
+          "nl": "Het preset !{{is|is niet}} [[preset]]"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          },
+          {
+            "name": "preset",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "frost",
+                "label": {
+                  "en": "Frost protection",
+                  "fr": "Hors-gel",
+                  "nl": "Vorstbeveiliging"
+                }
+              },
+              {
+                "id": "eco",
+                "label": {
+                  "en": "Eco",
+                  "fr": "Éco",
+                  "nl": "Eco"
+                }
+              },
+              {
+                "id": "comfort",
+                "label": {
+                  "en": "Comfort",
+                  "fr": "Confort",
+                  "nl": "Comfort"
+                }
+              },
+              {
+                "id": "boost",
+                "label": {
+                  "en": "Boost",
+                  "fr": "Boost",
+                  "nl": "Boost"
+                }
+              },
+              {
+                "id": "activity",
+                "label": {
+                  "en": "Activity",
+                  "fr": "Activité",
+                  "nl": "Activiteit"
+                }
+              },
+              {
+                "id": "none",
+                "label": {
+                  "en": "Manual",
+                  "fr": "Manuel",
+                  "nl": "Handmatig"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "window_is_open",
+        "title": {
+          "en": "A window !{{is|is not}} detected open",
+          "fr": "Une ouverture !{{est|n'est pas}} détectée",
+          "nl": "Een raam !{{is|is niet}} open"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      },
+      {
+        "id": "is_calling_for_heat",
+        "title": {
+          "en": "It !{{is|is not}} calling for heat",
+          "fr": "Il !{{demande|ne demande pas}} de la chaleur",
+          "nl": "Hij !{{vraagt|vraagt geen}} warmte"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      },
+      {
+        "id": "someone_is_home",
+        "title": {
+          "en": "Someone !{{is|is not}} home",
+          "fr": "Quelqu'un !{{est|n'est pas}} présent",
+          "nl": "Iemand !{{is|is niet}} thuis"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "id": "set_central_mode",
+        "title": {
+          "en": "Set the central mode",
+          "fr": "Régler le mode central",
+          "nl": "Centrale modus instellen"
+        },
+        "titleFormatted": {
+          "en": "Set the central mode to [[mode]]",
+          "fr": "Régler le mode central sur [[mode]]",
+          "nl": "Zet de centrale modus op [[mode]]"
+        },
+        "hint": {
+          "en": "Applies to every thermostat that opted in, in its settings.",
+          "fr": "S'applique à tous les thermostats qui l'ont accepté dans leurs réglages.",
+          "nl": "Geldt voor elke thermostaat die dat in zijn instellingen heeft geaccepteerd."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=central"
+          },
+          {
+            "name": "mode",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "auto",
+                "label": {
+                  "en": "Automatic",
+                  "fr": "Automatique",
+                  "nl": "Automatisch"
+                }
+              },
+              {
+                "id": "stopped",
+                "label": {
+                  "en": "All stopped",
+                  "fr": "Tout arrêté",
+                  "nl": "Alles gestopt"
+                }
+              },
+              {
+                "id": "heat_only",
+                "label": {
+                  "en": "Heating only",
+                  "fr": "Chauffage seul",
+                  "nl": "Alleen verwarmen"
+                }
+              },
+              {
+                "id": "frost",
+                "label": {
+                  "en": "Frost protection",
+                  "fr": "Hors-gel",
+                  "nl": "Vorstbeveiliging"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "set_preset",
+        "title": {
+          "en": "Set the preset",
+          "fr": "Régler le preset",
+          "nl": "Preset instellen"
+        },
+        "titleFormatted": {
+          "en": "Set the preset to [[preset]]",
+          "fr": "Régler le preset sur [[preset]]",
+          "nl": "Zet het preset op [[preset]]"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          },
+          {
+            "name": "preset",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "frost",
+                "label": {
+                  "en": "Frost protection",
+                  "fr": "Hors-gel",
+                  "nl": "Vorstbeveiliging"
+                }
+              },
+              {
+                "id": "eco",
+                "label": {
+                  "en": "Eco",
+                  "fr": "Éco",
+                  "nl": "Eco"
+                }
+              },
+              {
+                "id": "comfort",
+                "label": {
+                  "en": "Comfort",
+                  "fr": "Confort",
+                  "nl": "Comfort"
+                }
+              },
+              {
+                "id": "boost",
+                "label": {
+                  "en": "Boost",
+                  "fr": "Boost",
+                  "nl": "Boost"
+                }
+              },
+              {
+                "id": "activity",
+                "label": {
+                  "en": "Activity",
+                  "fr": "Activité",
+                  "nl": "Activiteit"
+                }
+              },
+              {
+                "id": "none",
+                "label": {
+                  "en": "Manual",
+                  "fr": "Manuel",
+                  "nl": "Handmatig"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "set_preset_timed",
+        "title": {
+          "en": "Set the preset for a while",
+          "fr": "Régler le preset pour un moment",
+          "nl": "Preset tijdelijk instellen"
+        },
+        "titleFormatted": {
+          "en": "Set the preset to [[preset]] for [[minutes]] minutes",
+          "fr": "Régler le preset sur [[preset]] pendant [[minutes]] minutes",
+          "nl": "Zet het preset op [[preset]] voor [[minutes]] minuten"
+        },
+        "hint": {
+          "en": "The previous preset comes back on its own when the time is up. It survives a restart of the app.",
+          "fr": "Le preset précédent revient tout seul à l'échéance. Cela survit à un redémarrage de l'app.",
+          "nl": "Het vorige preset komt vanzelf terug. Dit overleeft een herstart van de app."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          },
+          {
+            "name": "preset",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "frost",
+                "label": {
+                  "en": "Frost protection",
+                  "fr": "Hors-gel",
+                  "nl": "Vorstbeveiliging"
+                }
+              },
+              {
+                "id": "eco",
+                "label": {
+                  "en": "Eco",
+                  "fr": "Éco",
+                  "nl": "Eco"
+                }
+              },
+              {
+                "id": "comfort",
+                "label": {
+                  "en": "Comfort",
+                  "fr": "Confort",
+                  "nl": "Comfort"
+                }
+              },
+              {
+                "id": "boost",
+                "label": {
+                  "en": "Boost",
+                  "fr": "Boost",
+                  "nl": "Boost"
+                }
+              },
+              {
+                "id": "activity",
+                "label": {
+                  "en": "Activity",
+                  "fr": "Activité",
+                  "nl": "Activiteit"
+                }
+              },
+              {
+                "id": "none",
+                "label": {
+                  "en": "Manual",
+                  "fr": "Manuel",
+                  "nl": "Handmatig"
+                }
+              }
+            ]
+          },
+          {
+            "name": "minutes",
+            "type": "number",
+            "min": 1,
+            "max": 1440,
+            "step": 1,
+            "placeholder": {
+              "en": "60",
+              "fr": "60",
+              "nl": "60"
+            }
+          }
+        ]
+      },
+      {
+        "id": "cancel_timed_preset",
+        "title": {
+          "en": "Cancel the timed preset",
+          "fr": "Annuler le preset temporisé",
+          "nl": "Tijdelijk preset annuleren"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          }
+        ]
+      },
+      {
+        "id": "set_target_temperature",
+        "title": {
+          "en": "Set the target temperature",
+          "fr": "Régler la consigne",
+          "nl": "Doeltemperatuur instellen"
+        },
+        "titleFormatted": {
+          "en": "Set the target to [[temperature]] °C",
+          "fr": "Régler la consigne à [[temperature]] °C",
+          "nl": "Zet het doel op [[temperature]] °C"
+        },
+        "hint": {
+          "en": "Switches the preset to Manual, like turning the dial by hand.",
+          "fr": "Bascule le preset sur Manuel, comme si vous tourniez la molette.",
+          "nl": "Zet het preset op Handmatig."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          },
+          {
+            "name": "temperature",
+            "type": "number",
+            "min": 5,
+            "max": 35,
+            "step": 0.5
+          }
+        ]
+      },
+      {
+        "id": "set_window_bypass",
+        "title": {
+          "en": "Ignore the window detection",
+          "fr": "Ignorer la détection d'ouverture",
+          "nl": "Raamdetectie negeren"
+        },
+        "titleFormatted": {
+          "en": "[[bypass]] the window detection",
+          "fr": "[[bypass]] la détection d'ouverture",
+          "nl": "Raamdetectie [[bypass]]"
+        },
+        "hint": {
+          "en": "Keeps heating even with a window detected open. Useful for a room that is aired all day on purpose.",
+          "fr": "Continue de chauffer malgré une ouverture détectée. Utile pour une pièce volontairement aérée en continu.",
+          "nl": "Blijft verwarmen ondanks een gedetecteerd open raam."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          },
+          {
+            "name": "bypass",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "on",
+                "label": {
+                  "en": "Ignore",
+                  "fr": "Ignorer",
+                  "nl": "Negeren"
+                }
+              },
+              {
+                "id": "off",
+                "label": {
+                  "en": "Stop ignoring",
+                  "fr": "Cesser d'ignorer",
+                  "nl": "Niet meer negeren"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "force_presence",
+        "title": {
+          "en": "Force the presence state",
+          "fr": "Forcer l'état de présence",
+          "nl": "Aanwezigheid forceren"
+        },
+        "titleFormatted": {
+          "en": "Force presence to [[presence]]",
+          "fr": "Forcer la présence à [[presence]]",
+          "nl": "Forceer aanwezigheid op [[presence]]"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          },
+          {
+            "name": "presence",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "home",
+                "label": {
+                  "en": "Home",
+                  "fr": "Présent",
+                  "nl": "Thuis"
+                }
+              },
+              {
+                "id": "away",
+                "label": {
+                  "en": "Away",
+                  "fr": "Absent",
+                  "nl": "Afwezig"
+                }
+              },
+              {
+                "id": "auto",
+                "label": {
+                  "en": "Back to the sensor",
+                  "fr": "Revenir au capteur",
+                  "nl": "Terug naar de sensor"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "set_tpi_parameters",
+        "title": {
+          "en": "Tune the proportional algorithm",
+          "fr": "Régler l'algorithme proportionnel",
+          "nl": "Proportioneel algoritme afstellen"
+        },
+        "titleFormatted": {
+          "en": "Set the indoor coefficient to [[coef_int]] and the outdoor one to [[coef_ext]]",
+          "fr": "Régler le coefficient intérieur à [[coef_int]] et l'extérieur à [[coef_ext]]",
+          "nl": "Zet de binnencoëfficiënt op [[coef_int]] en de buitencoëfficiënt op [[coef_ext]]"
+        },
+        "advanced": true,
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vtherm"
+          },
+          {
+            "name": "coef_int",
+            "type": "number",
+            "min": 0,
+            "max": 2,
+            "step": 0.01
+          },
+          {
+            "name": "coef_ext",
+            "type": "number",
+            "min": 0,
+            "max": 1,
+            "step": 0.001
+          }
+        ]
+      }
+    ]
+  },
+  "drivers": [
+    {
+      "name": {
+        "en": "Central configuration",
+        "fr": "Configuration centrale",
+        "nl": "Centrale configuratie"
+      },
+      "class": "other",
+      "capabilities": [
+        "vtherm_central_mode",
+        "vtherm_boiler_active",
+        "vtherm_nb_active"
+      ],
+      "platforms": [
+        "local"
+      ],
+      "images": {
+        "small": "/drivers/central/assets/images/small.png",
+        "large": "/drivers/central/assets/images/large.png",
+        "xlarge": "/drivers/central/assets/images/xlarge.png"
+      },
+      "pair": [
+        {
+          "id": "pick_boiler",
+          "navigation": {
+            "next": "add_devices"
+          }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ],
+      "repair": [
+        {
+          "id": "pick_boiler"
+        }
+      ],
+      "id": "central",
+      "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "Boiler",
+            "fr": "Chaudière",
+            "nl": "Ketel"
+          },
+          "children": [
+            {
+              "id": "boiler_threshold",
+              "type": "number",
+              "label": {
+                "en": "Emitters needed to start the boiler",
+                "fr": "Émetteurs nécessaires pour démarrer la chaudière",
+                "nl": "Verwarmingen nodig om de ketel te starten"
+              },
+              "value": 1,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "hint": {
+                "en": "Counted in emitters, not thermostats.",
+                "fr": "Compté en émetteurs, pas en thermostats.",
+                "nl": "Geteld in verwarmingen, niet thermostaten."
+              }
+            },
+            {
+              "id": "boiler_activation_delay",
+              "type": "number",
+              "label": {
+                "en": "Delay before starting",
+                "fr": "Délai avant démarrage",
+                "nl": "Vertraging voor starten"
+              },
+              "value": 0,
+              "min": 0,
+              "max": 600,
+              "step": 5,
+              "units": {
+                "en": "s"
+              },
+              "hint": {
+                "en": "Shutdown is never delayed. That is deliberate: a boiler running against closed valves builds pressure.",
+                "fr": "L'extinction n'est jamais retardée. C'est délibéré : une chaudière qui tourne vannes fermées monte en pression.",
+                "nl": "Uitschakelen wordt nooit vertraagd. Dat is bewust."
+              }
+            },
+            {
+              "id": "boiler_min_dwell",
+              "type": "number",
+              "label": {
+                "en": "Minimum time before restarting",
+                "fr": "Délai minimal avant un nouvel allumage",
+                "nl": "Minimale tijd voor herstart"
+              },
+              "value": 60,
+              "min": 60,
+              "max": 1800,
+              "step": 10,
+              "units": {
+                "en": "s"
+              },
+              "hint": {
+                "en": "Guards against a burst of events pulsing the boiler. Cannot be set below 60 seconds.",
+                "fr": "Protège d'une rafale d'événements qui pulserait la chaudière. Ne peut pas descendre sous 60 secondes.",
+                "nl": "Beschermt tegen pulseren van de ketel. Kan niet onder 60 seconden."
+              }
+            },
+            {
+              "id": "boiler_keepalive",
+              "type": "number",
+              "label": {
+                "en": "Repeat the start command every",
+                "fr": "Répéter l'ordre de démarrage toutes les",
+                "nl": "Herhaal het startcommando elke"
+              },
+              "value": 0,
+              "min": 0,
+              "max": 3600,
+              "step": 30,
+              "units": {
+                "en": "s"
+              },
+              "hint": {
+                "en": "Zero disables it. Useful only if your relay can miss a command.",
+                "fr": "Zéro désactive. Utile seulement si votre relais peut rater un ordre.",
+                "nl": "Nul schakelt uit."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": {
+        "en": "Thermostat",
+        "fr": "Thermostat",
+        "nl": "Thermostaat"
+      },
+      "class": "thermostat",
+      "capabilities": [
+        "onoff",
+        "target_temperature",
+        "measure_temperature",
+        "vtherm_preset",
+        "vtherm_state",
+        "vtherm_regulated_setpoint",
+        "vtherm_power_percent",
+        "vtherm_valve_open",
+        "vtherm_slope",
+        "alarm_contact",
+        "alarm_motion",
+        "vtherm_emitter_battery"
+      ],
+      "capabilitiesOptions": {
+        "target_temperature": {
+          "min": 5,
+          "max": 35,
+          "step": 0.5,
+          "decimals": 1,
+          "title": {
+            "en": "Target",
+            "fr": "Consigne",
+            "nl": "Doel"
+          }
+        },
+        "measure_temperature": {
+          "title": {
+            "en": "Room",
+            "fr": "Pièce",
+            "nl": "Kamer"
+          }
+        },
+        "alarm_contact": {
+          "title": {
+            "en": "Window",
+            "fr": "Fenêtre",
+            "nl": "Raam"
+          }
+        }
+      },
+      "platforms": [
+        "local"
+      ],
+      "images": {
+        "small": "/drivers/vtherm/assets/images/small.png",
+        "large": "/drivers/vtherm/assets/images/large.png",
+        "xlarge": "/drivers/vtherm/assets/images/xlarge.png"
+      },
+      "pair": [
+        {
+          "id": "pick_room_sensor",
+          "navigation": {
+            "next": "pick_emitter"
+          }
+        },
+        {
+          "id": "pick_emitter",
+          "navigation": {
+            "prev": "pick_room_sensor",
+            "next": "pick_optional"
+          }
+        },
+        {
+          "id": "pick_optional",
+          "navigation": {
+            "prev": "pick_emitter",
+            "next": "add_devices"
+          }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ],
+      "repair": [
+        {
+          "id": "pick_room_sensor",
+          "navigation": {
+            "next": "pick_emitter"
+          }
+        },
+        {
+          "id": "pick_emitter",
+          "navigation": {
+            "prev": "pick_room_sensor",
+            "next": "pick_optional"
+          }
+        },
+        {
+          "id": "pick_optional",
+          "navigation": {
+            "prev": "pick_emitter"
+          }
+        }
+      ],
+      "id": "vtherm",
+      "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "Preset temperatures",
+            "fr": "Températures des presets",
+            "nl": "Preset-temperaturen"
+          },
+          "children": [
+            {
+              "id": "temp_frost",
+              "type": "number",
+              "label": {
+                "en": "Frost protection",
+                "fr": "Hors-gel",
+                "nl": "Vorstbeveiliging"
+              },
+              "value": 7,
+              "min": 4,
+              "max": 20,
+              "step": 0.5,
+              "units": {
+                "en": "°C"
+              }
+            },
+            {
+              "id": "temp_eco",
+              "type": "number",
+              "label": {
+                "en": "Eco",
+                "fr": "Éco",
+                "nl": "Eco"
+              },
+              "value": 17,
+              "min": 4,
+              "max": 30,
+              "step": 0.5,
+              "units": {
+                "en": "°C"
+              }
+            },
+            {
+              "id": "temp_comfort",
+              "type": "number",
+              "label": {
+                "en": "Comfort",
+                "fr": "Confort",
+                "nl": "Comfort"
+              },
+              "value": 19,
+              "min": 4,
+              "max": 30,
+              "step": 0.5,
+              "units": {
+                "en": "°C"
+              }
+            },
+            {
+              "id": "temp_boost",
+              "type": "number",
+              "label": {
+                "en": "Boost",
+                "fr": "Boost",
+                "nl": "Boost"
+              },
+              "value": 21,
+              "min": 4,
+              "max": 35,
+              "step": 0.5,
+              "units": {
+                "en": "°C"
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Away temperatures",
+            "fr": "Températures d'absence",
+            "nl": "Afwezigheidstemperaturen"
+          },
+          "children": [
+            {
+              "id": "away_eco",
+              "type": "number",
+              "label": {
+                "en": "Eco while away",
+                "fr": "Éco en absence",
+                "nl": "Eco bij afwezigheid"
+              },
+              "value": 17,
+              "min": 4,
+              "max": 30,
+              "step": 0.5,
+              "hint": {
+                "en": "Used instead of the preset temperature when the presence sensor reports nobody home. The preset shown does not change.",
+                "fr": "Utilisée à la place de la température du preset quand le capteur de présence indique une absence. Le preset affiché ne change pas.",
+                "nl": "Gebruikt in plaats van de preset-temperatuur wanneer niemand thuis is. Het getoonde preset verandert niet."
+              },
+              "units": {
+                "en": "°C"
+              }
+            },
+            {
+              "id": "away_comfort",
+              "type": "number",
+              "label": {
+                "en": "Comfort while away",
+                "fr": "Confort en absence",
+                "nl": "Comfort bij afwezigheid"
+              },
+              "value": 17,
+              "min": 4,
+              "max": 30,
+              "step": 0.5,
+              "units": {
+                "en": "°C"
+              }
+            },
+            {
+              "id": "away_boost",
+              "type": "number",
+              "label": {
+                "en": "Boost while away",
+                "fr": "Boost en absence",
+                "nl": "Boost bij afwezigheid"
+              },
+              "value": 17,
+              "min": 4,
+              "max": 30,
+              "step": 0.5,
+              "units": {
+                "en": "°C"
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Proportional algorithm (TPI)",
+            "fr": "Algorithme proportionnel (TPI)",
+            "nl": "Proportioneel algoritme (TPI)"
+          },
+          "children": [
+            {
+              "id": "tpi_coef_int",
+              "type": "number",
+              "label": {
+                "en": "Indoor coefficient",
+                "fr": "Coefficient intérieur",
+                "nl": "Binnencoëfficiënt"
+              },
+              "value": 0.6,
+              "min": 0,
+              "max": 2,
+              "step": 0.01,
+              "hint": {
+                "en": "Reacts to the gap with the room. Room warms too slowly: raise it. Temperature oscillates around the target: lower it.",
+                "fr": "Réagit à l'écart avec la pièce. La pièce monte trop lentement : augmentez. La température oscille autour de la consigne : diminuez.",
+                "nl": "Reageert op het verschil met de kamer. Te traag: verhogen. Slingert rond het doel: verlagen."
+              }
+            },
+            {
+              "id": "tpi_coef_ext",
+              "type": "number",
+              "label": {
+                "en": "Outdoor coefficient",
+                "fr": "Coefficient extérieur",
+                "nl": "Buitencoëfficiënt"
+              },
+              "value": 0.01,
+              "min": 0,
+              "max": 1,
+              "step": 0.001,
+              "hint": {
+                "en": "Compensates heat loss. Target never reached at steady state: raise it. Target overshot: lower it. Has no effect without an outdoor sensor.",
+                "fr": "Compense les pertes. Consigne jamais atteinte en régime stable : augmentez. Consigne dépassée : diminuez. Sans effet si aucun capteur extérieur n'est lié.",
+                "nl": "Compenseert warmteverlies. Doel nooit bereikt: verhogen. Doel overschreden: verlagen. Geen effect zonder buitensensor."
+              }
+            },
+            {
+              "id": "cycle_min",
+              "type": "number",
+              "label": {
+                "en": "Recalculation period",
+                "fr": "Période de recalcul",
+                "nl": "Herberekeningsperiode"
+              },
+              "value": 5,
+              "min": 1,
+              "max": 60,
+              "step": 1,
+              "hint": {
+                "en": "5 minutes suits radiators. Underfloor heating and central heating are slower: 15 to 30 minutes.",
+                "fr": "5 minutes conviennent à un radiateur. Un plancher chauffant ou un circuit de chaudière sont plus lents : 15 à 30 minutes.",
+                "nl": "5 minuten past bij radiatoren. Vloerverwarming is trager: 15 tot 30 minuten."
+              },
+              "units": {
+                "en": "min"
+              }
+            },
+            {
+              "id": "tpi_threshold_high",
+              "type": "number",
+              "label": {
+                "en": "Overshoot threshold while warming",
+                "fr": "Seuil de dépassement en montée",
+                "nl": "Overschrijdingsdrempel bij opwarmen"
+              },
+              "value": 0,
+              "min": 0,
+              "max": 5,
+              "step": 0.1,
+              "hint": {
+                "en": "Cuts heating when the room is this far above target AND still warming. Zero disables both thresholds — they work as a pair.",
+                "fr": "Coupe la chauffe quand la pièce dépasse la consigne de cet écart ET continue de monter. Zéro désactive les deux seuils — ils vont par paire.",
+                "nl": "Stopt verwarming bij deze overschrijding terwijl het nog opwarmt. Nul schakelt beide drempels uit."
+              },
+              "units": {
+                "en": "°C"
+              }
+            },
+            {
+              "id": "tpi_threshold_low",
+              "type": "number",
+              "label": {
+                "en": "Overshoot threshold while cooling",
+                "fr": "Seuil de dépassement en descente",
+                "nl": "Overschrijdingsdrempel bij afkoelen"
+              },
+              "value": 0,
+              "min": 0,
+              "max": 5,
+              "step": 0.1,
+              "units": {
+                "en": "°C"
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Self-regulation",
+            "fr": "Auto-régulation",
+            "nl": "Zelfregulering"
+          },
+          "children": [
+            {
+              "id": "regulation_mode",
+              "type": "dropdown",
+              "label": {
+                "en": "Self-regulation",
+                "fr": "Auto-régulation",
+                "nl": "Zelfregulering"
+              },
+              "value": "medium",
+              "values": [
+                {
+                  "id": "none",
+                  "label": {
+                    "en": "Off",
+                    "fr": "Désactivée",
+                    "nl": "Uit"
+                  }
+                },
+                {
+                  "id": "slow",
+                  "label": {
+                    "en": "Slow",
+                    "fr": "Lente",
+                    "nl": "Traag"
+                  }
+                },
+                {
+                  "id": "light",
+                  "label": {
+                    "en": "Light",
+                    "fr": "Légère",
+                    "nl": "Licht"
+                  }
+                },
+                {
+                  "id": "medium",
+                  "label": {
+                    "en": "Medium",
+                    "fr": "Moyenne",
+                    "nl": "Gemiddeld"
+                  }
+                },
+                {
+                  "id": "strong",
+                  "label": {
+                    "en": "Strong",
+                    "fr": "Forte",
+                    "nl": "Sterk"
+                  }
+                },
+                {
+                  "id": "expert",
+                  "label": {
+                    "en": "Expert",
+                    "fr": "Expert",
+                    "nl": "Expert"
+                  }
+                }
+              ],
+              "hint": {
+                "en": "Corrects the setpoint sent to the emitter so the room reaches your target. Needs an outdoor temperature sensor: without one, no offset is applied at all.",
+                "fr": "Corrige la consigne envoyée à l'émetteur pour que la pièce atteigne votre cible. Nécessite un capteur de température extérieure : sans lui, aucun offset n'est appliqué.",
+                "nl": "Corrigeert het setpoint zodat de kamer uw doel haalt. Vereist een buitentemperatuursensor."
+              }
+            },
+            {
+              "id": "regulation_dtemp",
+              "type": "number",
+              "label": {
+                "en": "Minimum change to resend",
+                "fr": "Variation minimale pour réécrire",
+                "nl": "Minimale wijziging"
+              },
+              "value": 0.5,
+              "min": 0,
+              "max": 5,
+              "step": 0.1,
+              "hint": {
+                "en": "These valves run on batteries. Below this change, the setpoint is not rewritten.",
+                "fr": "Ces vannes sont sur piles. En dessous de cette variation, la consigne n'est pas réécrite.",
+                "nl": "Deze kranen werken op batterijen. Onder deze wijziging wordt niets herschreven."
+              },
+              "units": {
+                "en": "°C"
+              }
+            },
+            {
+              "id": "regulation_period_min",
+              "type": "number",
+              "label": {
+                "en": "Minimum interval between writes",
+                "fr": "Intervalle minimal entre écritures",
+                "nl": "Minimale interval"
+              },
+              "value": 5,
+              "min": 1,
+              "max": 60,
+              "step": 1,
+              "units": {
+                "en": "min"
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Expert self-regulation",
+            "fr": "Auto-régulation expert",
+            "nl": "Expert-zelfregulering"
+          },
+          "children": [
+            {
+              "id": "expert_kp",
+              "type": "number",
+              "label": {
+                "en": "kp — raw error",
+                "fr": "kp — erreur brute",
+                "nl": "kp — ruwe fout"
+              },
+              "value": 0.3,
+              "min": 0,
+              "max": 5,
+              "step": 0.01
+            },
+            {
+              "id": "expert_ki",
+              "type": "number",
+              "label": {
+                "en": "ki — accumulated error",
+                "fr": "ki — erreur accumulée",
+                "nl": "ki — opgetelde fout"
+              },
+              "value": 0.05,
+              "min": 0,
+              "max": 5,
+              "step": 0.001
+            },
+            {
+              "id": "expert_k_ext",
+              "type": "number",
+              "label": {
+                "en": "k_ext — indoor/outdoor gap",
+                "fr": "k_ext — écart intérieur/extérieur",
+                "nl": "k_ext — binnen/buiten"
+              },
+              "value": 0.1,
+              "min": 0,
+              "max": 5,
+              "step": 0.001
+            },
+            {
+              "id": "expert_offset_max",
+              "type": "number",
+              "label": {
+                "en": "Maximum offset",
+                "fr": "Offset maximal",
+                "nl": "Maximale offset"
+              },
+              "value": 2,
+              "min": 0,
+              "max": 15,
+              "step": 0.1,
+              "units": {
+                "en": "°C"
+              }
+            },
+            {
+              "id": "expert_acc_threshold",
+              "type": "number",
+              "label": {
+                "en": "Accumulation cap",
+                "fr": "Plafond d'accumulation",
+                "nl": "Accumulatielimiet"
+              },
+              "value": 20,
+              "min": 0,
+              "max": 1000,
+              "step": 1
+            },
+            {
+              "id": "expert_overheat",
+              "type": "checkbox",
+              "label": {
+                "en": "Overheat protection",
+                "fr": "Protection surchauffe",
+                "nl": "Oververhittingsbeveiliging"
+              },
+              "value": true,
+              "hint": {
+                "en": "Halves the accumulated error whenever the error changes sign, so the integral does not keep pushing past the target.",
+                "fr": "Divise l'erreur accumulée par deux à chaque inversion de signe, pour que l'intégrale cesse de pousser au-delà de la consigne.",
+                "nl": "Halveert de opgetelde fout bij tekenwissel."
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Open window detection",
+            "fr": "Détection d'ouverture",
+            "nl": "Raamdetectie"
+          },
+          "children": [
+            {
+              "id": "window_mode",
+              "type": "dropdown",
+              "label": {
+                "en": "Detection",
+                "fr": "Détection",
+                "nl": "Detectie"
+              },
+              "value": "off",
+              "values": [
+                {
+                  "id": "off",
+                  "label": {
+                    "en": "Off",
+                    "fr": "Désactivée",
+                    "nl": "Uit"
+                  }
+                },
+                {
+                  "id": "sensor",
+                  "label": {
+                    "en": "Contact sensor",
+                    "fr": "Capteur d'ouverture",
+                    "nl": "Contactsensor"
+                  }
+                },
+                {
+                  "id": "auto",
+                  "label": {
+                    "en": "Temperature drop",
+                    "fr": "Chute de température",
+                    "nl": "Temperatuurdaling"
+                  }
+                }
+              ],
+              "hint": {
+                "en": "The two modes are mutually exclusive. Temperature-drop detection needs no sensor but reacts more slowly.",
+                "fr": "Les deux modes sont exclusifs. La détection par chute de température ne demande aucun capteur mais réagit plus lentement.",
+                "nl": "De twee modi sluiten elkaar uit."
+              }
+            },
+            {
+              "id": "window_action",
+              "type": "dropdown",
+              "label": {
+                "en": "What to do",
+                "fr": "Action",
+                "nl": "Actie"
+              },
+              "value": "turn_off",
+              "values": [
+                {
+                  "id": "turn_off",
+                  "label": {
+                    "en": "Turn off",
+                    "fr": "Éteindre",
+                    "nl": "Uitschakelen"
+                  }
+                },
+                {
+                  "id": "frost",
+                  "label": {
+                    "en": "Frost protection",
+                    "fr": "Hors-gel",
+                    "nl": "Vorstbeveiliging"
+                  }
+                },
+                {
+                  "id": "eco",
+                  "label": {
+                    "en": "Eco",
+                    "fr": "Éco",
+                    "nl": "Eco"
+                  }
+                },
+                {
+                  "id": "fan_only",
+                  "label": {
+                    "en": "Fan only",
+                    "fr": "Ventilation seule",
+                    "nl": "Alleen ventilator"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "window_delay",
+              "type": "number",
+              "label": {
+                "en": "Delay before acting",
+                "fr": "Délai avant action",
+                "nl": "Vertraging voor actie"
+              },
+              "value": 30,
+              "min": 0,
+              "max": 600,
+              "step": 5,
+              "hint": {
+                "en": "Lets you open a window briefly without cutting the heating.",
+                "fr": "Permet d'ouvrir brièvement sans couper la chauffe.",
+                "nl": "Laat kort luchten toe zonder de verwarming te stoppen."
+              },
+              "units": {
+                "en": "s"
+              }
+            },
+            {
+              "id": "window_off_delay",
+              "type": "number",
+              "label": {
+                "en": "Delay before restoring",
+                "fr": "Délai avant restauration",
+                "nl": "Vertraging voor herstel"
+              },
+              "value": 30,
+              "min": 0,
+              "max": 600,
+              "step": 5,
+              "units": {
+                "en": "s"
+              }
+            },
+            {
+              "id": "window_auto_open_threshold",
+              "type": "number",
+              "label": {
+                "en": "Drop that triggers detection",
+                "fr": "Chute déclenchant la détection",
+                "nl": "Daling die detectie activeert"
+              },
+              "value": 3,
+              "min": 0.5,
+              "max": 20,
+              "step": 0.5,
+              "units": {
+                "en": "°C/h"
+              }
+            },
+            {
+              "id": "window_auto_close_threshold",
+              "type": "number",
+              "label": {
+                "en": "Slope that ends detection",
+                "fr": "Pente mettant fin à la détection",
+                "nl": "Helling die detectie beëindigt"
+              },
+              "value": 0,
+              "min": -10,
+              "max": 10,
+              "step": 0.5,
+              "units": {
+                "en": "°C/h"
+              }
+            },
+            {
+              "id": "window_auto_max_duration",
+              "type": "number",
+              "label": {
+                "en": "Maximum detection time",
+                "fr": "Durée maximale de détection",
+                "nl": "Maximale detectietijd"
+              },
+              "value": 30,
+              "min": 1,
+              "max": 240,
+              "step": 1,
+              "hint": {
+                "en": "Past this, heating is restored even if the temperature is still falling.",
+                "fr": "Au-delà, la chauffe est restaurée même si la température continue de chuter.",
+                "nl": "Daarna wordt verwarming hersteld, ook bij verdere daling."
+              },
+              "units": {
+                "en": "min"
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Presence and motion",
+            "fr": "Présence et mouvement",
+            "nl": "Aanwezigheid en beweging"
+          },
+          "children": [
+            {
+              "id": "motion_delay",
+              "type": "number",
+              "label": {
+                "en": "Motion confirmation delay",
+                "fr": "Délai de confirmation du mouvement",
+                "nl": "Bevestigingsvertraging"
+              },
+              "value": 30,
+              "min": 0,
+              "max": 600,
+              "step": 5,
+              "hint": {
+                "en": "Must be longer than your motion sensor's own reset time.",
+                "fr": "Doit être supérieur à la temporisation propre de votre détecteur.",
+                "nl": "Moet langer zijn dan de eigen resettijd van uw sensor."
+              },
+              "units": {
+                "en": "s"
+              }
+            },
+            {
+              "id": "motion_off_delay",
+              "type": "number",
+              "label": {
+                "en": "No-motion confirmation delay",
+                "fr": "Délai de confirmation d'absence",
+                "nl": "Vertraging geen beweging"
+              },
+              "value": 300,
+              "min": 0,
+              "max": 3600,
+              "step": 10,
+              "units": {
+                "en": "s"
+              }
+            },
+            {
+              "id": "motion_preset",
+              "type": "dropdown",
+              "label": {
+                "en": "Preset when motion",
+                "fr": "Preset avec mouvement",
+                "nl": "Preset bij beweging"
+              },
+              "value": "comfort",
+              "values": [
+                {
+                  "id": "frost",
+                  "label": {
+                    "en": "Frost protection",
+                    "fr": "Hors-gel",
+                    "nl": "Vorstbeveiliging"
+                  }
+                },
+                {
+                  "id": "eco",
+                  "label": {
+                    "en": "Eco",
+                    "fr": "Éco",
+                    "nl": "Eco"
+                  }
+                },
+                {
+                  "id": "comfort",
+                  "label": {
+                    "en": "Comfort",
+                    "fr": "Confort",
+                    "nl": "Comfort"
+                  }
+                },
+                {
+                  "id": "boost",
+                  "label": {
+                    "en": "Boost",
+                    "fr": "Boost",
+                    "nl": "Boost"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "no_motion_preset",
+              "type": "dropdown",
+              "label": {
+                "en": "Preset when still",
+                "fr": "Preset sans mouvement",
+                "nl": "Preset zonder beweging"
+              },
+              "value": "eco",
+              "values": [
+                {
+                  "id": "frost",
+                  "label": {
+                    "en": "Frost protection",
+                    "fr": "Hors-gel",
+                    "nl": "Vorstbeveiliging"
+                  }
+                },
+                {
+                  "id": "eco",
+                  "label": {
+                    "en": "Eco",
+                    "fr": "Éco",
+                    "nl": "Eco"
+                  }
+                },
+                {
+                  "id": "comfort",
+                  "label": {
+                    "en": "Comfort",
+                    "fr": "Confort",
+                    "nl": "Comfort"
+                  }
+                },
+                {
+                  "id": "boost",
+                  "label": {
+                    "en": "Boost",
+                    "fr": "Boost",
+                    "nl": "Boost"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Central control",
+            "fr": "Pilotage central",
+            "nl": "Centrale sturing"
+          },
+          "children": [
+            {
+              "id": "use_central_mode",
+              "type": "checkbox",
+              "label": {
+                "en": "Follow the central mode",
+                "fr": "Suivre le mode central",
+                "nl": "Volg de centrale modus"
+              },
+              "value": true
+            },
+            {
+              "id": "controls_boiler",
+              "type": "checkbox",
+              "label": {
+                "en": "Counts towards the boiler",
+                "fr": "Compte pour la chaudière",
+                "nl": "Telt mee voor de ketel"
+              },
+              "value": true,
+              "hint": {
+                "en": "When this thermostat calls for heat, it contributes to the count that starts the central boiler.",
+                "fr": "Quand ce thermostat demande de la chaleur, il compte dans le total qui démarre la chaudière centrale.",
+                "nl": "Draagt bij aan het aantal dat de ketel start."
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Emitter",
+            "fr": "Émetteur",
+            "nl": "Verwarming"
+          },
+          "children": [
+            {
+              "id": "sync_mode",
+              "type": "dropdown",
+              "label": {
+                "en": "Push room temperature to the emitter",
+                "fr": "Injecter la température de pièce dans l'émetteur",
+                "nl": "Kamertemperatuur naar verwarming sturen"
+              },
+              "value": "off",
+              "values": [
+                {
+                  "id": "off",
+                  "label": {
+                    "en": "Off",
+                    "fr": "Désactivée",
+                    "nl": "Uit"
+                  }
+                },
+                {
+                  "id": "external",
+                  "label": {
+                    "en": "External sensor input",
+                    "fr": "Entrée capteur externe",
+                    "nl": "Externe sensoringang"
+                  }
+                },
+                {
+                  "id": "calibration",
+                  "label": {
+                    "en": "Calibration offset",
+                    "fr": "Offset de calibrage",
+                    "nl": "Kalibratie-offset"
+                  }
+                }
+              ],
+              "hint": {
+                "en": "A radiator valve measures the radiator, not the room. This pushes the real room temperature into it. Requires the Zigbee2MQTT backend in the app settings.",
+                "fr": "Une vanne mesure le radiateur, pas la pièce. Ceci lui injecte la vraie température ambiante. Nécessite la dorsale Zigbee2MQTT dans les réglages de l'app.",
+                "nl": "Een radiatorkraan meet de radiator, niet de kamer. Vereist de Zigbee2MQTT-backend."
+              }
+            },
+            {
+              "id": "regulation_threshold",
+              "type": "number",
+              "label": {
+                "en": "Minimum valve change",
+                "fr": "Variation minimale de vanne",
+                "nl": "Minimale klepwijziging"
+              },
+              "value": 3,
+              "min": 0,
+              "max": 20,
+              "step": 1,
+              "hint": {
+                "en": "Below 3% the Sonoff TRVZB can lose its calibration.",
+                "fr": "En dessous de 3 %, la Sonoff TRVZB peut perdre son calibrage.",
+                "nl": "Onder 3% kan de Sonoff TRVZB zijn kalibratie verliezen."
+              },
+              "units": {
+                "en": "%"
+              }
+            },
+            {
+              "id": "min_opening_degree",
+              "type": "number",
+              "label": {
+                "en": "Minimum opening",
+                "fr": "Ouverture minimale",
+                "nl": "Minimale opening"
+              },
+              "value": 0,
+              "min": 0,
+              "max": 100,
+              "step": 1,
+              "units": {
+                "en": "%"
+              }
+            },
+            {
+              "id": "max_opening_degree",
+              "type": "number",
+              "label": {
+                "en": "Maximum opening",
+                "fr": "Ouverture maximale",
+                "nl": "Maximale opening"
+              },
+              "value": 100,
+              "min": 1,
+              "max": 100,
+              "step": 1,
+              "units": {
+                "en": "%"
+              }
+            },
+            {
+              "id": "opening_threshold",
+              "type": "number",
+              "label": {
+                "en": "Closed below",
+                "fr": "Considérée fermée en dessous de",
+                "nl": "Gesloten onder"
+              },
+              "value": 0,
+              "min": 0,
+              "max": 100,
+              "step": 1,
+              "units": {
+                "en": "%"
+              }
+            },
+            {
+              "id": "max_closing_degree",
+              "type": "number",
+              "label": {
+                "en": "Maximum closing",
+                "fr": "Fermeture maximale",
+                "nl": "Maximale sluiting"
+              },
+              "value": 100,
+              "min": 0,
+              "max": 100,
+              "step": 1,
+              "units": {
+                "en": "%"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": {
+    "vtherm_boiler_active": {
+      "type": "boolean",
+      "title": {
+        "en": "Boiler running",
+        "fr": "Chaudière en marche",
+        "nl": "Ketel actief"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "insights": true
+    },
+    "vtherm_central_mode": {
+      "type": "enum",
+      "title": {
+        "en": "Central mode",
+        "fr": "Mode central",
+        "nl": "Centrale modus"
+      },
+      "desc": {
+        "en": "Overrides every thermostat that opted in to central control.",
+        "fr": "Prime sur tous les thermostats qui ont accepté le pilotage central.",
+        "nl": "Heeft voorrang op elke thermostaat die centrale sturing accepteert."
+      },
+      "getable": true,
+      "setable": true,
+      "uiComponent": "picker",
+      "insights": true,
+      "values": [
+        {
+          "id": "auto",
+          "title": {
+            "en": "Automatic",
+            "fr": "Automatique",
+            "nl": "Automatisch"
+          }
+        },
+        {
+          "id": "stopped",
+          "title": {
+            "en": "All stopped",
+            "fr": "Tout arrêté",
+            "nl": "Alles gestopt"
+          }
+        },
+        {
+          "id": "heat_only",
+          "title": {
+            "en": "Heating only",
+            "fr": "Chauffage seul",
+            "nl": "Alleen verwarmen"
+          }
+        },
+        {
+          "id": "frost",
+          "title": {
+            "en": "Frost protection",
+            "fr": "Hors-gel",
+            "nl": "Vorstbeveiliging"
+          }
+        }
+      ]
+    },
+    "vtherm_emitter_battery": {
+      "type": "number",
+      "title": {
+        "en": "Emitter battery",
+        "fr": "Pile de l'émetteur",
+        "nl": "Batterij verwarming"
+      },
+      "desc": {
+        "en": "Battery level of the radiator valve or thermostat this device drives. This device has no battery of its own.",
+        "fr": "Niveau de pile de la vanne ou du thermostat que cet appareil pilote. Cet appareil n'a pas de pile propre.",
+        "nl": "Batterijniveau van de radiatorkraan die dit apparaat aanstuurt. Dit apparaat heeft zelf geen batterij."
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "units": {
+        "en": "%"
+      },
+      "min": 0,
+      "max": 100,
+      "decimals": 0,
+      "insights": true
+    },
+    "vtherm_nb_active": {
+      "type": "number",
+      "title": {
+        "en": "Emitters calling for heat",
+        "fr": "Émetteurs en demande",
+        "nl": "Verwarmingen die warmte vragen"
+      },
+      "desc": {
+        "en": "Counted in emitters, not in thermostats — one thermostat can drive several.",
+        "fr": "Compté en émetteurs, pas en thermostats — un thermostat peut en piloter plusieurs.",
+        "nl": "Geteld in verwarmingen, niet in thermostaten — één thermostaat kan er meerdere aansturen."
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "min": 0,
+      "decimals": 0,
+      "insights": true
+    },
+    "vtherm_power_percent": {
+      "type": "number",
+      "title": {
+        "en": "Heating power",
+        "fr": "Puissance de chauffe",
+        "nl": "Verwarmingsvermogen"
+      },
+      "desc": {
+        "en": "Share of the cycle the emitter is asked to heat, as computed by the proportional algorithm.",
+        "fr": "Part du cycle pendant laquelle l'émetteur doit chauffer, calculée par l'algorithme proportionnel.",
+        "nl": "Deel van de cyclus waarin de verwarming moet verwarmen, berekend door het proportionele algoritme."
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "units": {
+        "en": "%"
+      },
+      "min": 0,
+      "max": 100,
+      "decimals": 0,
+      "insights": true
+    },
+    "vtherm_preset": {
+      "type": "enum",
+      "title": {
+        "en": "Preset",
+        "fr": "Preset",
+        "nl": "Preset"
+      },
+      "desc": {
+        "en": "The comfort level you asked for. What the thermostat actually does may differ — see Status.",
+        "fr": "Le niveau de confort demandé. Ce que le thermostat fait réellement peut différer — voir État.",
+        "nl": "Het gevraagde comfortniveau. Wat de thermostaat werkelijk doet kan afwijken — zie Status."
+      },
+      "getable": true,
+      "setable": true,
+      "uiComponent": "picker",
+      "insights": true,
+      "values": [
+        {
+          "id": "frost",
+          "title": {
+            "en": "Frost protection",
+            "fr": "Hors-gel",
+            "nl": "Vorstbeveiliging"
+          }
+        },
+        {
+          "id": "eco",
+          "title": {
+            "en": "Eco",
+            "fr": "Éco",
+            "nl": "Eco"
+          }
+        },
+        {
+          "id": "comfort",
+          "title": {
+            "en": "Comfort",
+            "fr": "Confort",
+            "nl": "Comfort"
+          }
+        },
+        {
+          "id": "boost",
+          "title": {
+            "en": "Boost",
+            "fr": "Boost",
+            "nl": "Boost"
+          }
+        },
+        {
+          "id": "activity",
+          "title": {
+            "en": "Activity",
+            "fr": "Activité",
+            "nl": "Activiteit"
+          }
+        },
+        {
+          "id": "none",
+          "title": {
+            "en": "Manual",
+            "fr": "Manuel",
+            "nl": "Handmatig"
+          }
+        }
+      ]
+    },
+    "vtherm_regulated_setpoint": {
+      "type": "number",
+      "title": {
+        "en": "Regulated setpoint",
+        "fr": "Consigne régulée",
+        "nl": "Gereguleerd setpoint"
+      },
+      "desc": {
+        "en": "The setpoint actually sent to the emitter, offset included. Differs from your target on purpose.",
+        "fr": "La consigne réellement envoyée à l'émetteur, offset compris. Elle diffère volontairement de la vôtre.",
+        "nl": "Het setpoint dat werkelijk naar de verwarming gaat, inclusief offset. Wijkt bewust af."
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "units": {
+        "en": "°C"
+      },
+      "min": 0,
+      "max": 40,
+      "decimals": 1,
+      "insights": true
+    },
+    "vtherm_slope": {
+      "type": "number",
+      "title": {
+        "en": "Temperature slope",
+        "fr": "Pente de température",
+        "nl": "Temperatuurhelling"
+      },
+      "desc": {
+        "en": "How fast the room is warming or cooling. A sharp drop is how open-window detection works.",
+        "fr": "Vitesse à laquelle la pièce se réchauffe ou se refroidit. Une chute franche déclenche la détection d'ouverture.",
+        "nl": "Hoe snel de kamer opwarmt of afkoelt. Een scherpe daling activeert de raamdetectie."
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "units": {
+        "en": "°C/h"
+      },
+      "min": -120,
+      "max": 120,
+      "decimals": 2,
+      "insights": true
+    },
+    "vtherm_state": {
+      "type": "enum",
+      "title": {
+        "en": "Status",
+        "fr": "État",
+        "nl": "Status"
+      },
+      "desc": {
+        "en": "What the thermostat is actually doing right now, which may override the preset you chose.",
+        "fr": "Ce que le thermostat fait réellement, ce qui peut primer sur le preset demandé.",
+        "nl": "Wat de thermostaat nu werkelijk doet, wat voorrang kan hebben op het gekozen preset."
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "insights": true,
+      "values": [
+        {
+          "id": "off",
+          "title": {
+            "en": "Off",
+            "fr": "Éteint",
+            "nl": "Uit"
+          }
+        },
+        {
+          "id": "idle",
+          "title": {
+            "en": "Idle",
+            "fr": "Au repos",
+            "nl": "Inactief"
+          }
+        },
+        {
+          "id": "heating",
+          "title": {
+            "en": "Heating",
+            "fr": "En chauffe",
+            "nl": "Verwarmen"
+          }
+        },
+        {
+          "id": "window",
+          "title": {
+            "en": "Window open",
+            "fr": "Fenêtre ouverte",
+            "nl": "Raam open"
+          }
+        },
+        {
+          "id": "away",
+          "title": {
+            "en": "Away",
+            "fr": "Absence",
+            "nl": "Afwezig"
+          }
+        },
+        {
+          "id": "activity",
+          "title": {
+            "en": "Activity",
+            "fr": "Activité",
+            "nl": "Activiteit"
+          }
+        },
+        {
+          "id": "central",
+          "title": {
+            "en": "Central mode",
+            "fr": "Mode central",
+            "nl": "Centrale modus"
+          }
+        },
+        {
+          "id": "safety",
+          "title": {
+            "en": "Safety",
+            "fr": "Sécurité",
+            "nl": "Veiligheid"
+          }
+        },
+        {
+          "id": "power",
+          "title": {
+            "en": "Load shedding",
+            "fr": "Délestage",
+            "nl": "Belastingafschakeling"
+          }
+        }
+      ]
+    },
+    "vtherm_valve_open": {
+      "type": "number",
+      "title": {
+        "en": "Valve opening",
+        "fr": "Ouverture de vanne",
+        "nl": "Klepopening"
+      },
+      "desc": {
+        "en": "How far the valve is commanded open. Requires the Zigbee2MQTT backend.",
+        "fr": "Ouverture commandée à la vanne. Nécessite la dorsale Zigbee2MQTT.",
+        "nl": "Hoe ver de klep wordt geopend. Vereist de Zigbee2MQTT-backend."
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "units": {
+        "en": "%"
+      },
+      "min": 0,
+      "max": 100,
+      "decimals": 0,
+      "insights": true
+    }
+  }
+}

@@ -25,6 +25,11 @@
       "motion_hint": "Active le preset Activité, qui suit le mouvement dans cette pièce.",
       "presence": "Capteur de présence",
       "presence_hint": "Quand personne n'est là, chaque preset bascule sur sa température d'absence."
+    },
+    "default_name": "Thermostat",
+    "central_name": "Configuration centrale",
+    "error": {
+      "incomplete": "Choisissez un capteur de pièce et un émetteur avant d'ajouter ce thermostat."
     }
   },
   "settings": {
@@ -62,5 +67,10 @@
     "test_timeout": "Aucune réponse du broker en dix secondes. Vérifiez l'adresse, le port, et que le broker est joignable depuis Homey.",
     "test_invalid_config": "Ces réglages sont incomplets ou invalides. Vérifiez l'adresse, le port et le topic de base.",
     "test_unknown": "Le test a renvoyé une réponse inattendue."
+  },
+  "device": {
+    "no_emitter": "Aucun émetteur n'est lié. Utilisez Réparer pour en désigner un.",
+    "central_duplicate": "Une autre configuration centrale existe déjà. Une seule est autorisée — supprimez celle-ci.",
+    "sync_restart": "Enregistré. Les réglages d'intervalle d'écriture vers l'émetteur prendront effet au redémarrage de l'app."
   }
 }

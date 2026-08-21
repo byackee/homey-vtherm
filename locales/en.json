@@ -25,6 +25,11 @@
       "motion_hint": "Enables the Activity preset, which follows movement in this room.",
       "presence": "Presence sensor",
       "presence_hint": "When nobody is home, every preset falls back to its away temperature."
+    },
+    "default_name": "Thermostat",
+    "central_name": "Central configuration",
+    "error": {
+      "incomplete": "Pick a room sensor and a heater before adding this thermostat."
     }
   },
   "settings": {
@@ -62,5 +67,10 @@
     "test_timeout": "No answer from the broker within ten seconds. Check the address and the port, and that the broker is reachable from Homey.",
     "test_invalid_config": "These settings are incomplete or invalid. Check the address, the port and the base topic.",
     "test_unknown": "The test returned an unexpected answer."
+  },
+  "device": {
+    "no_emitter": "No heater is linked. Use Repair to pick one.",
+    "central_duplicate": "Another central configuration already exists. Only one is allowed — delete this one.",
+    "sync_restart": "Saved. The write-interval settings for the emitter take effect when the app restarts."
   }
 }
