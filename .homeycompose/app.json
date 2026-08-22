@@ -1,5 +1,5 @@
 {
-  "id": "com.dataweavelabs.vtherm",
+  "id": "com.dataweavelabs.adaptivethermostat",
   "version": "1.0.0",
   "compatibility": ">=12.7.0",
   "sdk": 3,

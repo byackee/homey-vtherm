@@ -290,7 +290,7 @@ export default {
   /**
    * Tout ce que l'app sait d'elle-même, en lecture seule.
    *
-   * `homey api raw get /api/app/com.dataweavelabs.vtherm/diagnostics` depuis un poste de dev.
+   * `homey api raw get /api/app/com.dataweavelabs.adaptivethermostat/diagnostics` depuis un poste de dev.
    */
   async getDiagnostics({ homey }: Request): Promise<unknown> {
     const app = homey.app as { getDiagnostics?: () => unknown } | undefined;

@@ -1,5 +1,5 @@
 {
-  "name": "com.dataweavelabs.vtherm",
+  "name": "com.dataweavelabs.adaptivethermostat",
   "version": "1.0.0",
   "private": true,
   "type": "module",

@@ -224,7 +224,7 @@ ils sont faits.
   lui-même les liaisons — l'app perd son principal argument mais reste publiable. À écrire avant de
   soumettre, pas après un refus.
 - Avertissement sur le pilotage d'une chaudière réelle (SPEC §9.2).
-- Nom : **Adaptive Thermostat**. L'identifiant technique `com.dataweavelabs.vtherm` sera renommé en
+- Nom : **Adaptive Thermostat**. L'identifiant technique `com.dataweavelabs.adaptivethermostat` sera renommé en
   `com.dataweavelabs.adaptivethermostat` à cette étape — il apparaît dans l'URL de la fiche du store.
 - Attribution MIT à Versatile Thermostat : faite (`LICENSE`).
 - `.homeychangelog.json` : fait.

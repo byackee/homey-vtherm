@@ -28,7 +28,7 @@ mock.module('homey', {
 const { default: VThermDriver } = await import('../drivers/vtherm/driver.mjs');
 const { default: CentralDriver } = await import('../drivers/central/driver.mjs');
 
-const APP_ID = 'com.dataweavelabs.vtherm';
+const APP_ID = 'com.dataweavelabs.adaptivethermostat';
 
 // --- Faux voisinage -----------------------------------------------------------
 
