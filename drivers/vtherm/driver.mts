@@ -231,7 +231,15 @@ export default class VThermDriver extends Homey.Driver {
 
   /** La pièce du capteur, à défaut son nom : l'utilisateur peut renommer juste après. */
   private async proposeName(roomId: string): Promise<string> {
-    const summary = await this.app.hub.getDeviceSummary(roomId);
+    // Une seule nouvelle tentative si le hub n'a pas encore répondu. Le pairing suit souvent de
+    // près l'installation de l'app, et un thermostat créé pendant ce trou s'appelle « Thermostat »
+    // — ce qui devient illisible dès qu'il y en a cinq. Renommer après coup serait plus intrusif
+    // qu'attendre une seconde ici.
+    let summary = await this.app.hub.getDeviceSummary(roomId);
+    if (summary === null) {
+      await new Promise<void>((resolve) => { this.homey.setTimeout(resolve, 1_000); });
+      summary = await this.app.hub.getDeviceSummary(roomId);
+    }
     return summary?.zoneName ?? summary?.name ?? this.homey.__('pair.default_name');
   }
 

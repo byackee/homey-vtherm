@@ -62,7 +62,8 @@
       "orphan_option": "Verdwenen apparaat ({{id}})",
       "unavailable": "De lijst met apparaten voor deze bron kon niet geladen worden.",
       "unknown_thermostat": "Deze thermostaat bestaat niet meer. Laad de pagina opnieuw.",
-      "failed": "Je thermostaten konden niet gelezen worden: {{detail}}"
+      "failed": "Je thermostaten konden niet gelezen worden: {{detail}}",
+      "no_room": "Geen kamer"
     },
     "backbone_title": "Zigbee2MQTT-ruggengraat",
     "backbone_subtitle": "Optioneel. Ontgrendelt directe kraanbesturing op SONOFF TRVZB en vergelijkbare kranen.",
@@ -108,6 +109,10 @@
       "motion": "Beweging",
       "presence": "Aanwezigheid",
       "boiler": "Ketelschakelaar"
+    },
+    "tab": {
+      "sources": "Thermostaten",
+      "backbone": "Zigbee2MQTT"
     }
   },
   "device": {

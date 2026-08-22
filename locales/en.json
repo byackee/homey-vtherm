@@ -62,7 +62,8 @@
       "orphan_option": "Missing device ({{id}})",
       "unavailable": "The list of devices for this source could not be loaded.",
       "unknown_thermostat": "This thermostat no longer exists. Reload the page.",
-      "failed": "Your thermostats could not be read: {{detail}}"
+      "failed": "Your thermostats could not be read: {{detail}}",
+      "no_room": "No room"
     },
     "backbone_title": "Zigbee2MQTT backbone",
     "backbone_subtitle": "Optional. Unlocks direct valve control on SONOFF TRVZB and similar valves.",
@@ -108,6 +109,10 @@
       "motion": "Motion",
       "presence": "Presence",
       "boiler": "Boiler switch"
+    },
+    "tab": {
+      "sources": "Thermostats",
+      "backbone": "Zigbee2MQTT"
     }
   },
   "device": {

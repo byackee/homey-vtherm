@@ -62,7 +62,8 @@
       "orphan_option": "Appareil disparu ({{id}})",
       "unavailable": "La liste des appareils pour cette source n'a pas pu être chargée.",
       "unknown_thermostat": "Ce thermostat n'existe plus. Rechargez la page.",
-      "failed": "Vos thermostats n’ont pas pu être lus : {{detail}}"
+      "failed": "Vos thermostats n’ont pas pu être lus : {{detail}}",
+      "no_room": "Sans pièce"
     },
     "backbone_title": "Dorsale Zigbee2MQTT",
     "backbone_subtitle": "Facultatif. Débloque le contrôle direct de vanne sur les SONOFF TRVZB et similaires.",
@@ -108,6 +109,10 @@
       "motion": "Mouvement",
       "presence": "Présence",
       "boiler": "Interrupteur de chaudière"
+    },
+    "tab": {
+      "sources": "Thermostats",
+      "backbone": "Zigbee2MQTT"
     }
   },
   "device": {

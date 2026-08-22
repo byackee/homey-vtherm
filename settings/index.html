@@ -18,6 +18,21 @@
     .message.ok { color: #1a7f37; }
     .message.warn { color: #b45309; }
 
+    /* Onglets. Deux sujets sans rapport — les thermostats et l'accès au broker — cohabitaient
+       sur une page qu'il fallait parcourir en entier pour trouver l'un ou l'autre. */
+    .tabs { display: flex; gap: 4px; margin: 0 0 18px; border-bottom: 1px solid #dfe4e8; }
+    .tab { appearance: none; border: 0; background: none; padding: 10px 14px; font-size: 14px;
+           font-weight: 600; color: #62707d; cursor: pointer; border-bottom: 2px solid transparent;
+           margin-bottom: -1px; }
+    .tab:hover { color: #1f2933; }
+    .tab[aria-selected="true"] { color: #E8590C; border-bottom-color: #E8590C; }
+    .panel[hidden] { display: none; }
+
+    .room-title { font-size: 13px; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: .06em; color: #7b8794; margin: 20px 0 8px;
+                  padding-bottom: 5px; border-bottom: 1px solid #eceff1; }
+    .room-title:first-of-type { margin-top: 4px; }
+
     .section-title { font-size: 17px; font-weight: 700; margin: 26px 0 4px; }
     .section-title:first-of-type { margin-top: 0; }
 
@@ -43,6 +58,14 @@
     <p class="homey-subtitle" data-i18n="settings.subtitle"></p>
   </header>
 
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab" id="tab-sources" role="tab" aria-controls="panel-sources"
+            aria-selected="true" data-panel="sources" data-i18n="settings.tab.sources"></button>
+    <button type="button" class="tab" id="tab-backbone" role="tab" aria-controls="panel-backbone"
+            aria-selected="false" data-panel="backbone" data-i18n="settings.tab.backbone"></button>
+  </nav>
+
+  <div class="panel" id="panel-sources" role="tabpanel" aria-labelledby="tab-sources">
   <!-- Les sources d'abord : c'est ce que l'utilisateur ne trouvait pas ailleurs. La réparation de
        Homey continue d'exister et fait exactement la même chose ; elle est simplement introuvable. -->
   <h2 class="section-title" data-i18n="settings.sources.title"></h2>
@@ -52,7 +75,9 @@
   <div class="actions">
     <button class="homey-button-secondary-full" id="reloadSources" data-i18n="settings.sources.refresh"></button>
   </div>
+  </div>
 
+  <div class="panel" id="panel-backbone" role="tabpanel" aria-labelledby="tab-backbone" hidden>
   <h2 class="section-title" data-i18n="settings.backbone_title"></h2>
   <p class="lead" data-i18n="settings.backbone_subtitle"></p>
   <p class="lead" data-i18n="settings.lead"></p>
@@ -117,8 +142,40 @@
     <button class="homey-button-secondary-full" id="test" data-i18n="settings.test"></button>
   </div>
   <p class="message" id="message"></p>
+  </div>
 
   <script type="text/javascript">
+    /**
+     * Onglets.
+     *
+     * Les deux sujets de cette page n'ont rien à voir : les appareils d'un thermostat d'un côté,
+     * l'accès au broker Zigbee2MQTT de l'autre. Les empiler obligeait à parcourir l'un pour
+     * atteindre l'autre. Les panneaux restent dans le DOM et ne sont que masqués : le code qui
+     * les remplit n'a pas à savoir lequel est visible.
+     */
+    function showPanel(name) {
+      var tabs = document.querySelectorAll('.tab');
+      for (var i = 0; i < tabs.length; i++) {
+        var selected = tabs[i].getAttribute('data-panel') === name;
+        tabs[i].setAttribute('aria-selected', selected ? 'true' : 'false');
+      }
+      var panels = document.querySelectorAll('.panel');
+      for (var j = 0; j < panels.length; j++) {
+        panels[j].hidden = panels[j].id !== 'panel-' + name;
+      }
+    }
+
+    function wireTabs() {
+      var tabs = document.querySelectorAll('.tab');
+      for (var i = 0; i < tabs.length; i++) {
+        (function (tab) {
+          tab.addEventListener('click', function () {
+            showPanel(tab.getAttribute('data-panel'));
+          });
+        })(tabs[i]);
+      }
+    }
+
     /**
      * Une erreur JavaScript non rattrapée laissait cette page à moitié vide, sans un mot. Elle
      * s'écrit désormais dedans : une page de réglages muette est indébogable à distance.
@@ -132,6 +189,10 @@
 
     function onHomeyReady(Homey) {
       const $ = id => document.getElementById(id);
+
+      // Avant tout le reste : si le chargement des données échoue, les onglets doivent rester
+      // utilisables — l'onglet du broker n'a aucune raison de tomber avec celui des thermostats.
+      wireTabs();
       const DEFAULT_PORT = 1883;
       const DEFAULT_BASE_TOPIC = 'zigbee2mqtt';
 
@@ -314,7 +375,27 @@
           return;
         }
 
-        list.forEach(thermostat => root.appendChild(buildThermostat(thermostat, candidates)));
+        // Regroupés par pièce. Avec cinq ou dix thermostats, une liste à plat oblige à lire le
+        // détail de chacun pour retrouver celui qu'on cherche. La pièce retenue est celle du
+        // CAPTEUR : c'est lui qui définit le volume d'air régulé, pas l'émetteur — un radiateur
+        // peut être déclaré dans une pièce voisine sans que ça change ce qui est chauffé.
+        const byRoom = new Map();
+        list.forEach(thermostat => {
+          const room = thermostat.sources.find(s => s.source === 'room');
+          const zone = (room && room.zoneName) || Homey.__('settings.sources.no_room');
+          if (!byRoom.has(zone)) byRoom.set(zone, []);
+          byRoom.get(zone).push(thermostat);
+        });
+
+        [...byRoom.keys()].sort((a, b) => a.localeCompare(b)).forEach(zone => {
+          const heading = document.createElement('h3');
+          heading.className = 'room-title';
+          heading.textContent = zone;
+          root.appendChild(heading);
+          byRoom.get(zone)
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+            .forEach(thermostat => root.appendChild(buildThermostat(thermostat, candidates)));
+        });
 
         // Sans le hub, aucun nom n'a pu être résolu : le dire vaut mieux que d'afficher six
         // identifiants bruts sans explication.
