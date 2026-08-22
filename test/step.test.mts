@@ -48,6 +48,8 @@ const CONFIG: VThermConfig = {
   autoRegulationDtemp: 0.5,
   autoRegulationPeriodMin: 5,
   cycleMin: 5,
+  minActivationSec: 30,
+  minDeactivationSec: 30,
   useCentralMode: true,
   safety: DEFAULT_SAFETY,
 };

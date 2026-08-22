@@ -7,7 +7,7 @@ et non contre `docs/SPEC.md`. Référence amont : Versatile Thermostat 10.2.0.
 
 | | VT | Nous |
 |---|---|---|
-| Types d'émetteur | 4 (`over_switch`, `over_climate`, `over_valve`, vanne directe) | **1** (`over_climate`, avec vanne directe) |
+| Types d'émetteur | 4 (`over_switch`, `over_climate`, `over_valve`, vanne directe) | **3** (`over_climate`, vanne directe, `over_switch`) |
 | Algorithme TPI | oui | oui |
 | Auto-régulation PI | 5 modes + expert | 5 modes + expert |
 | Détection d'ouverture | capteur + pente | capteur + pente |
@@ -16,7 +16,6 @@ et non contre `docs/SPEC.md`. Référence amont : Versatile Thermostat 10.2.0.
 | Mode sécurité | oui | oui |
 | Délestage par puissance | oui | **non** |
 | Auto start/stop | oui | **non** |
-| Types d'émetteur autres | oui | **non** |
 
 ## Ce qui est à parité
 
@@ -49,6 +48,16 @@ sans quoi la vanne s'ouvrirait sur un circuit froid et ne chaufferait rien ; et 
 **prévenu** — avertissement sur l'appareil, carte Flow « le capteur se tait » — là où VT compense
 en silence. Secourir et signaler, pas l'un ou l'autre.
 
+**Pilotage par interrupteur (`over_switch`).** Le pourcentage du TPI devient du temps de marche :
+30 % sur un cycle de dix minutes, c'est trois minutes allumé puis sept éteint. Avec les deux gardes
+de VT — on n'allume pas si la marche serait trop courte pour chauffer, on ne coupe pas si l'arrêt
+serait trop court pour servir — parce qu'un relais a une durée de vie qui se compte en commutations.
+
+Un écart avec VT, assumé et mesurable : VT arme de vraies minuteries, nous honorons la bascule au
+battement de l'ordonnanceur. Ce battement est passé de trente à dix secondes pour cette raison —
+sur un cycle de dix minutes, l'erreur tombe sous deux pour cent. Le baisser ne coûte aucun appel
+réseau : le hub a son propre plancher d'une minute et les écritures sont dédupliquées.
+
 **Injection de la température de pièce dans la vanne.** Les deux modes de VT, `external` et
 `calibration` — ce dernier incrémental, comme chez lui.
 
@@ -74,9 +83,8 @@ aucune coupure des thermostats les plus proches de leur consigne quand l'install
 
 **L'auto start/stop.** Pas d'extinction prédictive d'un équipement qui consomme en veille.
 
-**Les autres types d'émetteur.** `over_switch` (radiateur électrique piloté par relais, avec cycles
-on/off) et `over_valve` (vanne exposée en `number` sans entité climat) n'existent pas. L'architecture
-les accueille sans refonte, mais ils ne sont pas écrits.
+**`over_valve`** — une vanne exposée en `number` sans entité climat. Aucun matériel de
+l'installation n'est dans ce cas ; l'architecture l'accueillerait sans refonte.
 
 **Fonctions annexes de VT absentes :** apprentissage automatique des coefficients (Auto-TPI),
 verrouillage par code PIN, détection d'anomalie de chauffe, réparation d'état incorrect,
@@ -109,8 +117,9 @@ Sur le **périmètre**, nous couvrons le cas d'usage principal de VT — un capt
 chaudière — et laissons de côté trois familles : la sécurité en cas de capteur muet, la gestion de
 puissance, et les types d'émetteur autres que `over_climate`.
 
-Le manque qui comptait — le **mode sécurité** — est comblé. Ce qui reste, le délestage par puissance
-et l'auto start/stop, relève de la fonctionnalité et non du filet.
+Le manque qui comptait — le **mode sécurité** — est comblé. Ce qui reste, le délestage par puissance,
+l'auto start/stop et le type `over_valve`, relève de la fonctionnalité et non du filet — et aucun
+des trois ne correspond à du matériel de l'installation.
 
 Vérifié sur l'installation le 2026-08-22 : la chaîne complète capteur → TPI → ouverture de vanne →
 demande agrégée → relais de chaudière fonctionne de bout en bout, et l'installation revient au repos

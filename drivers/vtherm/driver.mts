@@ -12,7 +12,9 @@ import Homey from 'homey';
 import type { Preset } from '../../lib/types.mjs';
 import type { PresenceOverride } from '../../runtime/participants.mjs';
 import type VThermApp from '../../app.mjs';
-import VThermDevice, { SOURCE_STORE_KEYS, toPreset, type SourceKey, SOURCE_CAPABILITIES } from './device.mjs';
+import VThermDevice, {
+  EMITTER_CLASSES, SOURCE_STORE_KEYS, toPreset, type SourceKey, SOURCE_CAPABILITIES,
+} from './device.mjs';
 
 /** `@types/homey` n'exporte pas `PairSession` : on le reprend de la signature qui l'emploie. */
 type PairSession = Parameters<Homey.Driver['onPair']>[0];
@@ -157,6 +159,10 @@ export default class VThermDriver extends Homey.Driver {
     }
     const summaries = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
     const candidates = summaries
+      // L'émetteur accepte `onoff` depuis le mode interrupteur, et `onoff` à lui seul ramènerait
+      // toutes les lampes de la maison. La classe de l'appareil est le seul discriminant dont on
+      // dispose ici — voir `EMITTER_CLASSES`.
+      .filter((summary) => source !== 'emitter' || EMITTER_CLASSES.includes(summary.class))
       // Ne jamais se proposer soi-même. Un thermostat de cette app porte `target_temperature` et
       // apparaîtrait donc dans la liste des émetteurs ; le désigner créerait une boucle où chacun
       // écrit la consigne que l'autre relit, et la vanne dériverait jusqu'à sa butée.
@@ -188,7 +194,7 @@ export default class VThermDriver extends Homey.Driver {
   private static readonly BASE_CAPABILITIES = [
     'onoff', 'target_temperature', 'measure_temperature',
     'vtherm_preset', 'vtherm_state',
-    'vtherm_regulated_setpoint', 'vtherm_power_percent', 'vtherm_valve_open', 'vtherm_slope',
+    'vtherm_regulated_setpoint', 'vtherm_power_percent', 'vtherm_slope',
   ] as const;
 
   private async buildDevice(selection: ReadonlyMap<SourceKey, string | null>): Promise<{
@@ -218,6 +224,17 @@ export default class VThermDriver extends Homey.Driver {
     if (emitter?.capabilities.some((id) => id === 'measure_battery' || id.startsWith('measure_battery.'))) {
       capabilities.push('vtherm_emitter_battery');
     }
+
+    // L'ouverture de vanne n'a de sens que si l'émetteur peut en avoir une. Un émetteur qui n'a
+    // aucune consigne inscriptible est un interrupteur, définitivement : aucune dorsale ne le
+    // rendra pilotable en ouverture. Lui déclarer cette capability afficherait une tuile
+    // perpétuellement vide, et on ne peut pas la retirer plus tard sans détruire son historique
+    // Insights.
+    const setpointCapable = emitter?.capabilities.some(
+      (id) => (id === 'target_temperature' || id.startsWith('target_temperature.'))
+        && emitter.setable[id] === true,
+    ) ?? true;
+    if (setpointCapable) capabilities.push('vtherm_valve_open');
 
     return {
       name: await this.proposeName(roomId),

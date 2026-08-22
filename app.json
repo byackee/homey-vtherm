@@ -938,7 +938,7 @@
               "value": 0,
               "min": 0,
               "max": 600,
-              "step": 5,
+              "step": 1,
               "units": {
                 "en": "s"
               },
@@ -2033,6 +2033,48 @@
               "step": 1,
               "units": {
                 "en": "%"
+              }
+            },
+            {
+              "id": "min_activation_sec",
+              "type": "number",
+              "label": {
+                "en": "Minimum on time",
+                "fr": "Durée minimale de marche",
+                "nl": "Minimale inschakelduur"
+              },
+              "value": 30,
+              "min": 0,
+              "max": 900,
+              "step": 5,
+              "units": {
+                "en": "s"
+              },
+              "hint": {
+                "en": "Emitters driven by a switch only. The calculated power becomes on time inside each cycle. A heater switched on for a few seconds warms nothing and wears the relay out, so below this on time the cycle stays off.",
+                "fr": "Émetteurs pilotés par interrupteur uniquement. La puissance calculée devient du temps de marche dans chaque cycle. Un radiateur allumé quelques secondes ne chauffe rien et use le relais : en dessous de cette durée, le cycle reste éteint.",
+                "nl": "Alleen voor verwarming die via een schakelaar wordt aangestuurd. Het berekende vermogen wordt inschakeltijd binnen elke cyclus. Een radiator die enkele seconden aan gaat verwarmt niets en verslijt het relais, dus onder deze duur blijft de cyclus uit."
+              }
+            },
+            {
+              "id": "min_deactivation_sec",
+              "type": "number",
+              "label": {
+                "en": "Minimum off time",
+                "fr": "Durée minimale d'arrêt",
+                "nl": "Minimale uitschakelduur"
+              },
+              "value": 30,
+              "min": 0,
+              "max": 900,
+              "step": 5,
+              "units": {
+                "en": "s"
+              },
+              "hint": {
+                "en": "The mirror image. Rather than make the contactor blink for a pause shorter than this, the emitter is left on for the whole cycle.",
+                "fr": "Le symétrique. Plutôt que de faire clignoter le contacteur pour une pause plus courte que cela, l'émetteur est laissé allumé tout le cycle.",
+                "nl": "Het spiegelbeeld. In plaats van de schakelaar te laten knipperen voor een kortere pauze blijft de verwarming de hele cyclus aan."
               }
             }
           ]

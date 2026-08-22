@@ -1,4 +1,5 @@
 import type { SafetyParams } from './safety.mjs';
+import type { DutyCycleState } from './dutyCycle.mjs';
 /**
  * Contrat du cœur algorithmique.
  *
@@ -27,8 +28,14 @@ export type WindowAction = 'turn_off' | 'frost' | 'eco' | 'fan_only';
 
 export type RegulationMode = 'none' | 'slow' | 'light' | 'medium' | 'strong' | 'expert';
 
-/** Comment on parle à l'émetteur : ouverture de vanne pilotée, ou consigne décalée. */
-export type EmitterMode = 'valve' | 'setpoint';
+/**
+ * Comment on parle à l'émetteur : ouverture de vanne pilotée, consigne décalée, ou interrupteur.
+ *
+ * `switch` est le `over_switch` de VT : un émetteur qui ne sait qu'être allumé ou éteint. La même
+ * puissance calculée par le TPI y devient du TEMPS de marche (voir lib/dutyCycle.mts) au lieu
+ * d'une ouverture — c'est ce qui rend proportionnel un radiateur qui ne l'est pas.
+ */
+export type EmitterMode = 'valve' | 'setpoint' | 'switch';
 
 /** Synchronisation du capteur de pièce vers l'émetteur (SPEC §5.3). */
 export type SyncMode = 'off' | 'external' | 'calibration';
@@ -370,6 +377,15 @@ export interface VThermPersistentState {
   window: WindowState;
   windowMemento: WindowMemento | null;
   regulation: RegulationState;
+  /**
+   * Découpage temporel du mode `switch` : début du cycle courant et dernier état commandé.
+   *
+   * Persisté, et ce n'est pas un confort. Sans lui, un redémarrage de l'app repart sur un cycle
+   * neuf au milieu du précédent : un radiateur qui venait de faire ses trois minutes de marche en
+   * refait trois d'affilée, et la pièce reçoit le double de la puissance demandée. Le `commanded`
+   * évite en plus de réaffirmer un état que le relais porte déjà.
+   */
+  dutyCycle: DutyCycleState;
   /** Instant du dernier pas exécuté. Sert à la règle SPEC §11 « arrêt > 1 h ⇒ RAZ de l'intégrale ». */
   lastRunAtMs: number;
 }
@@ -382,6 +398,13 @@ export interface VThermPersistentState {
 export interface VThermLastWrite {
   valvePercent: number | null;
   setpoint: number | null;
+  /**
+   * Dernier état réellement envoyé à un émetteur de type interrupteur. `null` = jamais envoyé
+   * depuis le démarrage de l'app : le prochain pas doit alors commander, même si le cycle relu du
+   * `store` dit que le relais est déjà dans le bon état — personne ne garantit qu'il n'a pas été
+   * basculé à la main pendant que l'app était arrêtée.
+   */
+  switchOn: boolean | null;
   atMs: number;
 }
 
@@ -477,6 +500,13 @@ export interface VThermConfig {
    * pas déclenché hors cycle ne pèse pas autant qu'un cycle complet.
    */
   cycleMin: number;
+  /**
+   * Durée minimale de marche du mode `switch`, en secondes (garde `minActivationSec` de VT).
+   * `cycleMin` sert de longueur de cycle aux deux modes : c'est la même période de recalcul.
+   */
+  minActivationSec: number;
+  /** Durée minimale d'arrêt du mode `switch`, en secondes. */
+  minDeactivationSec: number;
   /** SPEC §9.1 : un device peut refuser d'obéir au mode central. */
   useCentralMode: boolean;
 }
@@ -534,6 +564,14 @@ export interface VThermOutputs {
   setpointToEmitter: number | null;
   /** `null` = mode consigne, ou rien à écrire. */
   valvePercent: number | null;
+  /**
+   * État à commander sur un émetteur de type interrupteur. `null` = NE RIEN ÉCRIRE.
+   *
+   * Rempli seulement quand la bascule a réellement lieu, ou qu'aucune commande n'est encore
+   * partie. Réaffirmer à chaque pas un relais déjà dans le bon état l'userait autant qu'une vraie
+   * commutation — un contacteur a une durée de vie qui se compte en commutations, pas en heures.
+   */
+  switchOn: boolean | null;
   /** Fraction 0..1. `vtherm_power_percent` en est le centuple. */
   onPercent: number;
   slopePerHour: number | null;

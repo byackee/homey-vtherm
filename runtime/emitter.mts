@@ -30,7 +30,7 @@ import {
 
 type Logger = (...args: unknown[]) => void;
 
-export type EmitterWriteMode = 'valve' | 'setpoint';
+export type EmitterWriteMode = 'valve' | 'setpoint' | 'switch';
 
 export interface EmitterCapabilities {
   setpoint: boolean;
@@ -38,6 +38,8 @@ export interface EmitterCapabilities {
   externalTemp: boolean;
   calibration: boolean;
   heatingState: boolean;
+  /** L'émetteur ne sait qu'être allumé ou éteint : une prise commutée, un relais de convecteur. */
+  switch: boolean;
 }
 
 export interface EmitterAdapter {
@@ -47,6 +49,7 @@ export interface EmitterAdapter {
   get available(): boolean;
   applySetpoint(v: number, nowMs: number): Promise<void>;
   applyValve(percent: number, nowMs: number): Promise<void>;
+  applySwitch(on: boolean, nowMs: number): Promise<void>;
   pushRoomTemperature(t: number, mode: SyncMode, nowMs: number): Promise<void>;
   readHeating(nowMs: number): Reading<boolean> | null;
   readBattery(nowMs: number): Reading<number> | null;
@@ -102,10 +105,11 @@ const DEFAULT_SYNC_MIN_INTERVAL_MS = 5 * 60_000;
 const DEFAULT_FORCE_REFRESH_MS = 60 * 60_000;
 
 /** Chaque canal a sa propre mémoire d'écriture : un écho de consigne n'est pas un écho de vanne. */
-type WriteChannel = 'setpoint' | 'valve' | 'externalTemp' | 'calibration';
+type WriteChannel = 'setpoint' | 'valve' | 'externalTemp' | 'calibration' | 'switch';
 
 /** Ordre de préférence : la sous-capability d'abord, l'identifiant nu en repli. */
 const SETPOINT_CANDIDATES = ['target_temperature.local', 'target_temperature'] as const;
+const SWITCH_CANDIDATES = ['onoff'] as const;
 const LOCAL_TEMP_CANDIDATES = ['measure_temperature.local', 'measure_temperature'] as const;
 const HEATING_CANDIDATES = ['running_state', 'onoff'] as const;
 
@@ -147,12 +151,14 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
   private lastDetectAtMs: number | null = null;
 
   private setpointCapId: string | null = null;
+  private switchCapId: string | null = null;
   private localTempCapId: string | null = null;
   private heatingCapId: string | null = null;
   private batteryCapId: string | null = null;
   private systemModeCapId: string | null = null;
 
   private setpointBinding: SourceBinding | null = null;
+  private switchBinding: SourceBinding | null = null;
   private localTempBinding: SourceBinding | null = null;
   private heatingBinding: SourceBinding | null = null;
   private batteryBinding: SourceBinding | null = null;
@@ -194,6 +200,7 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
       externalTemp: backendReady,
       calibration: backendReady,
       heatingState: this.heatingCapId !== null,
+      switch: this.switchCapId !== null,
     };
   }
 
@@ -201,8 +208,13 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
    * `valve` exige la dorsale MQTT : aucune capability Homey n'expose `valve_opening_degree`
    * (SPEC §1.1). Sans dorsale — ou si l'utilisateur l'a refusée pour cet émetteur — on régule par
    * consigne décalée, et c'est un mode de fonctionnement complet, pas un mode dégradé.
+   *
+   * `switch` passe DEVANT `valve` sur un appareil qui n'a pas de consigne inscriptible : la
+   * dorsale, elle, est globale — sa disponibilité ne dit rien du fait qu'une prise commutée sache
+   * ouvrir une vanne, et elle ne le sait pas. Ailleurs, `valve` reste prioritaire.
    */
   get mode(): EmitterWriteMode {
+    if (this.switchCapId !== null) return 'switch';
     return this.valveControl && this.backend !== null && this.backend.available ? 'valve' : 'setpoint';
   }
 
@@ -257,6 +269,13 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
     this.summary = summary;
 
     const setpointCapId = pickSetable(summary, SETPOINT_CANDIDATES);
+    // `over_switch` : un émetteur qui n'accepte AUCUNE consigne — ni nue, ni en sous-capability —
+    // mais dont l'`onoff` s'écrit. On ne lui parle qu'en temps de marche. La condition porte sur
+    // toutes les sous-capabilities et pas seulement sur les deux candidates : une vanne exotique
+    // qui rangerait sa consigne ailleurs reste une vanne, pas un interrupteur.
+    const switchCapId = hasSetableSetpoint(summary)
+      ? null
+      : pickSetable(summary, SWITCH_CANDIDATES);
     const localTempCapId = pickPresent(summary, LOCAL_TEMP_CANDIDATES);
     const heatingCapId = pickPresent(summary, HEATING_CANDIDATES);
     const batteryCapId = pickPresent(summary, ['measure_battery']);
@@ -268,6 +287,11 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
       // La consigne mémorisée porte sur l'ANCIENNE capability : la garder ferait passer la
       // première écriture sur la nouvelle pour un doublon.
       this.lastSent.delete('setpoint');
+    }
+    if (switchCapId !== this.switchCapId) {
+      this.switchBinding = this.rebind(this.switchBinding, switchCapId);
+      this.switchCapId = switchCapId;
+      this.lastSent.delete('switch');
     }
     if (localTempCapId !== this.localTempCapId) {
       this.localTempBinding = this.rebind(this.localTempBinding, localTempCapId);
@@ -286,8 +310,8 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
       this.systemModeCapId = systemModeCapId;
     }
 
-    if (this.setpointCapId === null) {
-      this.logError(`Émetteur ${summary.name} : aucune consigne inscriptible, aucune écriture ne partira.`);
+    if (this.setpointCapId === null && this.switchCapId === null) {
+      this.logError(`Émetteur ${summary.name} : ni consigne ni interrupteur inscriptible, aucune écriture ne partira.`);
     }
   }
 
@@ -327,6 +351,21 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
 
     await backend.setValveOpening(this.deviceId, value);
     this.remember('valve', value, nowMs);
+  }
+
+  /**
+   * Bascule d'un émetteur de type interrupteur.
+   *
+   * Aucun rafraîchissement forcé ici, contrairement à la consigne et à la vanne : le noyau
+   * n'appelle cette méthode que sur une bascule réelle, et réaffirmer périodiquement un relais déjà
+   * dans le bon état l'userait pour rien — un contacteur se compte en commutations.
+   */
+  async applySwitch(on: boolean, nowMs: number): Promise<void> {
+    const binding = this.switchBinding;
+    if (binding === null) return;
+
+    const wrote = await binding.write(on, { nowMs });
+    if (wrote) this.remember('switch', on ? 1 : 0, nowMs);
   }
 
   /**
@@ -437,6 +476,16 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
     // exactement la dernière écrite. C'est le seul endroit où la déduplication doit être forcée.
     const force = { nowMs, maxIntervalMs: 1 };
 
+    // Un émetteur de type interrupteur est ÉTEINT, et c'est la seule sortie acceptable : laisser un
+    // convecteur allumé par une app qui ne le pilote plus, c'est une pièce chauffée sans limite et
+    // sans personne pour couper. Rien d'autre à rendre sur ce type d'appareil — il n'a ni consigne,
+    // ni vanne, ni calibrage, et lui publier ces propriétés serait du bruit adressé à personne.
+    const switchBinding = this.switchBinding;
+    if (switchBinding !== null) {
+      await this.safely('onoff', () => switchBinding.write(false, force));
+      return;
+    }
+
     const backend = this.backend;
     if (backend !== null && backend.available) {
       // Rendus AVANT la consigne : une vanne laissée à 20 % d'ouverture, ou attendant une
@@ -465,12 +514,13 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
   destroy(): void {
     this.destroyed = true;
     for (const binding of [
-      this.setpointBinding, this.localTempBinding, this.heatingBinding,
+      this.setpointBinding, this.switchBinding, this.localTempBinding, this.heatingBinding,
       this.batteryBinding, this.systemModeBinding,
     ]) {
       binding?.destroy();
     }
     this.setpointBinding = null;
+    this.switchBinding = null;
     this.localTempBinding = null;
     this.heatingBinding = null;
     this.batteryBinding = null;
@@ -537,6 +587,18 @@ function pickSetable(summary: DeviceSummary, candidates: readonly string[]): str
     if (summary.capabilities.includes(id) && summary.setable[id] === true) return id;
   }
   return null;
+}
+
+/**
+ * Vrai dès qu'une consigne inscriptible existe, sous-capability comprise.
+ *
+ * C'est ce prédicat qui sépare un émetteur de type interrupteur des autres : un appareil qui sait
+ * recevoir une consigne, où qu'elle soit rangée, n'est pas un interrupteur.
+ */
+function hasSetableSetpoint(summary: DeviceSummary): boolean {
+  return summary.capabilities.some((id) =>
+    (id === 'target_temperature' || id.startsWith('target_temperature.'))
+    && summary.setable[id] === true);
 }
 
 function pickPresent(summary: DeviceSummary, candidates: readonly string[]): string | null {

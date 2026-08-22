@@ -17,8 +17,17 @@ export const DEFAULT_TPI: TpiParams = {
   thresholdLow: 0,
 };
 
-/** Période de recalcul, en minutes. */
+/** Période de recalcul, en minutes. Sert aussi de longueur de cycle au mode interrupteur. */
 export const DEFAULT_CYCLE_MIN = 5;
+
+/**
+ * Gardes du mode interrupteur, en secondes (`minimal_activation_delay` de VT et son symétrique).
+ *
+ * 30 s sur un cycle de 5 min, c'est 10 % : en dessous, un convecteur n'a pas le temps de chauffer
+ * quoi que ce soit et le contacteur claque pour rien.
+ */
+export const DEFAULT_MIN_ACTIVATION_SEC = 30;
+export const DEFAULT_MIN_DEACTIVATION_SEC = 30;
 
 /** Bornes d'ouverture de vanne, en %. */
 export const DEFAULT_MIN_OPENING_DEGREE = 0;

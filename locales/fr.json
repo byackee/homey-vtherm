@@ -7,7 +7,7 @@
     },
     "emitter": {
       "title": "Qu'est-ce qui chauffe cette pièce ?",
-      "lead": "La vanne, le thermostat ou le radiateur que ce thermostat va piloter. Il doit accepter une consigne de température."
+      "lead": "La vanne, le thermostat ou le radiateur que ce thermostat va piloter. Il doit accepter une consigne de température, ou bien être un interrupteur — une prise commutée est pilotée par son temps de marche dans chaque cycle."
     },
     "boiler": {
       "title": "Quel interrupteur démarre la chaudière ?",

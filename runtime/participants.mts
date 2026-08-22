@@ -333,6 +333,14 @@ export class VThermParticipant implements Tickable {
         this.emitter.applySetpoint(setpointToEmitter, nowMs));
     }
 
+    // `null` = le noyau n'a rien à commander : soit le relais est déjà dans le bon état, soit la
+    // mesure s'est tue et on n'y touche pas. Écrire quand même userait le contacteur pour rien.
+    const switchOn = outputs.switchOn;
+    if (switchOn !== null) {
+      await this.safely('bascule de l\'interrupteur', () =>
+        this.emitter.applySwitch(switchOn, nowMs));
+    }
+
     // SPEC §5.3 : la synchronisation part à chaque nouvelle mesure, indépendamment de la
     // régulation, mais reste soumise aux seuils de l'émetteur — ces vannes sont sur piles.
     if (roomTemp !== null && !roomTemp.stale) {

@@ -7,7 +7,7 @@
     },
     "emitter": {
       "title": "Wat verwarmt deze kamer?",
-      "lead": "De radiatorkraan, thermostaat of verwarming die deze thermostaat aanstuurt. Hij moet een doeltemperatuur accepteren."
+      "lead": "De radiatorkraan, thermostaat of verwarming die deze thermostaat aanstuurt. Hij moet een doeltemperatuur accepteren, of een schakelaar zijn — een geschakelde stekker wordt aangestuurd via inschakeltijd binnen elke cyclus."
     },
     "boiler": {
       "title": "Welke schakelaar start de ketel?",

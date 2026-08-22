@@ -17,6 +17,7 @@ import type {
   WindowMemento, WindowPhase,
 } from './types.mjs';
 import { SETPOINT_MAX, SETPOINT_MIN, SETPOINT_STEP } from './constants.mjs';
+import { stepDutyCycle } from './dutyCycle.mjs';
 import { computeOnPercent } from './tpi.mjs';
 import { computeOpeningDegree } from './openingDegree.mjs';
 import { computeOffset, resolveRegulationParams } from './selfRegulation.mjs';
@@ -244,6 +245,11 @@ export function stepVTherm(
   let regulationState = persistent.regulation;
   let valveTarget: number | null = null;
   let regulatedSetpoint: number | null = null;
+  /**
+   * Puissance visée par un émetteur de type interrupteur, avant découpage temporel.
+   * `null` = ne pas toucher au relais du tout — c'est le gel de sortie du capteur muet.
+   */
+  let switchDemand: number | null = null;
 
   if (heatSuppressed) {
     // Arrêt commandé : aucune mesure n'est nécessaire pour fermer une vanne. Ce cas passe donc
@@ -251,6 +257,9 @@ export function stepVTherm(
     // Fermeture à 0 franc, et non `100 − maxClosingDegree` : le filet d'ouverture de ce réglage
     // vise la régulation sous le seuil, pas un thermostat qu'on vient d'éteindre.
     valveTarget = inputs.emitterMode === 'valve' ? 0 : null;
+    // Même raisonnement sur un relais : un convecteur laissé allumé par un thermostat affiché
+    // « éteint » est exactement l'écart que l'arrêt commandé doit supprimer.
+    switchDemand = inputs.emitterMode === 'switch' ? 0 : null;
     regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint);
   } else if (roomTemp === null) {
     // Capteur de pièce muet : SORTIE GELÉE. On ne calcule rien, on n'écrit rien, on n'accumule
@@ -286,6 +295,12 @@ export function stepVTherm(
       // En contrôle direct de vanne, la consigne envoyée reste la consigne BRUTE : elle ne sert
       // qu'à l'affichage de l'émetteur, c'est l'ouverture qui commande (SPEC §3, étape 4).
       regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint);
+    } else if (inputs.emitterMode === 'switch') {
+      // Aucun offset d'auto-régulation ici : il corrige un régulateur qui régule, et un relais
+      // n'en est pas un. C'est le même `on_percent` qu'en mode vanne, découpé en temps plus bas.
+      switchDemand = onPercent;
+      // Publiée pour l'affichage seulement : un interrupteur n'a pas de consigne à recevoir.
+      regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint);
     } else {
       const params = resolveRegulationParams(config.regulationMode, config.expertRegulation);
       // Intervalle écoulé exprimé en cycles : un pas déclenché hors cycle ne doit pas peser autant
@@ -300,6 +315,44 @@ export function stepVTherm(
       );
       regulationState = regulation.nextState;
       regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint + regulation.offset);
+    }
+  }
+
+  // === 8bis. Découpage temporel (mode interrupteur) ========================
+  //
+  // Le TPI a rendu une puissance ; ici elle devient du temps de marche. Le noyau n'arme aucune
+  // minuterie : `stepDutyCycle` annonce l'instant de la prochaine bascule, qui rejoint les réveils
+  // du pas (§14). Sans ce réveil, la coupure n'aurait lieu qu'au battement suivant et la puissance
+  // réellement délivrée dépendrait de la période d'ordonnancement au lieu du calcul.
+  //
+  // `switchDemand === null` (capteur muet) : on ne touche pas au relais et le cycle n'avance pas.
+  // Réaffirmer un état sur une mesure figée reviendrait à réguler sans mesure.
+
+  let dutyCycle = persistent.dutyCycle;
+  let switchCommanded: boolean | null = null;
+  let switchOn: boolean | null = null;
+  let dutyWakeUpAtMs: number | null = null;
+
+  if (inputs.emitterMode === 'switch' && switchDemand !== null) {
+    const duty = stepDutyCycle(
+      dutyCycle,
+      switchDemand,
+      {
+        cycleMin: config.cycleMin,
+        minActivationSec: config.minActivationSec,
+        minDeactivationSec: config.minDeactivationSec,
+      },
+      nowMs,
+    );
+    dutyCycle = duty.nextState;
+    switchCommanded = duty.commanded;
+    dutyWakeUpAtMs = duty.wakeUpAtMs;
+
+    // Une écriture inutile use le contacteur autant qu'une utile : on ne commande que sur bascule
+    // réelle, ou tant que rien n'est parti depuis le démarrage de l'app — auquel cas le relais peut
+    // avoir été basculé à la main pendant l'arrêt, et l'écart ne serait jamais rattrapé.
+    if (duty.changed || volatile.lastWrite.switchOn === null) {
+      switchOn = duty.commanded;
     }
   }
 
@@ -323,6 +376,13 @@ export function stepVTherm(
     const valveOpen = onPercent >= config.openingThreshold && onPercent > 0;
     demand = valveOpen
       ? { kind: 'active', percent: valveTarget ?? 0 }
+      : { kind: 'inactive' };
+  } else if (inputs.emitterMode === 'switch') {
+    // Sur un relais, la demande de chaleur n'est rien d'autre que l'état commandé : pendant la
+    // phase de marche l'émetteur consomme, pendant la phase d'arrêt il ne consomme rien. Aucune
+    // lecture de l'émetteur n'est nécessaire — c'est nous qui décidons.
+    demand = switchCommanded === true
+      ? { kind: 'active', percent: roundTo(onPercent * 100, 1) }
       : { kind: 'inactive' };
   } else if (emitterHeating === null) {
     // Mode consigne : la demande se lit sur l'émetteur (SPEC §9.2). Sans cette lecture on ne SAIT
@@ -360,7 +420,10 @@ export function stepVTherm(
   }
 
   let setpointToEmitter: number | null = null;
-  if (regulatedSetpoint !== null) {
+  // Un émetteur de type interrupteur n'a, par définition de sa détection, aucune consigne
+  // inscriptible : `regulatedSetpoint` n'y sert qu'à l'affichage, et l'écriture n'aurait nulle part
+  // où aller.
+  if (regulatedSetpoint !== null && inputs.emitterMode !== 'switch') {
     // En mode vanne la consigne n'est qu'un affichage : aucun seuil, on la réécrit quand elle
     // change. En mode consigne, c'est elle qui commande, et les deux garde-fous de la SPEC §5.2
     // (`auto_regulation_dtemp`, `auto_regulation_period_min`) s'appliquent.
@@ -379,6 +442,7 @@ export function stepVTherm(
   const nextLastWrite: VThermLastWrite = {
     valvePercent: valvePercent ?? lastWrite.valvePercent,
     setpoint: setpointToEmitter ?? lastWrite.setpoint,
+    switchOn: switchOn ?? lastWrite.switchOn,
     atMs: wrote ? nowMs : lastWrite.atMs,
   };
 
@@ -480,6 +544,12 @@ export function stepVTherm(
   if (timedPreset !== null) {
     wakeUps.push(timedPreset.untilMs);
   }
+  // Prochaine bascule du relais. C'est ce qui fait que la coupure se produit à l'heure dite et non
+  // au battement suivant : sans elle, un cycle de 5 min à 10 % de puissance resterait allumé
+  // jusqu'au prochain recalcul, soit cinq fois trop longtemps.
+  if (dutyWakeUpAtMs !== null) {
+    wakeUps.push(dutyWakeUpAtMs);
+  }
   const wakeUpAtMs = wakeUps.length === 0 ? null : Math.min(...wakeUps);
 
   // === 15. Capabilities à publier ==========================================
@@ -543,6 +613,7 @@ export function stepVTherm(
       window: nextWindow,
       windowMemento,
       regulation: regulationState,
+      dutyCycle,
       lastRunAtMs: nowMs,
       // Mémorisée seulement quand la mesure est vivante : c'est ce que le mode sécurité
       // interrogera si le capteur se tait, et une valeur de secours l'écraserait.
@@ -566,6 +637,7 @@ export function stepVTherm(
     stateLabel,
     setpointToEmitter,
     valvePercent,
+    switchOn,
     onPercent,
     slopePerHour,
     regulatedSetpoint,

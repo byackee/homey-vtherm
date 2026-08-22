@@ -18,7 +18,9 @@ import type {
   Preset, RegulationState, TimedPreset, VThermLastWrite, VThermPersistentState,
   VThermState, VThermStateDefaults, VThermVolatileState, WindowMemento, WindowPhase, WindowState,
 } from './types.mjs';
+import type { DutyCycleState } from './dutyCycle.mjs';
 import { REGULATION_RESET_AFTER_SEC, SETPOINT_MAX, SETPOINT_MIN } from './constants.mjs';
+import { createDutyCycleState } from './dutyCycle.mjs';
 import { createMotionState } from './presetResolver.mjs';
 import { createRegulationState } from './selfRegulation.mjs';
 import { createSlopeState } from './slope.mjs';
@@ -100,6 +102,19 @@ function parseRegulationState(value: unknown): RegulationState {
   };
 }
 
+/**
+ * Découpage temporel du mode interrupteur.
+ *
+ * Un `cycleStartMs` illisible retombe sur `null`, ce que `stepDutyCycle` interprète comme « aucun
+ * cycle en cours » : le prochain pas en ouvre un neuf. C'est le seul repli sûr — un début de cycle
+ * inventé ferait croire à un temps de marche déjà consommé, ou jamais consommé.
+ */
+function parseDutyCycleState(value: unknown): DutyCycleState {
+  if (!isRecord(value) || typeof value.commanded !== 'boolean') return createDutyCycleState();
+
+  return { cycleStartMs: finiteOrNull(value.cycleStartMs), commanded: value.commanded };
+}
+
 // --- Constructeurs ---------------------------------------------------------
 
 export function createPersistentState(
@@ -114,13 +129,18 @@ export function createPersistentState(
     window: createWindowState(),
     windowMemento: null,
     regulation: createRegulationState(),
+    dutyCycle: createDutyCycleState(),
     lastRunAtMs: nowMs,
     lastOnPercent: 0,
   };
 }
 
 export function createVolatileState(): VThermVolatileState {
-  const lastWrite: VThermLastWrite = { valvePercent: null, setpoint: null, atMs: 0 };
+  // `switchOn` à `null` : rien n'a encore été commandé sur le relais depuis ce démarrage, donc le
+  // premier pas doit écrire même si le cycle relu dit que l'état est déjà le bon.
+  const lastWrite: VThermLastWrite = {
+    valvePercent: null, setpoint: null, switchOn: null, atMs: 0,
+  };
 
   return {
     slope: createSlopeState(),
@@ -176,6 +196,7 @@ export function migratePersistentState(
     window: parseWindowState(raw.window),
     windowMemento: parseWindowMemento(raw.windowMemento),
     regulation,
+    dutyCycle: parseDutyCycleState(raw.dutyCycle),
     lastRunAtMs,
     lastOnPercent: readFraction(raw.lastOnPercent),
   };

@@ -7,7 +7,7 @@
     },
     "emitter": {
       "title": "What heats this room?",
-      "lead": "The radiator valve, thermostat or heater this thermostat will drive. It must accept a target temperature."
+      "lead": "The radiator valve, thermostat or heater this thermostat will drive. It must accept either a target temperature or an on/off switch — a switched socket is driven by on time within each cycle."
     },
     "boiler": {
       "title": "Which switch starts the boiler?",

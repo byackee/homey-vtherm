@@ -14,6 +14,7 @@ import {
   DEFAULT_AUTO_REGULATION_DTEMP, DEFAULT_AUTO_REGULATION_PERIOD_MIN, DEFAULT_CYCLE_MIN,
   DEFAULT_EXPERT_REGULATION, DEFAULT_MAX_CLOSING_DEGREE, DEFAULT_MAX_OPENING_DEGREE,
   DEFAULT_MIN_OPENING_DEGREE, DEFAULT_MOTION_DELAY_SEC, DEFAULT_MOTION_OFF_DELAY_SEC,
+  DEFAULT_MIN_ACTIVATION_SEC, DEFAULT_MIN_DEACTIVATION_SEC,
   DEFAULT_OPENING_THRESHOLD, DEFAULT_PRESET_TEMPS, DEFAULT_REGULATION_THRESHOLD, DEFAULT_SLOPE,
   DEFAULT_TPI, DEFAULT_WINDOW, DEFAULT_AWAY_TEMPS, DEFAULT_SAFETY } from '../../lib/constants.mjs';
 import type { Preset, VThermConfig } from '../../lib/types.mjs';
@@ -52,15 +53,33 @@ export type SourceKey = keyof typeof SOURCE_STORE_KEYS;
  *
  * Le pairing propose exactement cette liste, et la liaison résout ensuite celle que l'appareil
  * choisi porte réellement : il n'y a qu'une vérité, ici.
+ *
+ * L'émetteur en accepte deux : une consigne pour les vannes et les thermostats, un `onoff` pour les
+ * relais et prises commutées qui pilotent un convecteur (mode `switch`). `onoff` seul serait
+ * beaucoup trop large — toutes les lampes de la maison le portent —, d'où le filtre par classe
+ * d'appareil de `EMITTER_CLASSES`, côté driver.
  */
 export const SOURCE_CAPABILITIES: Record<SourceKey, readonly string[]> = {
   room: ['measure_temperature'],
-  emitter: ['target_temperature'],
+  emitter: ['target_temperature', 'onoff'],
   outdoor: ['measure_temperature'],
   window: ['alarm_contact'],
   motion: ['alarm_motion', 'alarm_presence', 'alarm_occupancy'],
   presence: ['alarm_presence', 'alarm_occupancy', 'alarm_motion'],
 };
+
+/**
+ * Classes d'appareil admises pour un émetteur, `onoff` étant devenu acceptable.
+ *
+ * Sur l'installation de référence, 38 appareils portent `onoff` — toutes les lampes comprises. Sans
+ * ce filtre, la liste des émetteurs deviendrait un annuaire de la maison, dans lequel les quelques
+ * appareils qui chauffent seraient introuvables. Seules ces quatre classes peuvent chauffer une
+ * pièce : `socket` couvre les prises commutées, et `other` les relais que leur app ne classe pas.
+ *
+ * Une classe de trop est bien moins grave qu'une classe manquante — un émetteur absent de la liste
+ * est inatteignable, alors qu'un intrus se contente d'occuper une ligne.
+ */
+export const EMITTER_CLASSES: readonly string[] = ['thermostat', 'heater', 'socket', 'other'];
 
 /** Sans elles, il n'y a pas de thermostat : une mesure de pièce et quelque chose à piloter. */
 const REQUIRED_SOURCES: readonly SourceKey[] = ['room', 'emitter'];
@@ -601,6 +620,8 @@ export default class VThermDevice extends Homey.Device {
       autoRegulationDtemp: num(s, 'regulation_dtemp', DEFAULT_AUTO_REGULATION_DTEMP),
       autoRegulationPeriodMin: num(s, 'regulation_period_min', DEFAULT_AUTO_REGULATION_PERIOD_MIN),
       cycleMin: num(s, 'cycle_min', DEFAULT_CYCLE_MIN),
+      minActivationSec: num(s, 'min_activation_sec', DEFAULT_MIN_ACTIVATION_SEC),
+      minDeactivationSec: num(s, 'min_deactivation_sec', DEFAULT_MIN_DEACTIVATION_SEC),
       safety: {
         enabled: bool(s, 'safety_enabled', DEFAULT_SAFETY.enabled),
         // Saisis en %, attendus en fraction sur l'échelle de `on_percent`.
