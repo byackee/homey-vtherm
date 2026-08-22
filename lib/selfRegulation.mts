@@ -8,7 +8,7 @@ import type {
 import { REGULATION_PRESETS } from './constants.mjs';
 
 export function createRegulationState(): RegulationState {
-  return { accumulatedError: 0, lastErrorSign: 0 };
+  return { accumulatedError: 0, lastRegulationAtMs: null };
 }
 
 export function resolveRegulationParams(mode: RegulationMode, expert: RegulationParams): RegulationParams {
@@ -30,7 +30,7 @@ function clamp(value: number, min: number, max: number): number {
 
 export function computeOffset(input: RegulationInput, params: RegulationParams, state: RegulationState): RegulationResult {
   const {
-    setpoint, roomTemp, outdoorTemp, dtCycles,
+    setpoint, roomTemp, outdoorTemp, dtPeriods, nowMs,
   } = input;
   const {
     kp, ki, kExt, offsetMax, accumulatedErrorThreshold, overheatProtection,
@@ -49,7 +49,30 @@ export function computeOffset(input: RegulationInput, params: RegulationParams, 
   }
 
   const erreur = setpoint - roomTemp;
-  const erreurSign = sign(erreur);
+
+  /*
+   * LA PORTE : la boucle n'intègre qu'une fois par période de régulation.
+   *
+   * C'est `check_auto_regulation_period_min` de l'amont, qui manquait. L'ordonnanceur force un pas
+   * de TOUS les participants au moindre événement — une mesure qui arrive quelque part réveille
+   * tout le logement — si bien que l'intervalle entre deux pas tombait sous une demi-période dans
+   * 98 à 100 % des cas dès trois thermostats. Le plancher de la protection surchauffe y ramenait
+   * le diviseur à 1 : la protection ne protégeait plus rien, et une intégrale saturée mettait des
+   * heures à se résorber là où l'amont y met quelques pas.
+   *
+   * Les termes proportionnel et extérieur, eux, restent VIVANTS à chaque pas : ils ne dépendent
+   * que de la mesure courante, et les figer rendrait l'app sourde à un changement de consigne
+   * entre deux périodes. Seule l'intégrale attend son tour. L'écriture vers l'émetteur reste par
+   * ailleurs bornée par `auto_regulation_dtemp`, donc ceci n'ajoute aucun appel.
+   */
+  if (state.lastRegulationAtMs !== null && dtPeriods < 1) {
+    const held = clamp(
+      kp * erreur + ki * state.accumulatedError + kExt * (roomTemp - outdoorTemp),
+      -offsetMax,
+      offsetMax,
+    );
+    return { offset: held, nextState: { ...state } };
+  }
 
   /*
    * Pondération temporelle de l'accumulation : VT fait `accumulated_error += error * time_delta`,
@@ -58,11 +81,26 @@ export function computeOffset(input: RegulationInput, params: RegulationParams, 
    * d'intégrale proportionnel au trou. Sans cette pondération, un pas déclenché hors cycle
    * (changement de consigne, nouvelle mesure) pèserait autant qu'un cycle complet.
    */
-  const dt = dtCycles > 2.0 ? 1.0 : dtCycles;
+  // Première intégration de la session : on part d'une période pleine plutôt que de zéro.
+  const dt = state.lastRegulationAtMs === null || dtPeriods > 2.0 ? 1.0 : dtPeriods;
 
   let accumulatedError = state.accumulatedError;
   // Inversion de signe sous protection surchauffe : on décharge l'accumulation avant d'ajouter.
-  const signInverted = state.lastErrorSign !== 0 && erreurSign !== 0 && state.lastErrorSign !== erreurSign;
+  /*
+   * Protection surchauffe : l'erreur et l'INTÉGRALE se contredisent.
+   *
+   * Amont : `error * self.accumulated_error < 0`. Une première transcription comparait l'erreur à
+   * l'erreur du pas PRÉCÉDENT, ce qui n'est pas la même chose et se trompe deux fois. D'abord la
+   * décharge devenait ponctuelle — une seule division à la traversée, alors qu'elle doit se rejouer
+   * tant que les deux désaccordent, ce qui prend l'intégrale des heures à résorber au lieu de
+   * quelques pas. Ensuite elle produisait un faux positif : intégrale déjà négative et erreur qui
+   * bascule, on coupait en deux une intégrale pourtant correctement signée.
+   *
+   * L'intégrale est sa propre mémoire : aucun état supplémentaire n'est nécessaire, et le champ
+   * `lastErrorSign` qui l'accompagnait — avec son cas particulier de l'erreur exactement nulle —
+   * n'était que le symptôme d'avoir choisi la mauvaise variable.
+   */
+  const signInverted = erreur * state.accumulatedError < 0;
   if (overheatProtection && signInverted) {
     /*
      * Diviseur `2 × max(dt, 0.5)`, transcrit littéralement de la SPEC §5.2.
@@ -103,17 +141,6 @@ export function computeOffset(input: RegulationInput, params: RegulationParams, 
 
   return {
     offset,
-    nextState: {
-      accumulatedError,
-      /*
-       * Le DERNIER signe non nul, jamais zéro.
-       *
-       * Les consignes sont alignées sur 0,5 °C et les mesures arrivent au dixième : une erreur
-       * exactement nulle est banale, pas exotique. Écraser le signe avec ce zéro effaçait de quel
-       * côté la pièce se trouvait — et la traversée +1 → 0 → −1 ne déchargeait alors sur AUCUN des
-       * deux pas : ni sur celui du zéro, ni sur le suivant, qui compare à un signe déjà perdu.
-       */
-      lastErrorSign: erreurSign === 0 ? state.lastErrorSign : erreurSign,
-    },
+    nextState: { accumulatedError, lastRegulationAtMs: nowMs },
   };
 }

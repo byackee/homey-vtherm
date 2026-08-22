@@ -115,18 +115,35 @@ export interface RegulationInput {
   /** `null` ⇒ VT saute **entièrement** l'auto-régulation (voir `computeOffset`). */
   outdoorTemp: number | null;
   /**
-   * Intervalle écoulé depuis le pas précédent, **exprimé en cycles** (1 = un cycle complet).
-   * VT pondère l'accumulation par cette durée (`accumulated_error += error * time_delta`) :
-   * sans ça, un pas déclenché hors cycle (changement de consigne, nouvelle mesure) pèserait
-   * autant qu'un cycle complet et l'intégrale s'emballerait.
+   * Intervalle depuis la dernière INTÉGRATION, exprimé en périodes de régulation
+   * (`auto_regulation_period_min`, 1 = une période complète).
+   *
+   * Deux corrections tiennent dans cette phrase. L'unité d'abord : l'amont divise par sa période
+   * de régulation, pas par le cycle TPI — les deux ne coïncident que parce qu'ils valent 5 par
+   * défaut, et `cycle_min` est réglable de 1 à 60. L'origine ensuite : c'est la dernière fois que
+   * la boucle a réellement intégré, pas le dernier pas du réducteur.
+   *
+   * Sous 1, la boucle N'INTÈGRE PAS — voir `computeOffset`.
    */
-  dtCycles: number;
+  dtPeriods: number;
+  /** Horodatage du pas, pour marquer l'intégration. `lib/` ne lit jamais l'horloge lui-même. */
+  nowMs: number;
 }
 
 export interface RegulationState {
   accumulatedError: number;
-  /** Signe de l'erreur au pas précédent : -1, 0 ou 1. Sert à la protection surchauffe. */
-  lastErrorSign: -1 | 0 | 1;
+  /**
+   * Instant de la dernière intégration effective de la boucle PI.
+   *
+   * La boucle n'avance QU'UNE fois par `auto_regulation_period_min`, comme en amont. Sans cette
+   * date, `dt` mesurait l'écart entre deux pas du réducteur — or l'ordonnanceur force un pas de
+   * TOUS les participants au moindre événement, donc `dt` tombait sous 0,5 dans 98 à 100 % des cas
+   * dès trois thermostats. Le plancher de la protection surchauffe y ramenait le diviseur à 1, et
+   * la protection ne protégeait plus rien.
+   *
+   * `null` tant que la boucle n'a jamais tourné : le premier pas intègre alors avec `dt = 1`.
+   */
+  lastRegulationAtMs: number | null;
 }
 
 export interface RegulationResult {

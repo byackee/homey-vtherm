@@ -20,7 +20,7 @@ function validRaw(overrides: Record<string, unknown> = {}): Record<string, unkno
     timedPreset: { preset: 'boost', untilMs: NOW + 60_000, previous: 'eco' },
     window: { phase: 'open', phaseSinceMs: NOW - 5_000, openSinceMs: NOW - 5_000 },
     windowMemento: { onoff: true, preset: 'eco', setpoint: 17 },
-    regulation: { accumulatedError: 12.5, lastErrorSign: -1 },
+    regulation: { accumulatedError: 12.5, lastRegulationAtMs: 1_000 },
     lastRunAtMs: NOW - 1_000,
     ...overrides,
   };
@@ -114,7 +114,7 @@ test('NaN ne franchit jamais la migration — c\'est le bug qui tue une capabili
     validRaw({
       manualSetpoint: Number.NaN,
       lastRunAtMs: Number.NaN,
-      regulation: { accumulatedError: Number.NaN, lastErrorSign: 1 },
+      regulation: { accumulatedError: Number.NaN, lastRegulationAtMs: 1_000 },
       window: { phase: 'open', phaseSinceMs: Number.NaN, openSinceMs: Number.NaN },
     }),
     NOW,
@@ -145,13 +145,15 @@ test('une consigne manuelle hors bornes est ramenée dans la plage de la SPEC §
   assert.equal(migratePersistentState(validRaw({ manualSetpoint: -40 }), NOW, DEFAULTS).manualSetpoint, 5);
 });
 
-test('un signe d\'erreur hors domaine retombe à 0', () => {
+test('un instant de régulation illisible retombe à `null`', () => {
+  // `null` veut dire « la boucle n'a jamais intégré » : le premier pas repart alors d'une période
+  // pleine, ce qui est le seul point de départ qui ne dépende pas de l'instant du redémarrage.
   const state = migratePersistentState(
-    validRaw({ regulation: { accumulatedError: 3, lastErrorSign: 5 } }),
+    validRaw({ regulation: { accumulatedError: 3, lastRegulationAtMs: 'plus tard' } }),
     NOW,
     DEFAULTS,
   );
-  assert.equal(state.regulation.lastErrorSign, 0);
+  assert.equal(state.regulation.lastRegulationAtMs, null);
   assert.equal(state.regulation.accumulatedError, 3);
 });
 
@@ -200,7 +202,7 @@ test('un état durable intact traverse la migration sans perte', () => {
   assert.deepEqual(state.timedPreset, { preset: 'boost', untilMs: NOW + 60_000, previous: 'eco' });
   assert.deepEqual(state.window, { phase: 'open', phaseSinceMs: NOW - 5_000, openSinceMs: NOW - 5_000, autoDisarmed: false });
   assert.deepEqual(state.windowMemento, { onoff: true, preset: 'eco', setpoint: 17 });
-  assert.deepEqual(state.regulation, { accumulatedError: 12.5, lastErrorSign: -1 });
+  assert.deepEqual(state.regulation, { accumulatedError: 12.5, lastRegulationAtMs: 1_000 });
   assert.equal(state.lastRunAtMs, NOW - 1_000);
 });
 
@@ -211,7 +213,6 @@ test('arrêt de plus d\'une heure : l\'erreur cumulée est remise à zéro', () 
   const state = migratePersistentState(raw, NOW, DEFAULTS);
 
   assert.equal(state.regulation.accumulatedError, 0);
-  assert.equal(state.regulation.lastErrorSign, 0);
   // Le reste de l'état durable n'est pas concerné : seule l'intégrale a perdu son sens.
   assert.equal(state.preset, 'eco');
   assert.equal(state.window.phase, 'open');
@@ -227,7 +228,7 @@ test('arrêt court : l\'intégrale survit au redémarrage', () => {
   const state = migratePersistentState(raw, NOW, DEFAULTS);
 
   assert.equal(state.regulation.accumulatedError, 12.5);
-  assert.equal(state.regulation.lastErrorSign, -1);
+  assert.equal(state.regulation.lastRegulationAtMs, 1_000, 'la boucle reprend où elle en était');
 });
 
 test('horloge qui recule de plus d\'une heure : l\'intégrale est invalidée elle aussi', () => {

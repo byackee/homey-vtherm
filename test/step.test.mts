@@ -1158,3 +1158,34 @@ test('la pente est bien transmise au TPI, et coupe la chauffe en dépassement', 
   const uncut = stepVTherm(state, inputs({ roomTemp: reading(19.4, 240_000) }), noThresholds, 240_000);
   assert.ok(uncut.outputs.onPercent > 0.9, 'la preuve que le seuil est bien ce qui a coupé');
 });
+
+test('`dt` de la boucle PI se compte en PÉRIODES DE RÉGULATION, pas en cycles TPI', () => {
+  // Les deux valent 5 par défaut, si bien que rien ne les distinguait — et `cycle_min` est réglable
+  // de 1 à 60. L'amont divise par sa période de régulation ; se tromper d'unité déplace le seuil
+  // d'intégration d'un facteur cinq sous les pieds de l'utilisateur.
+  const cfg = config({
+    cycleMin: 1,                 // cycle TPI court…
+    autoRegulationPeriodMin: 10, // …période de régulation longue
+    regulationMode: 'medium',
+  });
+
+  // La boucle PI ne tourne qu'en mode consigne, et seulement avec un capteur extérieur.
+  const setpointMode = inputs({ emitterMode: 'setpoint', emitterHeating: reading(true) });
+
+  // Premier pas : la boucle n'a jamais intégré, elle part d'une période pleine.
+  const first = stepVTherm(freshState(), setpointMode, cfg, 0);
+  const seeded = first.nextState.persistent.regulation.accumulatedError;
+  assert.notEqual(seeded, 0, 'la première intégration a bien eu lieu');
+
+  // Cinq minutes plus tard : cinq cycles TPI, mais une demi-période seulement. Compté en cycles,
+  // `dt` vaudrait 5 et la boucle intégrerait ; compté en périodes il vaut 0,5 et elle attend.
+  const early = stepVTherm(first.nextState, setpointMode, cfg, 300_000);
+  assert.equal(
+    early.nextState.persistent.regulation.accumulatedError, seeded,
+    'une demi-période ne doit pas intégrer, même si cinq cycles TPI se sont écoulés',
+  );
+
+  // Dix minutes : la période est écoulée, la boucle avance.
+  const due = stepVTherm(first.nextState, setpointMode, cfg, 600_000);
+  assert.notEqual(due.nextState.persistent.regulation.accumulatedError, seeded);
+});

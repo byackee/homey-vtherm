@@ -97,10 +97,10 @@ function parseWindowMemento(value: unknown): WindowMemento | null {
 function parseRegulationState(value: unknown): RegulationState {
   if (!isRecord(value)) return createRegulationState();
 
-  const sign = value.lastErrorSign;
   return {
     accumulatedError: finiteOr(value.accumulatedError, 0),
-    lastErrorSign: sign === 1 || sign === -1 ? sign : 0,
+    // Absent d'un état écrit par une version antérieure : la boucle repart d'une période pleine.
+    lastRegulationAtMs: finiteOrNull(value.lastRegulationAtMs),
   };
 }
 

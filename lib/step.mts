@@ -351,12 +351,24 @@ export function stepVTherm(
       regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint);
     } else {
       const params = resolveRegulationParams(config.regulationMode, config.expertRegulation);
-      // Intervalle écoulé exprimé en cycles : un pas déclenché hors cycle ne doit pas peser autant
-      // qu'un cycle complet dans l'intégrale. Jamais négatif — une horloge qui recule ne charge pas.
-      const dtCycles = Math.max(0, nowMs - persistent.lastRunAtMs) / (config.cycleMin * MS_PER_MINUTE);
+      /*
+       * Intervalle depuis la dernière INTÉGRATION, en périodes de régulation.
+       *
+       * Deux choses ont changé ici. L'origine n'est plus le dernier pas du réducteur mais la
+       * dernière fois que la boucle a intégré : l'ordonnanceur force un pas de tout le monde au
+       * moindre événement, et prendre le pas pour référence faisait tourner la boucle jusqu'à deux
+       * cents fois par heure. Et l'unité n'est plus le cycle TPI mais la période de régulation,
+       * comme en amont — les deux ne coïncidaient que parce qu'ils valent 5 par défaut.
+       *
+       * Jamais négatif : une horloge qui recule ne charge pas l'intégrale.
+       */
+      const lastRegulationAtMs = regulationState.lastRegulationAtMs;
+      const dtPeriods = lastRegulationAtMs === null
+        ? 1
+        : Math.max(0, nowMs - lastRegulationAtMs) / (config.autoRegulationPeriodMin * MS_PER_MINUTE);
       const regulation = computeOffset(
         {
-          setpoint: effectiveSetpoint, roomTemp, outdoorTemp, dtCycles,
+          setpoint: effectiveSetpoint, roomTemp, outdoorTemp, dtPeriods, nowMs,
         },
         params,
         regulationState,

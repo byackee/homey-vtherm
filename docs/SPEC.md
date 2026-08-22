@@ -274,7 +274,12 @@ Une nouvelle valeur n'est écrite que si elle diffère de la précédente d'au m
 
 ```
 erreur          = consigne − T_pièce
-dt              = min(intervalle_depuis_le_dernier_pas_en_cycles, 1.0) si intervalle > 2.0 sinon intervalle
+dt              = intervalle depuis la DERNIÈRE INTÉGRATION, en unités de auto_regulation_period_min
+                  (> 2.0 ⇒ 1.0 ; première intégration de la session ⇒ 1.0)
+
+si dt < 1 :       la boucle N'INTÈGRE PAS. L'offset est recalculé depuis l'erreur cumulée mémorisée,
+                  sans l'incrémenter ni la décharger, puis on s'arrête là.
+
 erreur_cumulée  = clamp(erreur_cumulée + erreur × dt, ±accumulated_error_threshold)
 offset          = kp × erreur + ki × erreur_cumulée + k_ext × (T_pièce − T_extérieure)
 offset          = clamp(offset, ±offset_max)
@@ -288,6 +293,18 @@ Deux points sur lesquels une première rédaction s'était trompée, corrigés d
 - L'accumulation est **pondérée par le temps écoulé**, pas une simple addition par pas. Sans ça, un pas
   déclenché hors cycle pèserait autant qu'un cycle complet et l'intégrale s'emballerait à chaque
   changement de consigne.
+
+Deux autres, corrigés plus tard, après lecture de la source d'amont plutôt que de sa description :
+
+- **`dt` se compte en périodes de RÉGULATION, pas en cycles TPI**, et son origine est la dernière
+  intégration, pas le dernier pas du réducteur. Les deux unités ne coïncidaient que parce qu'elles
+  valent 5 par défaut ; `cycle_min` est réglable de 1 à 60.
+- **La boucle n'intègre qu'une fois par période** (`check_auto_regulation_period_min` chez VT). Notre
+  ordonnanceur force un pas de TOUS les participants au moindre événement : sans cette porte, la boucle
+  tournait jusqu'à deux cents fois par heure, `dt` tombait sous 0,5 dans 98 à 100 % des pas dès trois
+  thermostats, et le plancher de la protection surchauffe y ramenait le diviseur à 1 — la protection ne
+  protégeait plus rien. Les termes proportionnel et externe, eux, restent recalculés à chaque pas : ils
+  ne dépendent que de la mesure courante, et les figer rendrait l'app sourde entre deux périodes.
 
 **Sans capteur de température extérieure, VT saute entièrement l'auto-régulation** et envoie la consigne
 nue. Le capteur extérieur étant optionnel (§2.1), c'est ce comportement qui est retenu : pas d'offset
@@ -303,10 +320,22 @@ Modes préréglés, valeurs reprises telles quelles de VT :
 | `medium` | 0.3 | 0.05 | 0.1 | 2.0 | 20 | oui |
 | `strong` | 0.4 | 0.08 | 0.0 | 5.0 | 50 | oui |
 
-`protection surchauffe` : à chaque inversion de signe de l'erreur, l'erreur cumulée est divisée par
-`2 × max(dt, 0.5)`. Les **quatre** modes l'activent (le tableau indiquait à tort « non » pour `slow`).
+`protection surchauffe` : quand l'erreur et l'erreur cumulée sont de **signes opposés**
+(`erreur × erreur_cumulée < 0`), l'erreur cumulée est divisée par `2 × max(dt, 0.5)`. Elle se rejoue donc
+**à chaque pas tant que les deux se contredisent**, et non une seule fois à la traversée. Une première
+rédaction disait « à chaque inversion de signe de l'erreur » : comparer l'erreur à celle du pas précédent
+n'est pas la même chose, et se trompe deux fois — la décharge devenait ponctuelle, et un faux positif
+coupait en deux une intégrale pourtant correctement signée. L'intégrale est sa propre mémoire ; aucun
+état supplémentaire n'est nécessaire.
+
+Le plancher `0,5` est un **garde-fou anti-amplification**, pas une atténuation voulue : sans lui, un pas
+très court donnerait un diviseur inférieur à 1, donc une multiplication. Depuis que la boucle n'intègre
+qu'une fois par période, ce plancher n'est plus atteignable par le chemin nominal.
+
+Les **quatre** modes activent la protection (le tableau indiquait à tort « non » pour `slow`).
 `auto_regulation_dtemp` (défaut 0,5 °C) : variation minimale d'offset pour réécrire la consigne.
-`auto_regulation_period_min` (défaut 5 min) : intervalle minimal entre deux écritures.
+`auto_regulation_period_min` (défaut 5 min) : **période de la boucle PI**, et unité de `dt`. Elle borne
+aussi l'intervalle entre deux écritures.
 
 **[ÉCART]** Le mode `expert` de VT (kp/ki/k_ext saisis à la main, global via `configuration.yaml`)
 devient en v1 un cinquième choix `expert` dont les six paramètres sont éditables **par device** dans
