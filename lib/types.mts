@@ -320,6 +320,17 @@ export interface BoilerState {
    * pas retenir la main d'une correction qui suit un ordre tout neuf.
    */
   lastDivergenceFixMs: number | null;
+  /**
+   * Dernière coupure d'un relais trouvé allumé sans demande. `null` quand il n'y en a jamais eu.
+   *
+   * Séparé de `lastChangeMs`, et il le faut. Une correction ne change pas l'état commandé, donc
+   * elle ne doit pas toucher `lastChangeMs` — c'est ce qui la distingue d'une commutation partout
+   * ailleurs. Mais celle-ci arrête un brûleur qui TOURNAIT : côté chaudière c'est bel et bien une
+   * extinction, et le prochain allumage doit attendre le garde-fou comme après n'importe quelle
+   * autre. Sans ce champ, une correction à t puis une demande à t+1 s rallumaient une seconde
+   * après avoir coupé — le court-cycle même que le garde-fou existe pour empêcher.
+   */
+  lastForcedOffMs: number | null;
 }
 
 export interface BoilerResult {

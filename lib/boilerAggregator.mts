@@ -8,7 +8,7 @@ import { BOILER_DIVERGENCE_RETRY_SEC, BOILER_MIN_DWELL_FLOOR_SEC } from './const
 export function createBoilerState(): BoilerState {
   return {
     commanded: false, lastChangeMs: null, pendingSinceMs: null, lastKeepAliveMs: null,
-    lastDivergenceFixMs: null,
+    lastDivergenceFixMs: null, lastForcedOffMs: null,
     // Un état neuf n'a rien écrit : le premier pas affirmera l'arrêt, ce qui est toujours sûr.
     affirmed: false,
   };
@@ -26,6 +26,22 @@ export function boilerDwellMs(params: BoilerParams): number {
 }
 
 /**
+ * L'instant à partir duquel un allumage est permis, ou `null` quand rien ne le retient.
+ *
+ * Deux extinctions comptent, et il a fallu les deux : celle que l'app a COMMANDÉE (`lastChangeMs`)
+ * et celle qu'elle a IMPOSÉE à un relais trouvé allumé sans demande (`lastForcedOffMs`). La
+ * seconde ne change pas l'état commandé — donc ne touche pas `lastChangeMs` — mais elle arrête un
+ * brûleur qui tournait, et le garde-fou lui est dû tout autant.
+ *
+ * Exporté parce que l'ordonnancement en a besoin autant que la décision : le participant doit
+ * pouvoir annoncer l'instant EXACT où un allumage refusé redeviendra possible.
+ */
+export function ignitionAllowedAtMs(state: BoilerState, params: BoilerParams): number | null {
+  const marks = [state.lastChangeMs, state.lastForcedOffMs].filter((m): m is number => m !== null);
+  return marks.length === 0 ? null : Math.max(...marks) + boilerDwellMs(params);
+}
+
+/**
  * @param relayState état RÉELLEMENT lu sur le relais, ou `null` quand il n'est pas lisible.
  *   Voir le bloc « Réaffirmation sur divergence ». `null` conserve exactement le comportement
  *   d'avant la lecture en retour : on ne corrige que ce qu'on a vu.
@@ -38,7 +54,6 @@ export function stepBoiler(
   relayState: boolean | null = null,
 ): BoilerResult {
   const demand = nbActive >= params.threshold;
-  const dwellMs = boilerDwellMs(params);
 
   // Compteur du délai d'activation : actif tant que la demande est vraie et qu'on n'est pas
   // encore commandé. Indépendant du garde-fou anti-pulsation ci-dessous.
@@ -77,8 +92,8 @@ export function stepBoiler(
       lastChangeMs = nowMs;
       command = false;
     } else {
-      const allowed = lastChangeMs === null || nowMs - lastChangeMs >= dwellMs;
-      if (allowed) {
+      const allowedAtMs = ignitionAllowedAtMs(state, params);
+      if (allowedAtMs === null || nowMs >= allowedAtMs) {
         commanded = true;
         lastChangeMs = nowMs;
         command = true;
@@ -161,12 +176,32 @@ export function stepBoiler(
     if (retryDue && !commanded && !demand) {
       command = false;
       divergence = true;
-    } else if (retryDue && commanded && (lastChangeMs === null || nowMs - lastChangeMs >= dwellMs)) {
-      command = true;
-      divergence = true;
+    } else if (retryDue && commanded) {
+      const allowedAtMs = ignitionAllowedAtMs(state, params);
+      if (allowedAtMs === null || nowMs >= allowedAtMs) {
+        command = true;
+        divergence = true;
+      }
     }
   }
   if (divergence) lastDivergenceFixMs = nowMs;
+
+  /*
+   * Une extinction qu'on IMPOSE à un relais observé allumé arme le garde-fou.
+   *
+   * Ni la correction ni la réaffirmation ne changent l'état commandé : `lastChangeMs` ne bouge pas,
+   * et c'est voulu. Mais quand le relais était réellement ALLUMÉ, l'ordre qui part vient d'arrêter
+   * un brûleur qui tournait — côté chaudière c'est une extinction pleine et entière, et le
+   * prochain allumage lui doit le garde-fou comme à n'importe quelle autre. Sans cette marque, une
+   * coupure imposée à t suivie d'une demande à t+1 s rallumait une seconde plus tard.
+   *
+   * La réaffirmation de démarrage compte pour la même raison, et c'est même le cas le plus exposé :
+   * sur un état neuf `lastChangeMs` vaut `null`, ce qui exempte du garde-fou.
+   *
+   * Une vraie commutation vers l'arrêt, elle, n'a besoin de rien : elle a déjà posé `lastChangeMs`.
+   */
+  const stoppedARunningBurner = command === false && relayState === true && (divergence || affirmation);
+  const lastForcedOffMs = stoppedARunningBurner ? nowMs : state.lastForcedOffMs;
 
   if (command !== null) affirmed = true;
 
@@ -178,6 +213,7 @@ export function stepBoiler(
     ignitionBlocked,
     nextState: {
       commanded, lastChangeMs, pendingSinceMs, lastKeepAliveMs, affirmed, lastDivergenceFixMs,
+      lastForcedOffMs,
     },
   };
 }

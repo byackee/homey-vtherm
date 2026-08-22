@@ -12,21 +12,36 @@
  */
 
 import type { Reading } from '../../lib/step.mjs';
+import { shouldWrite, type LastWrite } from '../../lib/writePolicy.mjs';
 import { UnresolvedBindingError } from '../../runtime/hub.mjs';
 import type { CapValue, SourceBinding, WriteRequest } from '../../runtime/hub.mjs';
 
 export interface FakeWrite {
   value: CapValue;
   nowMs: number;
+  /** Les options telles que l'appelant les a passées — c'est là que vit `maxIntervalMs`. */
+  opts: WriteRequest;
 }
 
 export class FakeBinding implements SourceBinding {
   /** Toutes les écritures réellement parties, dans l'ordre. */
   readonly writes: FakeWrite[] = [];
+  /**
+   * Toutes les TENTATIVES, y compris celles qui lèvent ou sont dédupliquées.
+   *
+   * `writes` ne dit pas tout : une écriture qui échoue a quand même coûté son appel d'API, et
+   * c'est ce que doit compter un test qui vérifie un espacement anti-rafale. Compter `writes`
+   * laissait passer un garde-fou entièrement supprimé — sur un appareil injoignable, la liste ne
+   * bougeait d'aucun côté.
+   */
+  readonly attempts: FakeWrite[] = [];
   destroyed = false;
 
   /** Prochaines écritures : `true` = part, `false` = dédupliquée, `Error` = échoue. */
   private outcome: true | false | Error = true;
+  /** Quand vrai, la déduplication réelle tranche au lieu de `outcome`. Voir `policyWrites()`. */
+  private policy = false;
+  private lastPolicyWrite: LastWrite | null = null;
   private reading: Reading<CapValue> | null = null;
 
   /** Identité annoncée par l'`UnresolvedBindingError` que produit `unresolve()`. */
@@ -70,6 +85,19 @@ export class FakeBinding implements SourceBinding {
     this.outcome = true;
   }
 
+  /**
+   * Applique la VRAIE déduplication (`lib/writePolicy.mjs`) au lieu d'un verdict fixé d'avance.
+   *
+   * Sans ce mode, un faux qui accepte tout rend indétectable l'oubli d'un `maxIntervalMs` : la
+   * valeur réécrite est identique à la précédente, `shouldWrite` la supprimerait, et le test
+   * verrait quand même passer l'écriture. C'est exactement le trou qu'une revue a trouvé en
+   * supprimant le forçage sans faire tomber un seul test.
+   */
+  policyWrites(): void {
+    this.policy = true;
+    this.outcome = true;
+  }
+
   read(nowMs: number, freshnessMs: number): Reading<CapValue> | null {
     const reading = this.reading;
     if (reading === null) return null;
@@ -79,9 +107,16 @@ export class FakeBinding implements SourceBinding {
   }
 
   async write(value: CapValue, opts: WriteRequest): Promise<boolean> {
+    this.attempts.push({ value, nowMs: opts.nowMs, opts });
     if (this.outcome instanceof Error) throw this.outcome;
     if (this.outcome === false) return false;
-    this.writes.push({ value, nowMs: opts.nowMs });
+
+    if (this.policy && !shouldWrite(this.lastPolicyWrite, value, opts, opts.nowMs).write) {
+      return false;
+    }
+    this.lastPolicyWrite = { value, atMs: opts.nowMs };
+
+    this.writes.push({ value, nowMs: opts.nowMs, opts });
     return true;
   }
 

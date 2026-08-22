@@ -17,10 +17,10 @@ import type {
 } from '../lib/types.mjs';
 import type { BoilerParams, BoilerResult, BoilerState } from '../lib/types.mjs';
 import {
-  SETPOINT_MAX, SETPOINT_MIN, STALE_MEASUREMENT_SEC,
+  BOILER_DIVERGENCE_RETRY_SEC, SETPOINT_MAX, SETPOINT_MIN, STALE_MEASUREMENT_SEC,
   TIMED_PRESET_MAX_MINUTES, TIMED_PRESET_MIN_MINUTES,
 } from '../lib/constants.mjs';
-import { boilerDwellMs, createBoilerState, stepBoiler } from '../lib/boilerAggregator.mjs';
+import { createBoilerState, ignitionAllowedAtMs, stepBoiler } from '../lib/boilerAggregator.mjs';
 import { restoreVThermState } from '../lib/state.mjs';
 import { stepVTherm } from '../lib/step.mjs';
 import type { CapValue, SourceBinding } from './hub.mjs';
@@ -688,10 +688,16 @@ export class CentralParticipant {
        * minute, pour un allumage qu'on sait déjà refusé — et la reprise a lieu au battement
        * suivant plutôt qu'à l'instant exact où le garde-fou expire.
        */
-      const dwellUntilMs = state.lastChangeMs === null
-        ? Number.NEGATIVE_INFINITY
-        : state.lastChangeMs + boilerDwellMs(this.params);
-      return Math.max(activationAtMs, dwellUntilMs);
+      return Math.max(activationAtMs, ignitionAllowedAtMs(state, this.params) ?? Number.NEGATIVE_INFINITY);
+    }
+    /*
+     * Une correction différée doit se réveiller seule. Le relais divergent n'est vu que si un pas
+     * a lieu : sans cette échéance, une correction repoussée par l'espacement des retentatives
+     * attendait le prochain pas d'un AUTRE participant — jusqu'à `cycle_min`, cinq minutes par
+     * défaut, pendant lesquelles un relais resté allumé continue de chauffer.
+     */
+    if (state.lastDivergenceFixMs !== null) {
+      return state.lastDivergenceFixMs + BOILER_DIVERGENCE_RETRY_SEC * 1000;
     }
     if (state.commanded && this.params.keepAliveSec > 0) {
       const baseline = state.lastKeepAliveMs ?? state.lastChangeMs;
@@ -732,7 +738,14 @@ export class CentralParticipant {
         // monte en tâche de fond, le premier tick part avant lui, et `stepBoiler` ne produit un
         // ordre que sur CHANGEMENT. Un ordre avalé au démarrage n'était jamais réémis — la maison
         // ne chauffait pas de la journée, la tuile affichait « en marche », aucune erreur.
-        this.boilerState = previous;
+        //
+        // L'espacement des retentatives, lui, SURVIT au retour arrière : il compte les tentatives,
+        // pas les succès. Une écriture qui échoue a quand même coûté son appel d'API — et le cas
+        // qui la fait échouer est justement le quota Athom atteint. Rendre la marque effacerait
+        // l'espacement exactement quand il sert, et l'app retenterait à chaque pas.
+        this.boilerState = result.divergence
+          ? { ...previous, lastDivergenceFixMs: result.nextState.lastDivergenceFixMs }
+          : previous;
         this.host.error('Commande de la chaudière :', err);
       }
     }
@@ -755,6 +768,9 @@ export class CentralParticipant {
         `Relais de chaudière trouvé ${result.command ? 'ÉTEINT' : 'ALLUMÉ'} alors qu'il était `
         + `commandé ${result.command ? 'ALLUMÉ' : 'ÉTEINT'} : remis en accord.`,
       );
+      // Une coupure imposée a arrêté un brûleur qui tournait : le garde-fou qu'elle vient d'armer
+      // doit survivre à un redémarrage, sinon l'app revient et rallume aussitôt.
+      if (result.command === false) await this.persist();
       return;
     }
 
@@ -804,6 +820,10 @@ export class CentralParticipant {
       pendingSinceMs: null,
       lastKeepAliveMs: null,
       affirmed: true,
+      // Les marques de correction appartiennent à la session qui s'arrête : les traîner
+      // contredirait l'invariant du type, et retiendrait la première correction de la suivante.
+      lastDivergenceFixMs: null,
+      lastForcedOffMs: null,
     };
     await this.persist();
   }
@@ -856,10 +876,10 @@ export class CentralParticipant {
       return;
     }
 
-    const lastChangeMs = this.boilerState.lastChangeMs;
-    const remainingSec = lastChangeMs === null
+    const allowedAtMs = ignitionAllowedAtMs(this.boilerState, this.params);
+    const remainingSec = allowedAtMs === null
       ? 0
-      : Math.max(0, Math.ceil((lastChangeMs + boilerDwellMs(this.params) - nowMs) / 1000));
+      : Math.max(0, Math.ceil((allowedAtMs - nowMs) / 1000));
     this.host.log(
       `${nbActive} émetteur(s) en demande, mais le garde-fou anti-pulsation diffère l'allumage `
       + `de ${remainingSec} s : la chaudière vient de commuter.`,
@@ -870,6 +890,7 @@ export class CentralParticipant {
     await this.safely('état durable de la chaudière', () => this.host.setStoreValue(BOILER_STORE_KEY, {
       commanded: this.boilerState.commanded,
       lastChangeMs: this.boilerState.lastChangeMs,
+      lastForcedOffMs: this.boilerState.lastForcedOffMs,
     }));
   }
 
@@ -903,11 +924,16 @@ function restoreBoilerState(raw: unknown, nowMs: number): BoilerState {
 
   const record = raw as Record<string, unknown>;
   const commanded = record.commanded === true;
-  const lastChangeMs = typeof record.lastChangeMs === 'number'
-    && Number.isFinite(record.lastChangeMs)
-    && record.lastChangeMs <= nowMs
-    ? record.lastChangeMs
-    : null;
 
-  return { ...state, commanded, lastChangeMs };
+  return {
+    ...state,
+    commanded,
+    lastChangeMs: pastInstant(record.lastChangeMs, nowMs),
+    lastForcedOffMs: pastInstant(record.lastForcedOffMs, nowMs),
+  };
+}
+
+/** Un instant relu du `store`, ou `null` s'il est illisible ou dans le futur. */
+function pastInstant(raw: unknown, nowMs: number): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw <= nowMs ? raw : null;
 }

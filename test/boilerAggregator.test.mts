@@ -184,7 +184,7 @@ test('réaffirmation après redémarrage : un état restauré est réécrit une 
   // la maison resterait froide avec une app persuadée d'avoir allumé.
   const restored: BoilerState = {
     commanded: true, lastChangeMs: 0, pendingSinceMs: null, lastKeepAliveMs: null,
-    affirmed: false, lastDivergenceFixMs: null,
+    affirmed: false, lastDivergenceFixMs: null, lastForcedOffMs: null,
   };
 
   const first = stepBoiler(restored, 1, PARAMS, 1_000);
@@ -206,7 +206,7 @@ test('la réaffirmation n\'est pas soumise au garde-fou anti-pulsation', () => {
   // elle ne change pas d'état, elle remet le relais en accord avec l'état déjà décidé.
   const restored: BoilerState = {
     commanded: true, lastChangeMs: 0, pendingSinceMs: null, lastKeepAliveMs: null,
-    affirmed: false, lastDivergenceFixMs: null,
+    affirmed: false, lastDivergenceFixMs: null, lastForcedOffMs: null,
   };
   const result = stepBoiler(restored, 1, PARAMS, 1);
   assert.equal(result.command, true);
@@ -385,4 +385,56 @@ test('une vraie commutation rend sa chance à la correction', () => {
   const fix = stepBoiler(off.nextState, 0, PARAMS, DWELL_MS + 2_000, true);
   assert.equal(fix.command, false);
   assert.equal(fix.divergence, true);
+});
+
+// --- Une coupure imposée arme le garde-fou -----------------------------------
+
+test('couper un relais resté allumé interdit un rallumage dans la minute', () => {
+  // RÉGRESSION EMPÊCHÉE. La correction ne change pas l'état commandé, donc elle ne touche pas
+  // `lastChangeMs` — c'est ce qui la distingue d'une commutation partout ailleurs. Mais celle-ci
+  // arrête un brûleur qui TOURNAIT. Sans marque propre, une coupure imposée à t suivie d'une
+  // demande à t+1 s rallumait une seconde après avoir coupé.
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));           // ON
+  ({ nextState: state } = stepBoiler(state, 0, PARAMS, 200_000));     // OFF commandé
+
+  // Le relais n'a pas obéi et brûle toujours : on le coupe pour de bon, bien plus tard.
+  const forced = stepBoiler(state, 0, PARAMS, 400_000, true);
+  assert.equal(forced.command, false);
+  assert.equal(forced.divergence, true);
+  assert.equal(forced.nextState.lastForcedOffMs, 400_000);
+  assert.equal(forced.nextState.lastChangeMs, 200_000, 'l\'état commandé, lui, n\'a pas bougé');
+
+  // Une demande une seconde plus tard ne doit PAS rallumer.
+  const tooSoon = stepBoiler(forced.nextState, 1, PARAMS, 401_000);
+  assert.equal(tooSoon.command, null);
+  assert.equal(tooSoon.ignitionBlocked, true);
+
+  const allowed = stepBoiler(forced.nextState, 1, PARAMS, 400_000 + DWELL_MS);
+  assert.equal(allowed.command, true, 'et le garde-fou expiré, elle rallume');
+});
+
+test('sur une installation neuve aussi, la coupure imposée arme le garde-fou', () => {
+  // `lastChangeMs === null` exempte du garde-fou. Sans marque propre, le cas le plus exposé — un
+  // relais trouvé allumé au tout premier pas — n'était protégé par rien du tout.
+  const state = createBoilerState();
+  const forced = stepBoiler(state, 0, PARAMS, 1_000, true);
+  assert.equal(forced.command, false);
+  assert.equal(forced.nextState.lastChangeMs, null);
+  assert.equal(forced.nextState.lastForcedOffMs, 1_000);
+
+  const tooSoon = stepBoiler(forced.nextState, 1, PARAMS, 2_000);
+  assert.equal(tooSoon.command, null, 'aucune exemption : un brûleur vient d\'être arrêté');
+  assert.equal(tooSoon.ignitionBlocked, true);
+});
+
+test('la correction vers l\'allumage attend elle aussi la coupure imposée', () => {
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 0, PARAMS, 1_000, true)); // coupure imposée
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 1_000 + DWELL_MS)); // allumage à l'expiration
+  assert.equal(state.commanded, true);
+
+  // Le relais n'a pas suivi. La correction ne doit pas non plus court-circuiter le garde-fou.
+  const tooSoon = stepBoiler(state, 1, PARAMS, 1_000 + DWELL_MS + 1_000, false);
+  assert.equal(tooSoon.command, null);
 });

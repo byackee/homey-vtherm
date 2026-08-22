@@ -58,7 +58,7 @@ export default class CentralDevice extends Homey.Device {
 
     const boilerId = this.boilerId();
     if (boilerId !== null) {
-      participant.setBoilerBinding(app.hub.bind(boilerId, 'onoff'));
+      participant.setBoilerBinding(this.bindBoiler(app, boilerId));
     }
 
     this.registerListeners();
@@ -170,6 +170,19 @@ export default class CentralDevice extends Homey.Device {
     this.participant?.setMode(mode);
   }
 
+  /**
+   * Lie le relais, ET demande un recalcul quand il change d'état de lui-même.
+   *
+   * Sans ce rappel, l'événement qui RÉVÈLE une divergence ne réveille personne : une fois la
+   * chaudière commandée, le participant central n'a plus d'échéance propre, et l'écart n'était
+   * constaté qu'au prochain pas d'un autre appareil — jusqu'à `cycle_min`, cinq minutes par
+   * défaut, pendant lesquelles un relais resté allumé continue de chauffer. Les sources d'un
+   * thermostat sont liées ainsi depuis toujours ; le relais avait été oublié.
+   */
+  private bindBoiler(app: VThermApp, deviceId: string) {
+    return app.hub.bind(deviceId, 'onoff', () => app.requestTick('central:boiler-relay'));
+  }
+
   isBoilerActive(): boolean {
     return this.getCapabilityValue('vtherm_boiler_active') === true;
   }
@@ -195,7 +208,7 @@ export default class CentralDevice extends Homey.Device {
     const participant = this.participant;
     if (participant === null || !this.registered) return;
 
-    participant.setBoilerBinding(deviceId === null ? null : this.app.hub.bind(deviceId, 'onoff'));
+    participant.setBoilerBinding(deviceId === null ? null : this.bindBoiler(this.app, deviceId));
     this.app.requestTick('central:repair');
   }
 
@@ -236,7 +249,14 @@ export default class CentralDevice extends Homey.Device {
     const s = raw ?? this.getSettings() as Record<string, unknown>;
 
     return {
-      threshold: num(s, 'boiler_threshold', DEFAULT_BOILER.threshold),
+      /*
+       * Plancher à 1, réaffirmé ici. L'interface impose déjà `min: 1`, mais une valeur venue
+       * d'ailleurs — import, restauration de sauvegarde — passerait sans être bornée. À zéro ou
+       * moins, `nbActive >= threshold` est vrai en permanence : la chaudière est réputée demandée
+       * même quand personne ne demande, et la coupure d'un relais resté allumé — la protection du
+       * circuit fermé — ne peut plus jamais se déclencher.
+       */
+      threshold: Math.max(1, num(s, 'boiler_threshold', DEFAULT_BOILER.threshold)),
       activationDelaySec: num(s, 'boiler_activation_delay', DEFAULT_BOILER.activationDelaySec),
       // Plancher réaffirmé ici : le réglage ne descend pas sous 60 s dans l'interface, mais une
       // valeur venue d'ailleurs (import, restauration) ne doit pas pouvoir désarmer le garde-fou.

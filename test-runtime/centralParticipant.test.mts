@@ -286,3 +286,72 @@ test('une attente d\'allumage abandonnée est dite, sinon le journal ne se concl
     host.logs.filter((line) => line.includes('Attente d\'allumage abandonnée')).length, 1,
   );
 });
+
+test('la correction survit à la déduplication RÉELLE, pas à un faux complaisant', async () => {
+  // La valeur corrigée est identique à la dernière écrite : sans `maxIntervalMs`, `shouldWrite`
+  // la supprime. Une revue a démontré le trou en retirant le forçage sans faire tomber un test.
+  const { relay, central } = world();
+  relay.policyWrites();
+
+  await central.applyBoiler([ACTIVE], 0);
+  assert.equal(relay.writes.length, 1);
+
+  relay.setReading(false, 61_000);
+  await central.applyBoiler([ACTIVE], 61_000);
+
+  assert.equal(relay.writes.length, 2, 'la correction est bien PARTIE malgré la déduplication');
+  assert.equal(relay.writes[1]?.opts.maxIntervalMs, 1, 'et c\'est le forçage qui l\'a fait passer');
+});
+
+test('un relais silencieux depuis des heures reste corrigible', async () => {
+  // La lecture ignore l'ÂGE, et c'est le régime que la correction existe pour rattraper : un
+  // relais qui ne bascule pas ne réémet rien. Un seuil de fraîcheur ordinaire la rendrait aveugle
+  // exactement là où elle sert.
+  const { relay, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  relay.setReading(false, 0); // dernière annonce à t=0…
+  await central.applyBoiler([ACTIVE], 4 * 3_600_000); // …lue quatre heures plus tard
+
+  assert.equal(relay.writes.length, 2);
+  assert.equal(relayState(relay), true);
+});
+
+test('une correction qui ÉCHOUE n\'efface pas l\'espacement des retentatives', async () => {
+  // Le cas qui fait échouer l'écriture est justement le quota d'API atteint. Rendre la marque au
+  // retour arrière ferait retenter à chaque pas — l'app creuserait le trou où elle est tombée.
+  const { relay, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  relay.setReading(false, 61_000);
+  relay.failWrites();
+
+  const before = relay.attempts.length;
+  await central.applyBoiler([ACTIVE], 61_000);   // correction tentée, échouée
+  await central.applyBoiler([ACTIVE], 66_000);
+  await central.applyBoiler([ACTIVE], 71_000);
+  await central.applyBoiler([ACTIVE], 76_000);
+
+  // Compté en TENTATIVES : une écriture qui lève ne figure pas dans `writes`, et s'y fier laissait
+  // passer un espacement entièrement supprimé.
+  assert.equal(
+    relay.attempts.length - before, 1,
+    'une seule tentative en 15 s : l\'espacement compte les appels, pas les succès',
+  );
+
+  // Et il retente bien une fois l'espacement écoulé, sinon la correction serait perdue.
+  await central.applyBoiler([ACTIVE], 95_000);
+  assert.equal(relay.attempts.length - before, 2);
+});
+
+test('l\'échéance annoncée réveille une correction différée', async () => {
+  // Sans elle, une correction repoussée attendait le pas d'un AUTRE participant — jusqu'à cinq
+  // minutes pendant lesquelles un relais resté allumé continue de chauffer.
+  const { relay, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  relay.setReading(false, 61_000);
+  await central.applyBoiler([ACTIVE], 61_000); // correction émise
+
+  assert.equal(central.dueAtMs(), 61_000 + 30_000);
+});

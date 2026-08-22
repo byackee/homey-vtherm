@@ -491,7 +491,14 @@ et ne déclenche aucune carte Flow.
 L'asymétrie vaut ici aussi, avec sa condition exacte. Corriger vers l'allumage attend le garde-fou.
 Corriger vers l'arrêt ne l'attend pas, mais seulement quand **rien** ne demande de chaleur : couper un
 relais resté allumé pendant l'attente qui précède un allumage fabriquerait le court-cycle que la
-correction prétend éviter. Les retentatives sont espacées de 30 s — un relais en panne peut réannoncer
+correction prétend éviter.
+
+Et une extinction **imposée** à un relais observé allumé arme le garde-fou, alors même qu'elle ne change
+pas l'état commandé. Elle ne touche pas l'instant de la dernière commutation — ce n'en est pas une pour
+l'app — mais elle a arrêté un brûleur qui tournait, et le prochain allumage lui doit l'attente comme à
+n'importe quelle autre extinction. La réaffirmation de démarrage compte pour la même raison, et c'est le
+cas le plus exposé : sur un état neuf, l'instant de dernière commutation est nul, ce qui exempte du
+garde-fou. Cette marque est persistée : sans elle, un redémarrage dans la minute rallumerait aussitôt. Les retentatives sont espacées de 30 s — un relais en panne peut réannoncer
 son état en boucle, et chaque annonce vaudrait un appel d'API. La lecture ignore l'ÂGE : un relais qui ne
 bascule pas ne réémet rien pendant des heures, et c'est précisément ce régime que la correction doit
 voir ; seule l'indisponibilité de l'appareil la disqualifie.
