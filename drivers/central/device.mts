@@ -9,6 +9,9 @@
 import Homey from 'homey';
 
 import { BOILER_MIN_DWELL_FLOOR_SEC, DEFAULT_BOILER } from '../../lib/constants.mjs';
+import {
+  CENTRAL_EXPLAIN_IDS, changedSettings, explainSettings,
+} from '../../lib/settingsExplain.mjs';
 import type { BoilerParams, CentralMode } from '../../lib/types.mjs';
 import type { CapValue } from '../../runtime/hub.mjs';
 import { CentralParticipant, type DeviceHost, type ParticipantEvent } from '../../runtime/participants.mjs';
@@ -33,6 +36,7 @@ export default class CentralDevice extends Homey.Device {
     const mode = this.currentMode();
     await this.setCapabilityValue('vtherm_central_mode', mode);
     void this.refreshLinkedLabels();
+    void this.refreshExplanations();
 
     const participant = new CentralParticipant({
       host: this.deviceHost(),
@@ -85,6 +89,24 @@ export default class CentralDevice extends Homey.Device {
       await this.setSettings({ linked_devices: `${this.homey.__('settings.linked.boiler')} : ${value}` });
     } catch (err) {
       this.error('Mise à jour de l\'appareil lié :', err);
+    }
+  }
+
+  /**
+   * Remplit l'explication du groupe de réglages.
+   *
+   * Homey affiche la VALEUR d'un réglage `label`, jamais son `hint` — qui ne sort qu'en infobulle.
+   * Sans cette écriture, le groupe montre un cadre gris vide.
+   */
+  private async refreshExplanations(): Promise<void> {
+    const desired = explainSettings(CENTRAL_EXPLAIN_IDS, (key) => this.homey.__(key));
+    const pending = changedSettings(desired, (key) => this.getSetting(key));
+    if (Object.keys(pending).length === 0) return;
+
+    try {
+      await this.setSettings(pending);
+    } catch (err) {
+      this.error('Mise à jour de l\'explication de réglages :', err);
     }
   }
 

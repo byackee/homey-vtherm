@@ -116,7 +116,20 @@
       "sources": "Thermostaten",
       "backbone": "Zigbee2MQTT"
     },
-    "test_host_has_credentials": "Zet geen gebruikersnaam of wachtwoord in het adres. Gebruik de twee velden hieronder: alleen die houden het wachtwoord uit het logboek."
+    "test_host_has_credentials": "Zet geen gebruikersnaam of wachtwoord in het adres. Gebruik de twee velden hieronder: alleen die houden het wachtwoord uit het logboek.",
+    "explain": {
+      "away_hint": "Als de aanwezigheidssensor een leeg huis meldt, valt elk preset terug op de onderstaande temperatuur. Het getoonde preset verandert niet. Zonder aanwezigheidssensor blijven deze ongebruikt.",
+      "boiler_hint": "De app telt hoeveel verwarmingen warmte vragen en schakelt het relais. Een ketel die tegen gesloten kranen draait, bouwt druk op — controleer de eigen beveiligingen.",
+      "central_hint": "Het apparaat CV-ketel heeft één schakelaar voor het hele huis en het relais dat uw ketel start. De twee instellingen hieronder bepalen of deze thermostaat die schakelaar volgt, en of zijn vraag meetelt om de ketel te starten.",
+      "emitter_hint": "De app stuurt aan wat kan: een setpoint, een klepopening of een schakelaar. De klepinstellingen gelden alleen met de Zigbee2MQTT-backend.",
+      "expert_hint": "Deze waarden vervangen de vooraf ingestelde modi als u hierboven Expert kiest. Zonder Expert heeft niets hier effect.",
+      "presence_hint": "Aanwezigheid gaat over het huis, beweging alleen over deze kamer en stuurt het Activiteit-preset.",
+      "presets_hint": "De temperatuur die deze thermostaat per preset nastreeft. Presets zijn hoe u hem dagelijks aanstuurt, in plaats van telkens een getal in te typen.",
+      "regulation_hint": "Een radiatorkraan meet de radiator, niet de kamer. Zelfregulering verschuift het setpoint. Vereist een buitentemperatuursensor.",
+      "safety_hint": "Een lege batterij in januari zou de kamer anders onverwarmd laten. De app houdt een minimum aan tot de sensor terugkomt, en geeft op na de onderstaande termijn.",
+      "tpi_hint": "Dit onderscheidt een echte thermostaat van een bimetaal. De app berekent hoeveel warmte de kamer nodig heeft. De standaardwaarden passen bij een normaal geïsoleerde kamer.",
+      "window_hint": "Twee manieren, die elkaar uitsluiten. Een contactsensor is direct en betrouwbaar. Detectie via temperatuurdaling vereist geen sensor maar reageert trager."
+    }
   },
   "device": {
     "no_emitter": "Er is geen verwarming gekoppeld. Gebruik Repareren om er een te kiezen.",

@@ -19,5 +19,6 @@
   "min": 0,
   "max": 100,
   "decimals": 0,
-  "insights": true
+  "insights": true,
+  "icon": "/assets/capabilities/vtherm_valve_open.svg"
 }

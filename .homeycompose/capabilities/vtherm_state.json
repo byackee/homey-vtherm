@@ -87,5 +87,6 @@
         "nl": "Belastingafschakeling"
       }
     }
-  ]
+  ],
+  "icon": "/assets/capabilities/vtherm_state.svg"
 }

@@ -8,5 +8,6 @@
   "getable": true,
   "setable": false,
   "uiComponent": "sensor",
-  "insights": true
+  "insights": true,
+  "icon": "/assets/capabilities/vtherm_boiler_active.svg"
 }

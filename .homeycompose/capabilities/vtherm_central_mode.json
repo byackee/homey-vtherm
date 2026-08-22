@@ -47,5 +47,6 @@
         "nl": "Vorstbeveiliging"
       }
     }
-  ]
+  ],
+  "icon": "/assets/capabilities/vtherm_central_mode.svg"
 }

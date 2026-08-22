@@ -19,5 +19,6 @@
   "min": -120,
   "max": 120,
   "decimals": 2,
-  "insights": true
+  "insights": true,
+  "icon": "/assets/capabilities/vtherm_slope.svg"
 }

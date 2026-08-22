@@ -116,7 +116,20 @@
       "sources": "Thermostats",
       "backbone": "Zigbee2MQTT"
     },
-    "test_host_has_credentials": "Ne mettez ni identifiant ni mot de passe dans l'adresse. Servez-vous des deux champs ci-dessous : eux seuls gardent le mot de passe hors du journal."
+    "test_host_has_credentials": "Ne mettez ni identifiant ni mot de passe dans l'adresse. Servez-vous des deux champs ci-dessous : eux seuls gardent le mot de passe hors du journal.",
+    "explain": {
+      "away_hint": "Quand le capteur de présence indique un logement vide, chaque preset se rabat sur la température ci-dessous au lieu de la sienne. Le preset affiché sur la tuile ne change pas — seule la cible change. Sans capteur de présence, ces valeurs ne servent jamais.",
+      "boiler_hint": "L'app compte combien d'émetteurs demandent de la chaleur dans tout le logement et commute le relais quand il y en a assez. Piloter une vraie chaudière comporte un risque : une chaudière qui tourne vannes fermées monte en pression. Vérifiez que la vôtre a ses propres sécurités avant de laisser quoi que ce soit la commuter.",
+      "central_hint": "L'appareil Chaudière porte un interrupteur unique pour tout le logement — tout arrêté, chauffage seul, ou hors-gel — et le relais qui démarre votre chaudière. Les deux réglages ci-dessous décident si ce thermostat obéit à cet interrupteur, et si sa demande compte pour démarrer la chaudière. Les deux sont actifs par défaut. Désactivez le premier pour une pièce que vous voulez continuer à piloter à la main ; désactivez le second pour un émetteur qui n'a rien à voir avec la chaudière, un radiateur électrique par exemple.",
+      "emitter_hint": "L'app pilote ce qu'elle peut : une consigne, une ouverture de vanne, ou un simple interrupteur. Les réglages de vanne ci-dessous ne s'appliquent que si la dorsale Zigbee2MQTT est configurée dans les réglages de l'app — l'ouverture de vanne n'est pas quelque chose que Homey expose.",
+      "expert_hint": "Ces valeurs remplacent les modes d'auto-régulation préréglés lorsque vous choisissez Expert ci-dessus. Ce sont les coefficients bruts de la correction ; les modes préréglés n'en sont que des combinaisons nommées. Si vous n'avez pas délibérément choisi Expert, rien ici n'a d'effet.",
+      "presence_hint": "La présence concerne le logement : personne, et chaque preset se rabat sur sa température d'absence. Le mouvement ne concerne que cette pièce, et pilote le preset Activité — qui n'est proposé qu'une fois les quatre réglages ci-dessous renseignés.",
+      "presets_hint": "La température visée par ce thermostat sous chaque preset. Les presets sont la façon de le piloter au quotidien — depuis un Flow, depuis la tuile, ou depuis un planning — plutôt que de saisir un nombre à chaque fois.",
+      "regulation_hint": "Une vanne mesure le radiateur, pas la pièce — elle lit chaud et ferme trop tôt. L'auto-régulation décale la consigne qu'on lui envoie pour que la pièce atteigne votre cible. Elle exige un capteur de température extérieure : sans lui, aucun offset n'est appliqué.",
+      "safety_hint": "Une pile morte en janvier laisserait sinon la pièce sans chauffage jusqu'à ce que quelqu'un s'en aperçoive : l'app refuse de calculer sur une mesure figée, donc elle cesse de demander de la chaleur. À la place, elle maintient un minimum jusqu'au retour du capteur — et abandonne au bout du délai ci-dessous, parce qu'une chaudière qui tourne des jours sur un capteur mort est un risque plus grand que le gel qu'on évitait.",
+      "tpi_hint": "C'est ce qui sépare un vrai thermostat d'un bilame. Au lieu de basculer à fond puis rien, l'app calcule la puissance dont la pièce a réellement besoin et ne délivre que celle-là. Les valeurs par défaut conviennent à une pièce normalement isolée ; ne les changez qu'en cas de problème observé.",
+      "window_hint": "Deux façons de s'en apercevoir, et elles s'excluent. Un contact d'ouverture est immédiat et fiable. La détection par chute de température ne demande aucun capteur mais réagit plus lentement, et seulement une fois que l'app a assez de mesures pour calculer une pente."
+    }
   },
   "device": {
     "no_emitter": "Aucun émetteur n'est lié. Utilisez Réparer pour en désigner un.",

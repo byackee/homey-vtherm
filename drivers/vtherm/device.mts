@@ -8,6 +8,9 @@
  */
 
 import { resolveCapabilityId } from '../../lib/capabilityMatch.mjs';
+import {
+  VTHERM_EXPLAIN_IDS, changedSettings, explainSettings, joinLinkedLabels,
+} from '../../lib/settingsExplain.mjs';
 import Homey from 'homey';
 
 import {
@@ -184,6 +187,7 @@ export default class VThermDevice extends Homey.Device {
     // Les noms des appareils liés, pour les réglages. En tâche de fond : ils passent par le hub,
     // et l'initialisation ne doit pas attendre le réseau pour rendre l'appareil disponible.
     void this.refreshLinkedLabels();
+    void this.refreshExplanations();
   }
 
   // --- Contrat avec le participant -------------------------------------------
@@ -410,9 +414,28 @@ export default class VThermDevice extends Homey.Device {
     );
 
     try {
-      await this.setSettings({ linked_devices: lines.join('\n') });
+      await this.setSettings({ linked_devices: joinLinkedLabels(lines) });
     } catch (err) {
       this.error('Mise à jour des appareils liés :', err);
+    }
+  }
+
+  /**
+   * Remplit les explications de chaque groupe de réglages.
+   *
+   * Elles ne peuvent pas venir du manifeste : Homey affiche la VALEUR d'un réglage `label`, et une
+   * valeur par défaut de `driver.settings.compose.json` n'est pas traduisible. Sans cette écriture,
+   * chaque groupe montre un cadre gris vide — ce que l'utilisateur voyait avant ce correctif.
+   */
+  private async refreshExplanations(): Promise<void> {
+    const desired = explainSettings(VTHERM_EXPLAIN_IDS, (key) => this.homey.__(key));
+    const pending = changedSettings(desired, (key) => this.getSetting(key));
+    if (Object.keys(pending).length === 0) return;
+
+    try {
+      await this.setSettings(pending);
+    } catch (err) {
+      this.error('Mise à jour des explications de réglages :', err);
     }
   }
 

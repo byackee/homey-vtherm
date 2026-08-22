@@ -116,7 +116,20 @@
       "sources": "Thermostats",
       "backbone": "Zigbee2MQTT"
     },
-    "test_host_has_credentials": "Do not put a username or a password in the address. Use the two fields below — they are the only ones that keep the password out of the logs."
+    "test_host_has_credentials": "Do not put a username or a password in the address. Use the two fields below — they are the only ones that keep the password out of the logs.",
+    "explain": {
+      "away_hint": "When the presence sensor reports an empty home, each preset falls back to the temperature below instead of its normal one. The preset shown on the tile does not change — only what the thermostat aims for. Without a presence sensor, these values are never used.",
+      "boiler_hint": "The app counts how many emitters are calling for heat across the home and switches the relay when enough of them are. Driving a real boiler carries a risk: one running against closed valves builds pressure. Check that yours has its own safety cut-out before letting anything switch it.",
+      "central_hint": "The Boiler device carries one switch for the whole home — everything off, heating only, or frost protection — and the relay that starts your boiler. The two settings below decide whether this thermostat obeys that switch, and whether its demand counts towards starting the boiler. Both are on by default. Turn the first off for a room you want to keep controlling by hand; turn the second off for a heater that has nothing to do with the boiler, such as an electric radiator.",
+      "emitter_hint": "The app drives whatever it can: a setpoint, a valve opening, or a plain switch. The valve settings below only apply when the Zigbee2MQTT backend is configured in the app settings — valve opening is not something Homey exposes on its own.",
+      "expert_hint": "These values replace the preset self-regulation modes when you choose Expert above. They are the raw coefficients of the correction; the preset modes are just named combinations of them. If you have not deliberately chosen Expert, nothing here has any effect.",
+      "presence_hint": "Presence is about the home: nobody there, every preset falls back to its away temperature. Motion is about this room only, and drives the Activity preset — which is offered only once all four settings below are filled in.",
+      "presets_hint": "The temperature this thermostat aims for under each preset. Presets are how you drive it day to day — from a Flow, from the tile, or from a schedule — instead of typing a number each time.",
+      "regulation_hint": "A radiator valve measures the radiator, not the room — it reads warm and closes too early. Self-regulation offsets the setpoint sent to it so the room reaches your target. It needs an outdoor temperature sensor: without one, no offset is applied at all.",
+      "safety_hint": "A flat battery in January would otherwise leave the room unheated until someone notices: the app refuses to compute on a frozen reading, so it stops asking for heat. Instead, it keeps a minimum going until the sensor comes back — and gives up after the delay below, because a boiler running for days on a dead sensor is a bigger risk than the frost it was avoiding.",
+      "tpi_hint": "This is what separates a real thermostat from a bimetallic strip. Instead of switching fully on and fully off, the app computes how much heat the room actually needs and delivers exactly that. The defaults suit a normally insulated room; change them only if you observe a problem.",
+      "window_hint": "Two ways to notice, and they are mutually exclusive. A contact sensor is immediate and reliable. Detection by temperature drop needs no sensor at all but reacts more slowly, and only once the app has enough readings to measure a slope."
+    }
   },
   "device": {
     "no_emitter": "No heater is linked. Use Repair to pick one.",
