@@ -27,7 +27,7 @@
       "presence_hint": "Quand personne n'est là, chaque preset bascule sur sa température d'absence."
     },
     "default_name": "Thermostat",
-    "central_name": "Configuration centrale",
+    "central_name": "Chaudière",
     "error": {
       "incomplete": "Choisissez un capteur de pièce et un émetteur avant d'ajouter ce thermostat.",
       "no_api": "Adaptive Thermostat ne peut pas encore lire vos appareils. Son accès à l'API Homey n'est pas monté — réessayez dans quelques secondes, ou redémarrez l'app.",
@@ -120,7 +120,7 @@
   },
   "device": {
     "no_emitter": "Aucun émetteur n'est lié. Utilisez Réparer pour en désigner un.",
-    "central_duplicate": "Une autre configuration centrale existe déjà. Une seule est autorisée — supprimez celle-ci.",
+    "central_duplicate": "Un appareil Chaudière existe déjà. Un seul est autorisé — supprimez celui-ci.",
     "sync_restart": "Enregistré. Les réglages d'intervalle d'écriture vers l'émetteur prendront effet au redémarrage de l'app.",
     "warning": {
       "no_sensor": "Aucun capteur de température de pièce exploitable : la régulation est suspendue et rien n'est envoyé à l'émetteur.",

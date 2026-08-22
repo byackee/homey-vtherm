@@ -27,7 +27,7 @@
       "presence_hint": "Als niemand thuis is, valt elk preset terug op zijn afwezigheidstemperatuur."
     },
     "default_name": "Thermostaat",
-    "central_name": "Centrale configuratie",
+    "central_name": "CV-ketel",
     "error": {
       "incomplete": "Kies een kamersensor en een verwarming voordat u deze thermostaat toevoegt.",
       "no_api": "Adaptive Thermostat kan uw apparaten nog niet lezen. De toegang tot de Homey API is niet actief — probeer over enkele seconden opnieuw of herstart de app.",
@@ -120,7 +120,7 @@
   },
   "device": {
     "no_emitter": "Er is geen verwarming gekoppeld. Gebruik Repareren om er een te kiezen.",
-    "central_duplicate": "Er bestaat al een andere centrale configuratie. Slechts één is toegestaan — verwijder deze.",
+    "central_duplicate": "Er bestaat al een CV-ketel-apparaat. Slechts één is toegestaan — verwijder deze.",
     "sync_restart": "Opgeslagen. De schrijfinterval-instellingen voor de verwarming worden actief na een herstart van de app.",
     "warning": {
       "no_sensor": "Geen bruikbare kamertemperatuursensor: de regeling is opgeschort en er wordt niets naar de verwarming gestuurd.",

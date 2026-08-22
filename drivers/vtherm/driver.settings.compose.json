@@ -1013,9 +1013,9 @@
           "nl": "Het huis laten beslissen voor deze kamer"
         },
         "hint": {
-          "en": "The Central configuration device carries one switch for the whole home — everything off, heating only, or frost protection — and one boiler relay. The two settings below decide whether this thermostat obeys that switch, and whether its demand counts towards starting the boiler. Both are on by default. Turn the first off for a room you want to keep controlling by hand; turn the second off for a heater that has nothing to do with the boiler, such as an electric radiator.",
-          "fr": "L'appareil Configuration centrale porte un interrupteur unique pour tout le logement — tout arrêté, chauffage seul, ou hors-gel — et un relais de chaudière. Les deux réglages ci-dessous décident si ce thermostat obéit à cet interrupteur, et si sa demande compte pour démarrer la chaudière. Les deux sont actifs par défaut. Désactivez le premier pour une pièce que vous voulez continuer à piloter à la main ; désactivez le second pour un émetteur qui n'a rien à voir avec la chaudière, un radiateur électrique par exemple.",
-          "nl": "Het apparaat Centrale configuratie heeft één schakelaar voor het hele huis en één ketelrelais. De twee instellingen hieronder bepalen of deze thermostaat die schakelaar volgt, en of zijn vraag meetelt om de ketel te starten."
+          "en": "The Boiler device carries one switch for the whole home — everything off, heating only, or frost protection — and the relay that starts your boiler. The two settings below decide whether this thermostat obeys that switch, and whether its demand counts towards starting the boiler. Both are on by default. Turn the first off for a room you want to keep controlling by hand; turn the second off for a heater that has nothing to do with the boiler, such as an electric radiator.",
+          "fr": "L'appareil Chaudière porte un interrupteur unique pour tout le logement — tout arrêté, chauffage seul, ou hors-gel — et le relais qui démarre votre chaudière. Les deux réglages ci-dessous décident si ce thermostat obéit à cet interrupteur, et si sa demande compte pour démarrer la chaudière. Les deux sont actifs par défaut. Désactivez le premier pour une pièce que vous voulez continuer à piloter à la main ; désactivez le second pour un émetteur qui n'a rien à voir avec la chaudière, un radiateur électrique par exemple.",
+          "nl": "Het apparaat CV-ketel heeft één schakelaar voor het hele huis en het relais dat uw ketel start. De twee instellingen hieronder bepalen of deze thermostaat die schakelaar volgt, en of zijn vraag meetelt om de ketel te starten."
         }
       },
       {
@@ -1028,9 +1028,9 @@
         },
         "value": true,
         "hint": {
-          "en": "When on, the switch on the Central configuration device applies to this thermostat: everything off, heating only, or frost protection. Turn it off for a room you want to keep controlling by hand, whatever the rest of the home is doing.",
-          "fr": "Quand c'est actif, l'interrupteur de l'appareil Configuration centrale s'applique à ce thermostat : tout arrêté, chauffage seul, ou hors-gel. Désactivez-le pour une pièce que vous voulez continuer à piloter à la main, quoi que fasse le reste du logement.",
-          "nl": "Indien aan, geldt de schakelaar van de Centrale configuratie ook voor deze thermostaat."
+          "en": "When on, the switch on the Boiler device applies to this thermostat: everything off, heating only, or frost protection. Turn it off for a room you want to keep controlling by hand, whatever the rest of the home is doing.",
+          "fr": "Quand c'est actif, l'interrupteur de l'appareil Chaudière s'applique à ce thermostat : tout arrêté, chauffage seul, ou hors-gel. Désactivez-le pour une pièce que vous voulez continuer à piloter à la main, quoi que fasse le reste du logement.",
+          "nl": "Indien aan, geldt de schakelaar van het apparaat CV-ketel ook voor deze thermostaat."
         }
       },
       {

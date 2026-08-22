@@ -8,8 +8,8 @@
         "nl": "Hij begint warmte te vragen"
       },
       "hint": {
-        "en": "Fires when this thermostat goes from not needing heat to needing it. Useful to drive a boiler yourself instead of using the central configuration.",
-        "fr": "Se déclenche quand ce thermostat passe de « pas besoin » à « besoin de chaleur ». Utile pour piloter une chaudière soi-même plutôt que par la configuration centrale.",
+        "en": "Fires when this thermostat goes from not needing heat to needing it. Useful to drive a boiler yourself instead of using the Boiler device.",
+        "fr": "Se déclenche quand ce thermostat passe de « pas besoin » à « besoin de chaleur ». Utile pour piloter une chaudière soi-même plutôt que par l'appareil Chaudière.",
         "nl": "Wordt geactiveerd wanneer deze thermostaat warmte gaat vragen."
       },
       "tokens": [

@@ -1,8 +1,8 @@
 {
   "name": {
-    "en": "Central configuration",
-    "fr": "Configuration centrale",
-    "nl": "Centrale configuratie"
+    "en": "Boiler",
+    "fr": "Chaudière",
+    "nl": "CV-ketel"
   },
   "class": "other",
   "capabilities": [
