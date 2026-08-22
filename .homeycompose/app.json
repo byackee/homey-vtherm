@@ -31,6 +31,22 @@
     "testBroker": {
       "method": "POST",
       "path": "/broker/test"
+    },
+    "getDiagnostics": {
+      "method": "GET",
+      "path": "/diagnostics"
+    },
+    "getThermostats": {
+      "method": "GET",
+      "path": "/thermostats"
+    },
+    "getSourceCandidates": {
+      "method": "GET",
+      "path": "/candidates"
+    },
+    "setThermostatSource": {
+      "method": "PUT",
+      "path": "/thermostats/source"
     }
   },
   "tags": {

@@ -29,12 +29,43 @@
     "default_name": "Thermostat",
     "central_name": "Central configuration",
     "error": {
-      "incomplete": "Pick a room sensor and a heater before adding this thermostat."
+      "incomplete": "Pick a room sensor and a heater before adding this thermostat.",
+      "no_api": "Adaptive Thermostat cannot read your devices yet. Its access to the Homey API has not come up — reopen this in a few seconds, or restart the app.",
+      "repair_no_create": "This device already exists — you are repairing it, not creating a new one."
+    },
+    "finish": "Create the thermostat",
+    "creating": "Creating…",
+    "updated": "Change saved.",
+    "done": "Done",
+    "edit": {
+      "title": "Sources of this thermostat",
+      "lead": "Change any of them. Each choice takes effect immediately — the thermostat regulates on the new source from its next cycle.",
+      "required": "Required",
+      "room": "Room temperature sensor",
+      "room_hint": "The thermometer that reads the temperature you care about — the one in the room, not the one inside the radiator valve.",
+      "emitter": "Heater",
+      "emitter_hint": "Changing it reloads the device: its regulation restarts from the new heater."
     }
   },
   "settings": {
-    "title": "Zigbee2MQTT backbone",
-    "subtitle": "Optional. Unlocks direct valve control on SONOFF TRVZB and similar valves.",
+    "title": "Adaptive Thermostat",
+    "subtitle": "The sources of your thermostats, and the optional Zigbee2MQTT backbone.",
+    "sources": {
+      "title": "Thermostats",
+      "lead": "Every thermostat reads a room sensor and drives a heater; the four other sources are optional. Change any of them here — the choice takes effect immediately, and the thermostat keeps its name, its settings, its history and its Flows.",
+      "loading": "Reading your devices…",
+      "refresh": "Reload",
+      "empty": "No thermostat yet. Add one from Devices, then come back — its sources will be listed here.",
+      "hub_offline": "Your devices cannot be read right now: the app has not reached the Homey API yet. Reload in a few seconds.",
+      "saving": "Saving…",
+      "missing": "The linked device no longer exists ({{id}}). This source is dead — pick another one.",
+      "orphan_option": "Missing device ({{id}})",
+      "unavailable": "The list of devices for this source could not be loaded.",
+      "unknown_thermostat": "This thermostat no longer exists. Reload the page.",
+      "failed": "Your thermostats could not be read: {{detail}}"
+    },
+    "backbone_title": "Zigbee2MQTT backbone",
+    "backbone_subtitle": "Optional. Unlocks direct valve control on SONOFF TRVZB and similar valves.",
     "lead": "The Homey Zigbee2MQTT app does not expose everything a thermostatic valve can do: four of the properties this thermostat needs simply do not exist as Homey capabilities. If you give it access to your MQTT broker, the app publishes to Zigbee2MQTT itself and unlocks two things:",
     "lead_valve": "Direct valve opening — the algorithm sets how far the valve opens, instead of steering it indirectly with a setpoint.",
     "lead_sensor": "Room temperature injection — the valve regulates on your room sensor instead of its own thermometer, which sits against the radiator and always reads too warm.",
@@ -66,7 +97,11 @@
     "test_refused": "The broker could not be reached ({{detail}}). Check the address and the port.",
     "test_timeout": "No answer from the broker within ten seconds. Check the address and the port, and that the broker is reachable from Homey.",
     "test_invalid_config": "These settings are incomplete or invalid. Check the address, the port and the base topic.",
-    "test_unknown": "The test returned an unexpected answer."
+    "test_unknown": "The test returned an unexpected answer.",
+    "linked": {
+      "none": "Not set",
+      "missing": "Device no longer exists — set it again in the app settings"
+    }
   },
   "device": {
     "no_emitter": "No heater is linked. Use Repair to pick one.",

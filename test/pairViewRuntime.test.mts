@@ -1,0 +1,198 @@
+/**
+ * Exécution réelle du JavaScript des vues de pairing, sans navigateur.
+ *
+ * Les autres tests de vues n'inspectent que le texte du fichier. C'est insuffisant : le bug qui a
+ * atteint la production — l'amorçage placé avant l'affectation de la configuration, d'où un
+ * `{capability: undefined}` envoyé au driver — était parfaitement invisible à la lecture. Ici on
+ * évalue le script dans un DOM minimal avec un faux `Homey`, et on regarde ce qu'il émet vraiment.
+ */
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import vm from 'node:vm';
+
+interface Emitted { event: string; data: unknown }
+
+interface FakeElement {
+  id: string;
+  className: string;
+  textContent: string;
+  style: { display: string };
+  children: FakeElement[];
+  innerHTML: string;
+  onclick: (() => void) | null;
+  classList: { add(c: string): void; remove(c: string): void; contains(c: string): boolean };
+  appendChild(child: FakeElement): void;
+  querySelectorAll(): FakeElement[];
+  getAttribute(name: string): string | null;
+  setAttribute(name: string, value: string): void;
+}
+
+function element(id = ''): FakeElement {
+  const classes = new Set<string>();
+  const attrs = new Map<string, string>();
+  return {
+    id,
+    className: '',
+    textContent: '',
+    style: { display: '' },
+    children: [],
+    innerHTML: '',
+    onclick: null,
+    classList: {
+      add: (c) => { classes.add(c); },
+      remove: (c) => { classes.delete(c); },
+      contains: (c) => classes.has(c),
+    },
+    appendChild(child) { this.children.push(child); },
+    querySelectorAll: () => [],
+    getAttribute: (name) => attrs.get(name) ?? null,
+    setAttribute: (name, value) => { attrs.set(name, value); },
+  };
+}
+
+/**
+ * Évalue le script d'une vue et renvoie ce qu'elle a émis.
+ *
+ * `homeyReadyAtLoad` reproduit la course : `true` = l'objet `Homey` est déjà présent au chargement
+ * (la vue démarre immédiatement), `false` = il arrive plus tard. Les deux chemins doivent produire
+ * exactement le même appel — c'est précisément ce qui n'était pas le cas.
+ */
+function runView(relativePath: string, homeyReadyAtLoad: boolean): {
+  emitted: Emitted[];
+  handlerInstalled: boolean;
+} {
+  const html = readFileSync(join(process.cwd(), relativePath), 'utf8');
+  const match = /<script type="text\/javascript">([\s\S]*?)<\/script>/.exec(html);
+  const source = match?.[1];
+  assert.ok(source !== undefined, `aucun script trouvé dans ${relativePath}`);
+
+  const emitted: Emitted[] = [];
+  let handlerInstalled = false;
+  // Les identifiants sont préfixés par le nom de la vue : les vues d'un même driver partagent un
+  // seul document, et des identifiants nus se marchent dessus.
+  const viewId = relativePath.split('/').pop()?.replace('.html', '') ?? '';
+  const nodes = new Map<string, FakeElement>();
+  for (const base of ['state', 'list', 'outdoor', 'window', 'motion', 'presence', 'finish']) {
+    const id = `${viewId}-${base}`;
+    nodes.set(id, element(id));
+  }
+
+  const homey = {
+    emit(event: string, data: unknown): Promise<unknown> {
+      emitted.push({ event, data });
+      // Une liste vide suffit : on teste ce qui PART, pas ce qui revient.
+      return Promise.resolve([]);
+    },
+    __: (key: string) => key,
+    nextView: () => { /* rien à faire ici */ },
+  };
+
+  const sandbox: Record<string, unknown> = {
+    Promise,
+    JSON,
+    console,
+    setTimeout,
+    document: {
+      getElementById: (id: string) => nodes.get(id) ?? null,
+      querySelectorAll: () => [],
+      createElement: () => element(),
+      addEventListener: () => { /* DOMContentLoaded : jamais déclenché ici */ },
+    },
+    addEventListener: (type: string) => { if (type === 'error') handlerInstalled = true; },
+  };
+  sandbox.window = sandbox;
+  if (homeyReadyAtLoad) sandbox.Homey = homey;
+
+  const context = vm.createContext(sandbox);
+  vm.runInContext(source, context, { timeout: 2000 });
+
+  // Convention « page de réglages » : l'objet arrive après coup.
+  if (!homeyReadyAtLoad) {
+    const onReady = sandbox.onHomeyReady as ((h: unknown) => void) | undefined;
+    assert.ok(typeof onReady === 'function', `${relativePath} n'expose pas onHomeyReady`);
+    onReady(homey);
+  }
+
+  return { emitted, handlerInstalled };
+}
+
+/**
+ * Ce que chaque vue doit demander.
+ *
+ * Les vues du driver `vtherm` nomment une SOURCE ; c'est le driver qui sait quelles capabilities
+ * cela recouvre. La vue du driver `central` n'a qu'un seul choix possible et demande directement
+ * sa capability.
+ */
+const SINGLE_VIEWS: { path: string; field: 'source' | 'capability'; value: string }[] = [
+  { path: 'drivers/vtherm/pair/pick_room_sensor.html', field: 'source', value: 'room' },
+  { path: 'drivers/vtherm/pair/pick_emitter.html', field: 'source', value: 'emitter' },
+  { path: 'drivers/central/pair/pick_boiler.html', field: 'capability', value: 'onoff' },
+];
+
+for (const view of SINGLE_VIEWS) {
+  for (const readyAtLoad of [true, false]) {
+    const when = readyAtLoad ? 'Homey deja pret' : 'Homey pret plus tard';
+    test(`${view.path} demande bien ${view.value} (${when})`, () => {
+      const { emitted } = runView(view.path, readyAtLoad);
+      const calls = emitted.filter((e) => e.event === 'list_candidates');
+      assert.equal(calls.length, 1, 'une seule demande, quel que soit le chemin de démarrage');
+
+      const data = calls[0]?.data as Record<string, unknown> | undefined;
+      // Le cœur du bug : `undefined` se sérialisait en `{}` et le driver ne voyait rien.
+      assert.notEqual(data?.[view.field], undefined,
+        `${view.field} undefined — la vue a démarré avant d'affecter sa configuration`);
+      assert.equal(data?.[view.field], view.value);
+    });
+  }
+}
+
+for (const readyAtLoad of [true, false]) {
+  const when = readyAtLoad ? 'Homey deja pret' : 'Homey pret plus tard';
+  test(`pick_optional demande ses quatre sources (${when})`, () => {
+    const { emitted } = runView('drivers/vtherm/pair/pick_optional.html', readyAtLoad);
+    const asked = emitted
+      .filter((e) => e.event === 'list_candidates')
+      .map((e) => (e.data as { source?: unknown }).source);
+
+    assert.equal(asked.length, 4);
+    for (const source of asked) {
+      assert.notEqual(source, undefined, 'un emplacement demandé sans source');
+    }
+    assert.deepEqual(new Set(asked),
+      new Set(['outdoor', 'window', 'motion', 'presence']));
+  });
+}
+
+test('une vue installe son interception d\'erreurs', () => {
+  // Un plantage survenu avant l'installation du gestionnaire ne laisserait aucune trace :
+  // ni dans le log de l'app, ni dans la page.
+  for (const view of SINGLE_VIEWS) {
+    const { handlerInstalled } = runView(view.path, true);
+    assert.ok(handlerInstalled, `${view.path} n'installe pas de gestionnaire d'erreurs`);
+  }
+});
+
+test('la liste se charge sans attendre la réponse au mode', () => {
+  // Une première version enchaînait `start()` derrière `emit('pair_mode')`. La liste ne
+  // s'affichait donc qu'après un aller-retour supplémentaire, et pas du tout si celui-ci
+  // traînait — exactement la panne qu'on venait de corriger, réintroduite par le correctif
+  // suivant. `runView` ne laisse passer aucune microtâche : ce qui est émis ici est ce qui
+  // part de façon synchrone au démarrage.
+  for (const view of SINGLE_VIEWS) {
+    const { emitted } = runView(view.path, true);
+    const events = emitted.map((e) => e.event);
+    assert.ok(events.includes('list_candidates'),
+      `${view.path} ne demande pas sa liste au démarrage — elle attend autre chose`);
+  }
+});
+
+test('le mode pairing/réparation est demandé, mais ne bloque rien', () => {
+  for (const view of SINGLE_VIEWS) {
+    const { emitted } = runView(view.path, true);
+    assert.ok(emitted.some((e) => e.event === 'pair_mode'),
+      `${view.path} ne demande jamais son mode : le bouton final agira comme en pairing`);
+  }
+});

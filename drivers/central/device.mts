@@ -32,6 +32,7 @@ export default class CentralDevice extends Homey.Device {
     // par Homey. Un second stockage en ferait une seconde vérité.
     const mode = this.currentMode();
     await this.setCapabilityValue('vtherm_central_mode', mode);
+    void this.refreshLinkedLabels();
 
     const participant = new CentralParticipant({
       host: this.deviceHost(),
@@ -61,6 +62,31 @@ export default class CentralDevice extends Homey.Device {
   }
 
   // --- Contrat avec le participant -------------------------------------------
+
+  /**
+   * Recopie le nom du relais de chaudière dans les réglages, en lecture seule.
+   *
+   * Même raison que pour le thermostat : les réglages ne savent pas afficher un sélecteur
+   * d'appareil, alors ils montrent ce qui est lié et disent où le changer.
+   */
+  private async refreshLinkedLabels(): Promise<void> {
+    const deviceId: unknown = this.getStoreValue(BOILER_STORE_KEY);
+    let value = this.homey.__('settings.linked.none');
+    if (typeof deviceId === 'string' && deviceId.length > 0) {
+      let name: string | null = null;
+      try {
+        name = (await this.app.hub.getDeviceSummary(deviceId))?.name ?? null;
+      } catch {
+        name = null;
+      }
+      value = name ?? this.homey.__('settings.linked.missing');
+    }
+    try {
+      await this.setSettings({ linked_boiler: value });
+    } catch (err) {
+      this.error('Mise à jour de l\'appareil lié :', err);
+    }
+  }
 
   private deviceHost(): DeviceHost {
     return {

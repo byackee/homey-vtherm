@@ -29,12 +29,43 @@
     "default_name": "Thermostat",
     "central_name": "Configuration centrale",
     "error": {
-      "incomplete": "Choisissez un capteur de pièce et un émetteur avant d'ajouter ce thermostat."
+      "incomplete": "Choisissez un capteur de pièce et un émetteur avant d'ajouter ce thermostat.",
+      "no_api": "Adaptive Thermostat ne peut pas encore lire vos appareils. Son accès à l'API Homey n'est pas monté — réessayez dans quelques secondes, ou redémarrez l'app.",
+      "repair_no_create": "Cet appareil existe déjà — vous êtes en train de le réparer, pas d'en créer un nouveau."
+    },
+    "finish": "Créer le thermostat",
+    "creating": "Création…",
+    "updated": "Modification enregistrée.",
+    "done": "Terminé",
+    "edit": {
+      "title": "Sources de ce thermostat",
+      "lead": "Changez-en une ou plusieurs. Chaque choix prend effet immédiatement — le thermostat régule sur la nouvelle source dès son prochain cycle.",
+      "required": "Obligatoire",
+      "room": "Capteur de température de la pièce",
+      "room_hint": "Le thermomètre qui lit la température qui vous intéresse — celui de la pièce, pas celui intégré à la vanne.",
+      "emitter": "Émetteur de chaleur",
+      "emitter_hint": "En changer recharge l'appareil : la régulation repart du nouvel émetteur."
     }
   },
   "settings": {
-    "title": "Dorsale Zigbee2MQTT",
-    "subtitle": "Facultatif. Débloque le contrôle direct de vanne sur les SONOFF TRVZB et similaires.",
+    "title": "Adaptive Thermostat",
+    "subtitle": "Les sources de vos thermostats, et la dorsale Zigbee2MQTT facultative.",
+    "sources": {
+      "title": "Thermostats",
+      "lead": "Chaque thermostat lit un capteur de pièce et pilote un émetteur ; les quatre autres sources sont facultatives. Changez-en une ici — le choix prend effet immédiatement, et le thermostat garde son nom, ses réglages, son historique et ses Flows.",
+      "loading": "Lecture de vos appareils…",
+      "refresh": "Recharger",
+      "empty": "Aucun thermostat pour l'instant. Ajoutez-en un depuis Appareils, puis revenez : ses sources seront listées ici.",
+      "hub_offline": "Vos appareils ne peuvent pas être lus pour l'instant : l'app n'a pas encore joint l'API Homey. Rechargez dans quelques secondes.",
+      "saving": "Enregistrement…",
+      "missing": "L'appareil lié n'existe plus ({{id}}). Cette source est morte — choisissez-en une autre.",
+      "orphan_option": "Appareil disparu ({{id}})",
+      "unavailable": "La liste des appareils pour cette source n'a pas pu être chargée.",
+      "unknown_thermostat": "Ce thermostat n'existe plus. Rechargez la page.",
+      "failed": "Vos thermostats n’ont pas pu être lus : {{detail}}"
+    },
+    "backbone_title": "Dorsale Zigbee2MQTT",
+    "backbone_subtitle": "Facultatif. Débloque le contrôle direct de vanne sur les SONOFF TRVZB et similaires.",
     "lead": "L'app Zigbee2MQTT pour Homey n'expose pas tout ce que sait faire une vanne thermostatique : quatre des propriétés dont ce thermostat a besoin n'existent tout simplement pas en capability Homey. Si vous lui donnez l'accès à votre broker MQTT, l'app publie elle-même vers Zigbee2MQTT et débloque deux choses :",
     "lead_valve": "L'ouverture directe de la vanne — l'algorithme fixe l'ouverture au lieu de la piloter indirectement par une consigne.",
     "lead_sensor": "L'injection de la température de pièce — la vanne régule sur votre capteur de pièce, et non sur son propre thermomètre, collé au radiateur et toujours trop chaud.",
@@ -66,7 +97,11 @@
     "test_refused": "Le broker est injoignable ({{detail}}). Vérifiez l'adresse et le port.",
     "test_timeout": "Aucune réponse du broker en dix secondes. Vérifiez l'adresse, le port, et que le broker est joignable depuis Homey.",
     "test_invalid_config": "Ces réglages sont incomplets ou invalides. Vérifiez l'adresse, le port et le topic de base.",
-    "test_unknown": "Le test a renvoyé une réponse inattendue."
+    "test_unknown": "Le test a renvoyé une réponse inattendue.",
+    "linked": {
+      "none": "Non défini",
+      "missing": "Appareil introuvable — redésignez-le dans les réglages de l'app"
+    }
   },
   "device": {
     "no_emitter": "Aucun émetteur n'est lié. Utilisez Réparer pour en désigner un.",

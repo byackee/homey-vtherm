@@ -13,6 +13,7 @@
 import { EventEmitter } from 'node:events';
 import type Homey from 'homey';
 import { HomeyAPI } from 'homey-api';
+import { matchesCapability } from '../lib/capabilityMatch.mjs';
 
 import { computeStale, resolveTimestamp, toEpochMs } from '../lib/freshness.mjs';
 import { shouldWrite } from '../lib/writePolicy.mjs';
@@ -617,7 +618,8 @@ export class HomeyApiHub {
 
     return Object.values(devices)
       .filter((device): device is ApiDevice => device !== undefined)
-      .filter((device) => Array.isArray(device.capabilities) && device.capabilities.includes(capabilityId))
+      .filter((device) => Array.isArray(device.capabilities)
+        && matchesCapability(device.capabilities, capabilityId))
       .map((device) => this.toSummary(device, zoneNames))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -736,3 +738,4 @@ function readDriverUri(device: unknown): string | null {
   const value = record.driverUri ?? record.driverId;
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
+

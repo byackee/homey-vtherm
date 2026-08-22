@@ -2,6 +2,41 @@
   {
     "type": "group",
     "label": {
+      "en": "Linked devices",
+      "fr": "Appareils liés",
+      "nl": "Gekoppelde apparaten"
+    },
+    "children": [
+      {
+        "id": "linked_hint",
+        "type": "label",
+        "label": {
+          "en": "Where to change this",
+          "fr": "Où le changer",
+          "nl": "Waar te wijzigen"
+        },
+        "value": "",
+        "hint": {
+          "en": "Read-only here. To point the central configuration at a different switch, open the app settings — Homey app, Settings, Apps, Adaptive Thermostat.",
+          "fr": "En lecture seule ici. Pour désigner un autre interrupteur, ouvrez les réglages de l'app — Homey, Réglages, Applications, Adaptive Thermostat.",
+          "nl": "Alleen-lezen. Wijzig via de app-instellingen — Homey, Instellingen, Apps, Adaptive Thermostat."
+        }
+      },
+      {
+        "id": "linked_boiler",
+        "type": "label",
+        "label": {
+          "en": "Boiler switch",
+          "fr": "Interrupteur de chaudière",
+          "nl": "Ketelschakelaar"
+        },
+        "value": ""
+      }
+    ]
+  },
+  {
+    "type": "group",
+    "label": {
       "en": "Boiler",
       "fr": "Chaudière",
       "nl": "Ketel"

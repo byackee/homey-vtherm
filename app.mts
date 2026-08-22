@@ -46,6 +46,15 @@ const BROKER_KEYS = new Set<string>(Object.values(BROKER_SETTINGS));
 
 export default class VThermApp extends Homey.App {
 
+  /**
+   * Tampon circulaire de traces.
+   *
+   * Une app installée par CLI n'a pas de log lisible : quand une vue de pairing s'affiche vide,
+   * il n'y a rien à consulter. Ce tampon, servi par `GET /diagnostics`, est le seul moyen de
+   * savoir après coup ce que l'app a réellement fait.
+   */
+  private readonly traces: string[] = [];
+
   private hubImpl: HomeyApiHub | null = null;
   private schedulerImpl: Scheduler | null = null;
 
@@ -93,6 +102,7 @@ export default class VThermApp extends Homey.App {
     scheduler.register(this.cycle);
 
     hub.on('connected', () => {
+      this.trace('hub: connecté à l\'API Homey');
       // Un ré-abonnement vient d'avoir lieu : un device Zigbee2MQTT ré-annoncé peut revenir avec
       // un jeu de capabilities différent, donc la détection du mode d'émetteur se rejoue.
       for (const participant of this.vtherms.values()) {
@@ -104,6 +114,9 @@ export default class VThermApp extends Homey.App {
     // Le hub monte en tâche de fond : les drivers s'initialisent après cet `onInit` et doivent
     // pouvoir s'enregistrer même si l'API Homey n'a pas encore répondu.
     hub.start().catch((err: unknown) => {
+      // Sans le hub, aucune source ne peut être lue NI listée : les vues de pairing seraient vides
+      // sans autre explication. C'est la première chose à regarder dans `GET /diagnostics`.
+      this.trace(`hub: ÉCHEC de démarrage — ${err instanceof Error ? err.message : String(err)}`);
       this.error('Connexion à l\'API Homey impossible :', err);
     });
 
@@ -247,6 +260,31 @@ export default class VThermApp extends Homey.App {
   }
 
   // --- Arrêt -----------------------------------------------------------------
+
+  /** Ajoute une ligne au tampon de diagnostic, et au log au cas où quelqu'un puisse le lire. */
+  trace(message: string): void {
+    const line = `${new Date().toISOString()} ${message}`;
+    this.traces.push(line);
+    if (this.traces.length > 300) this.traces.splice(0, this.traces.length - 300);
+    this.log(message);
+  }
+
+  /** Servi par `GET /diagnostics`. Ne contient rien de secret : ni mot de passe, ni jeton. */
+  getDiagnostics(): {
+    hubConnected: boolean;
+    brokerAvailable: boolean;
+    vtherms: string[];
+    hasCentral: boolean;
+    traces: string[];
+  } {
+    return {
+      hubConnected: this.hubImpl?.connected === true,
+      brokerAvailable: this.isBrokerAvailable(),
+      vtherms: [...this.vtherms.keys()],
+      hasCentral: this.central !== null,
+      traces: [...this.traces],
+    };
+  }
 
   /** Vrai seulement si la dorsale est réellement connectée ET a vu la liste des appareils Z2M. */
   isBrokerAvailable(): boolean {

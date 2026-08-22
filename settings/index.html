@@ -17,6 +17,24 @@
     .message.error { color: #b91c1c; }
     .message.ok { color: #1a7f37; }
     .message.warn { color: #b45309; }
+
+    .section-title { font-size: 17px; font-weight: 700; margin: 26px 0 4px; }
+    .section-title:first-of-type { margin-top: 0; }
+
+    /* Un thermostat et ses six sources. Le cadre sert à ne pas confondre deux thermostats. */
+    .tstat { border: 1px solid #dfe4e8; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+    .tstat-name { font-size: 15px; font-weight: 700; margin: 0 0 10px; }
+    .src { margin-bottom: 12px; }
+    .src:last-child { margin-bottom: 0; }
+    .src-label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px; }
+    .src-required { font-size: 10px; color: #a12727; text-transform: uppercase; letter-spacing: .04em;
+                    font-weight: 700; margin-left: 6px; }
+    .src-select { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 14px;
+                  color: #1f2933; background: #fff; border: 1px solid #c3cbd2; border-radius: 8px; }
+    .src-select:disabled { background: #f3f4f6; color: #7b8794; }
+    /* Un identifiant orphelin doit sauter aux yeux : c'est la panne que cette page existe pour corriger. */
+    .src.is-missing .src-select { border-color: #d1242f; background: #fff5f5; }
+    .hint.danger { color: #b91c1c; }
   </style>
 </head>
 <body>
@@ -25,6 +43,18 @@
     <p class="homey-subtitle" data-i18n="settings.subtitle"></p>
   </header>
 
+  <!-- Les sources d'abord : c'est ce que l'utilisateur ne trouvait pas ailleurs. La réparation de
+       Homey continue d'exister et fait exactement la même chose ; elle est simplement introuvable. -->
+  <h2 class="section-title" data-i18n="settings.sources.title"></h2>
+  <p class="lead" data-i18n="settings.sources.lead"></p>
+  <div id="thermostats"></div>
+  <p class="message" id="sourcesMessage"></p>
+  <div class="actions">
+    <button class="homey-button-secondary-full" id="reloadSources" data-i18n="settings.sources.refresh"></button>
+  </div>
+
+  <h2 class="section-title" data-i18n="settings.backbone_title"></h2>
+  <p class="lead" data-i18n="settings.backbone_subtitle"></p>
   <p class="lead" data-i18n="settings.lead"></p>
   <ul class="lead-list">
     <li data-i18n="settings.lead_valve"></li>
@@ -89,6 +119,17 @@
   <p class="message" id="message"></p>
 
   <script type="text/javascript">
+    /**
+     * Une erreur JavaScript non rattrapée laissait cette page à moitié vide, sans un mot. Elle
+     * s'écrit désormais dedans : une page de réglages muette est indébogable à distance.
+     */
+    window.addEventListener('error', function (event) {
+      const box = document.getElementById('sourcesMessage');
+      if (!box) return;
+      box.className = 'message error';
+      box.textContent = 'JavaScript : ' + ((event && event.message) || 'erreur inconnue');
+    });
+
     function onHomeyReady(Homey) {
       const $ = id => document.getElementById(id);
       const DEFAULT_PORT = 1883;
@@ -99,6 +140,214 @@
        * quand un mot de passe est enregistré. Laisser vide conserve celui qui est stocké.
        */
       let hasPassword = false;
+
+      /** `Homey.api` est à callback. Tout le reste de cette page raisonne en promesses. */
+      function api(method, path, body) {
+        return new Promise((resolve, reject) => {
+          Homey.api(method, path, body, (err, result) => {
+            if (err) reject(err instanceof Error ? err : new Error((err && err.message) || String(err)));
+            else resolve(result);
+          });
+        });
+      }
+
+      // --- Sources des thermostats ------------------------------------------
+
+      /**
+       * Les six sources, dans l'ordre de la page de réparation.
+       *
+       * Les libellés sont ceux du pairing : deux écrans qui nomment différemment la même chose se
+       * lisent comme deux fonctions différentes. Capteur de pièce et émetteur n'ont pas d'option
+       * « Aucun » — sans eux il n'y a rien à réguler, et l'API refuserait de toute façon.
+       */
+      const SOURCES = [
+        { key: 'room', label: 'pair.edit.room', required: true },
+        { key: 'emitter', label: 'pair.edit.emitter', required: true },
+        { key: 'outdoor', label: 'pair.optional.outdoor' },
+        { key: 'window', label: 'pair.optional.window' },
+        { key: 'motion', label: 'pair.optional.motion' },
+        { key: 'presence', label: 'pair.optional.presence' },
+      ];
+
+      function setSourcesMessage(text, kind) {
+        $('sourcesMessage').textContent = text || '';
+        $('sourcesMessage').className = 'message' + (kind ? ' ' + kind : '');
+      }
+
+      /** Nom de l'appareil tel qu'il doit apparaître dans la liste : « Sonde » ou « Sonde — Salon ». */
+      function deviceLabel(device) {
+        if (!device || !device.name) return '';
+        return device.zoneName ? device.name + ' — ' + device.zoneName : device.name;
+      }
+
+      function paintMissing(row, hint, view) {
+        const missing = view && view.missing === true;
+        row.classList.toggle('is-missing', missing);
+        hint.className = 'hint danger';
+        hint.textContent = missing
+          ? Homey.__('settings.sources.missing', { id: view.deviceId })
+          : '';
+        hint.style.display = missing ? '' : 'none';
+      }
+
+      /**
+       * Une source : son libellé, ce qui est lié aujourd'hui, et de quoi en changer.
+       *
+       * Aucun bouton « enregistrer » : le changement part au choix, comme dans la page de
+       * réparation. `candidates` vaut `null` quand la liste n'a pas pu être lue — le menu est
+       * alors désactivé plutôt que vide, pour ne pas laisser croire qu'aucun appareil n'existe.
+       */
+      function buildSource(thermostat, spec, view, candidates) {
+        const row = document.createElement('div');
+        row.className = 'src';
+
+        const label = document.createElement('label');
+        label.className = 'src-label';
+        label.textContent = Homey.__(spec.label);
+        if (spec.required) {
+          const badge = document.createElement('span');
+          badge.className = 'src-required';
+          badge.textContent = Homey.__('pair.edit.required');
+          label.appendChild(badge);
+        }
+        row.appendChild(label);
+
+        const select = document.createElement('select');
+        select.className = 'src-select';
+
+        const options = [];
+        if (!spec.required) options.push({ id: '', text: Homey.__('pair.optional.none') });
+
+        const list = Array.isArray(candidates) ? candidates : [];
+        const known = view.deviceId !== null && list.some(d => d.id === view.deviceId);
+        // Un identifiant orphelin n'est dans aucune liste. Sans son option, le menu afficherait
+        // un autre appareil et mentirait sur ce qui est réellement lié.
+        if (view.deviceId !== null && !known) {
+          options.push({
+            id: view.deviceId,
+            text: view.deviceName
+              ? deviceLabel(view)
+              : Homey.__('settings.sources.orphan_option', { id: view.deviceId }),
+          });
+        }
+        list.forEach(d => options.push({ id: d.id, text: deviceLabel(d) }));
+
+        options.forEach(option => {
+          const node = document.createElement('option');
+          node.value = option.id;
+          node.textContent = option.text;
+          select.appendChild(node);
+        });
+
+        select.value = view.deviceId === null ? '' : view.deviceId;
+        select.disabled = candidates === null;
+        row.appendChild(select);
+
+        const hint = document.createElement('p');
+        row.appendChild(hint);
+        paintMissing(row, hint, view);
+
+        if (candidates === null) {
+          const warning = document.createElement('p');
+          warning.className = 'hint';
+          warning.textContent = Homey.__('settings.sources.unavailable');
+          row.appendChild(warning);
+        }
+
+        let previous = select.value;
+        select.addEventListener('change', () => {
+          const chosen = select.value === '' ? null : select.value;
+          select.disabled = true;
+          setSourcesMessage(Homey.__('settings.sources.saving'));
+
+          api('PUT', '/thermostats/source', {
+            deviceId: thermostat.id,
+            source: spec.key,
+            sourceDeviceId: chosen,
+          }).then(updated => {
+            select.disabled = false;
+            previous = select.value;
+            paintMissing(row, hint, updated);
+            setSourcesMessage(Homey.__('pair.updated'), 'ok');
+          }).catch(err => {
+            select.disabled = false;
+            // Un refus doit se voir : le menu revient à ce qui est réellement lié.
+            select.value = previous;
+            setSourcesMessage(err.message || String(err), 'error');
+          });
+        });
+
+        return row;
+      }
+
+      function buildThermostat(thermostat, candidates) {
+        const box = document.createElement('div');
+        box.className = 'tstat';
+
+        const name = document.createElement('p');
+        name.className = 'tstat-name';
+        name.textContent = thermostat.name;
+        box.appendChild(name);
+
+        const views = Array.isArray(thermostat.sources) ? thermostat.sources : [];
+        SOURCES.forEach(spec => {
+          const view = views.filter(v => v.source === spec.key)[0]
+            || { source: spec.key, deviceId: null, deviceName: null, zoneName: null, missing: false };
+          box.appendChild(buildSource(thermostat, spec, view, candidates[spec.key]));
+        });
+
+        return box;
+      }
+
+      function renderThermostats(data, candidates) {
+        const root = $('thermostats');
+        root.textContent = '';
+
+        const list = (data && Array.isArray(data.thermostats)) ? data.thermostats : [];
+        if (list.length === 0) {
+          // Un cadre vide n'apprend rien : on dit quoi faire pour en avoir un.
+          const empty = document.createElement('p');
+          empty.className = 'hint';
+          empty.textContent = Homey.__('settings.sources.empty');
+          root.appendChild(empty);
+          setSourcesMessage('');
+          return;
+        }
+
+        list.forEach(thermostat => root.appendChild(buildThermostat(thermostat, candidates)));
+
+        // Sans le hub, aucun nom n'a pu être résolu : le dire vaut mieux que d'afficher six
+        // identifiants bruts sans explication.
+        if (data.hubConnected === true) setSourcesMessage('');
+        else setSourcesMessage(Homey.__('settings.sources.hub_offline'), 'warn');
+      }
+
+      function loadSources() {
+        setSourcesMessage(Homey.__('settings.sources.loading'));
+        $('reloadSources').disabled = true;
+
+        // Les candidats ne dépendent que du TYPE de source, pas du thermostat : six appels pour
+        // toute la page, quel que soit le nombre de thermostats. Le quota de l'API Homey n'est
+        // pas une vue de l'esprit.
+        const lists = SOURCES.map(spec =>
+          api('GET', '/candidates?source=' + encodeURIComponent(spec.key))
+            .then(devices => Array.isArray(devices) ? devices : [])
+            .catch(() => null));
+
+        Promise.all([api('GET', '/thermostats'), Promise.all(lists)]).then(results => {
+          $('reloadSources').disabled = false;
+          const candidates = {};
+          SOURCES.forEach((spec, index) => { candidates[spec.key] = results[1][index]; });
+          renderThermostats(results[0], candidates);
+        }).catch(err => {
+          $('reloadSources').disabled = false;
+          $('thermostats').textContent = '';
+          setSourcesMessage(
+            Homey.__('settings.sources.failed', { detail: err.message || String(err) }), 'error');
+        });
+      }
+
+      // --- Dorsale Zigbee2MQTT ----------------------------------------------
 
       function setMessage(text, kind) {
         $('message').textContent = text;
@@ -221,6 +470,16 @@
           setMessage(text, kind);
         });
       });
+
+      $('reloadSources').addEventListener('click', loadSources);
+
+      // Le chargement des thermostats ne doit jamais empêcher `Homey.ready()` : une page qui ne
+      // se déclare pas prête reste blanche, réglages du broker compris.
+      try {
+        loadSources();
+      } catch (err) {
+        setSourcesMessage((err && err.message) || String(err), 'error');
+      }
 
       Homey.ready();
     }

@@ -2,6 +2,91 @@
   {
     "type": "group",
     "label": {
+      "en": "Linked devices",
+      "fr": "Appareils liés",
+      "nl": "Gekoppelde apparaten"
+    },
+    "children": [
+      {
+        "id": "linked_hint",
+        "type": "label",
+        "label": {
+          "en": "Where to change these",
+          "fr": "Où les changer",
+          "nl": "Waar te wijzigen"
+        },
+        "value": "",
+        "hint": {
+          "en": "These are read-only here. To point this thermostat at different devices, open the app settings — Homey app, Settings, Apps, Adaptive Thermostat — and use the Thermostats section. Changes take effect immediately.",
+          "fr": "Ils sont en lecture seule ici. Pour désigner d'autres appareils, ouvrez les réglages de l'app — Homey, Réglages, Applications, Adaptive Thermostat — et utilisez la section Thermostats. Le changement prend effet immédiatement.",
+          "nl": "Deze zijn hier alleen-lezen. Wijzig ze via de app-instellingen — Homey, Instellingen, Apps, Adaptive Thermostat — in de sectie Thermostaten."
+        }
+      },
+      {
+        "id": "linked_room",
+        "type": "label",
+        "label": {
+          "en": "Room temperature sensor",
+          "fr": "Capteur de température de la pièce",
+          "nl": "Kamertemperatuursensor"
+        },
+        "value": ""
+      },
+      {
+        "id": "linked_emitter",
+        "type": "label",
+        "label": {
+          "en": "Heater",
+          "fr": "Émetteur de chaleur",
+          "nl": "Verwarming"
+        },
+        "value": ""
+      },
+      {
+        "id": "linked_outdoor",
+        "type": "label",
+        "label": {
+          "en": "Outdoor temperature",
+          "fr": "Température extérieure",
+          "nl": "Buitentemperatuur"
+        },
+        "value": ""
+      },
+      {
+        "id": "linked_window",
+        "type": "label",
+        "label": {
+          "en": "Window or door contact",
+          "fr": "Contact d'ouverture",
+          "nl": "Raamcontact"
+        },
+        "value": ""
+      },
+      {
+        "id": "linked_motion",
+        "type": "label",
+        "label": {
+          "en": "Motion sensor",
+          "fr": "Détecteur de mouvement",
+          "nl": "Bewegingssensor"
+        },
+        "value": ""
+      },
+      {
+        "id": "linked_presence",
+        "type": "label",
+        "label": {
+          "en": "Presence sensor",
+          "fr": "Capteur de présence",
+          "nl": "Aanwezigheidssensor"
+        },
+        "value": ""
+      }
+    ]
+  },
+  {
+    "type": "group",
+    "label": {
       "en": "Preset temperatures",
       "fr": "Températures des presets",
       "nl": "Preset-temperaturen"

@@ -7,6 +7,7 @@
  * un déclencheur qui naîtrait dans ce fichier serait une décision métier qu'aucun test ne couvre.
  */
 
+import { resolveCapabilityId } from '../../lib/capabilityMatch.mjs';
 import Homey from 'homey';
 
 import {
@@ -42,14 +43,24 @@ export const SOURCE_STORE_KEYS = {
 
 export type SourceKey = keyof typeof SOURCE_STORE_KEYS;
 
-/** Capability lue sur chaque source. Le pairing propose les mêmes, il n'y a qu'une vérité. */
-const SOURCE_CAPABILITIES: Record<SourceKey, string> = {
-  room: 'measure_temperature',
-  emitter: 'target_temperature',
-  outdoor: 'measure_temperature',
-  window: 'alarm_contact',
-  motion: 'alarm_motion',
-  presence: 'alarm_motion',
+/**
+ * Capabilities acceptées pour chaque source, par ordre de préférence.
+ *
+ * Plusieurs par source, et ce n'est pas de la générosité : les détecteurs de présence de
+ * l'installation de référence n'exposent PAS `alarm_motion`. Les mmWave publient
+ * `alarm_presence`, d'autres `alarm_occupancy`. Une seule capability codée en dur rendait ces
+ * appareils introuvables au pairing — ils n'étaient même pas candidats.
+ *
+ * Le pairing propose exactement cette liste, et la liaison résout ensuite celle que l'appareil
+ * choisi porte réellement : il n'y a qu'une vérité, ici.
+ */
+export const SOURCE_CAPABILITIES: Record<SourceKey, readonly string[]> = {
+  room: ['measure_temperature'],
+  emitter: ['target_temperature'],
+  outdoor: ['measure_temperature'],
+  window: ['alarm_contact'],
+  motion: ['alarm_motion', 'alarm_presence', 'alarm_occupancy'],
+  presence: ['alarm_presence', 'alarm_occupancy', 'alarm_motion'],
 };
 
 /** Sans elles, il n'y a pas de thermostat : une mesure de pièce et quelque chose à piloter. */
@@ -140,7 +151,21 @@ export default class VThermDevice extends Homey.Device {
 
     app.registerVTherm(this.participant);
     this.registered = true;
+    // `onoff` est une entrée du noyau, pas une de ses sorties : rien ne la publie donc, et elle
+    // resterait `null` après un pairing. Le réducteur traite `null` comme allumé — c'est le bon
+    // défaut — mais la tuile afficherait un interrupteur dans un état indéfini, en désaccord avec
+    // ce que l'app fait réellement. On aligne l'affichage sur le comportement, une seule fois.
+    if (typeof this.getCapabilityValue('onoff') !== 'boolean') {
+      await this.setCapabilityValue('onoff', true).catch((err: unknown) => {
+        this.error('Initialisation de onoff :', err);
+      });
+    }
+
     await this.setAvailable();
+
+    // Les noms des appareils liés, pour les réglages. En tâche de fond : ils passent par le hub,
+    // et l'initialisation ne doit pas attendre le réseau pour rendre l'appareil disponible.
+    void this.refreshLinkedLabels();
   }
 
   // --- Contrat avec le participant -------------------------------------------
@@ -326,12 +351,58 @@ export default class VThermDevice extends Homey.Device {
    * session de réparation peut se fermer sans dernière vue, et un choix gardé en mémoire serait
    * perdu.
    */
+  /**
+   * Recopie le NOM des appareils liés dans les réglages, en lecture seule.
+   *
+   * Les réglages ne savent pas afficher un sélecteur d'appareil : leurs listes déroulantes sont
+   * figées dans le manifeste. On y montre donc ce qui est lié, et on dit où le changer — voir
+   * un identifiant technique n'aiderait personne, et ne rien voir du tout encore moins.
+   *
+   * Écrit à l'initialisation et après chaque re-liaison, jamais en boucle : c'est de la mémoire
+   * flash.
+   */
+  private async refreshLinkedLabels(): Promise<void> {
+    const entries = await Promise.all(
+      (Object.keys(SOURCE_STORE_KEYS) as SourceKey[]).map(async (key) => {
+        const deviceId = this.sourceId(key);
+        if (deviceId === null) {
+          return [`linked_${key}`, this.homey.__('settings.linked.none')] as const;
+        }
+        let name: string | null = null;
+        try {
+          name = (await this.app.hub.getDeviceSummary(deviceId))?.name ?? null;
+        } catch {
+          name = null;
+        }
+        // Un identifiant orphelin est le cas le plus fréquent : un appareil Zigbee ré-appairé
+        // change d'identifiant, et sans ce message rien n'expliquerait le silence du thermostat.
+        return [`linked_${key}`, name ?? this.homey.__('settings.linked.missing')] as const;
+      }),
+    );
+
+    try {
+      await this.setSettings(Object.fromEntries(entries));
+    } catch (err) {
+      this.error('Mise à jour des appareils liés :', err);
+    }
+  }
+
+  /** Les identifiants actuellement liés, pour que la page d'édition montre d'où l'on part. */
+  currentSources(): Record<SourceKey, string | null> {
+    const out = {} as Record<SourceKey, string | null>;
+    for (const key of Object.keys(SOURCE_STORE_KEYS) as SourceKey[]) {
+      out[key] = this.sourceId(key);
+    }
+    return out;
+  }
+
   async rebindSource(key: SourceKey, deviceId: string | null): Promise<void> {
     if (deviceId === null && REQUIRED_SOURCES.includes(key)) {
       throw new Error(this.homey.__('pair.error.incomplete'));
     }
 
     await this.setStoreValue(SOURCE_STORE_KEYS[key], deviceId);
+    void this.refreshLinkedLabels();
 
     if (key === 'emitter') {
       // L'adaptateur d'émetteur tient ses propres liaisons et n'est pas remplaçable à chaud :
@@ -407,11 +478,49 @@ export default class VThermDevice extends Homey.Device {
       return;
     }
 
+    // La capability à lire dépend de l'appareil : un détecteur mmWave publie `alarm_presence`
+    // là où un PIR publie `alarm_motion`, et une vanne range sa température dans
+    // `measure_temperature.local`. On résout, on ne suppose pas.
+    void this.resolveAndBind(key, slot, deviceId);
+  }
+
+  private async resolveAndBind(
+    key: Exclude<SourceKey, 'emitter'>,
+    slot: keyof VThermSourceBindings,
+    deviceId: string,
+  ): Promise<void> {
+    let capabilityId: string | null = null;
+    try {
+      const summary = await this.app.hub.getDeviceSummary(deviceId);
+      if (summary !== null) {
+        for (const accepted of SOURCE_CAPABILITIES[key]) {
+          capabilityId = resolveCapabilityId(summary.capabilities, accepted);
+          if (capabilityId !== null) break;
+        }
+      }
+    } catch {
+      // Appareil injoignable pour l'instant : on retombe sur la capability préférée, et le
+      // ré-abonnement du hub reprendra la main quand il répondra.
+    }
+
+    // Repli : la première capability acceptée. Mieux vaut une liaison qui attend l'appareil
+    // qu'une source silencieusement absente.
+    const resolved = capabilityId ?? SOURCE_CAPABILITIES[key][0];
+    if (resolved === undefined) return;
+
+    if (capabilityId === null) {
+      this.app.trace(
+        `[vtherm] ${this.deviceId()} : source « ${key} » — aucune capability attendue sur `
+        + `l'appareil ${deviceId}, liaison tentée sur ${resolved}`,
+      );
+    }
+
     this.sources[slot] = this.app.hub.bind(
       deviceId,
-      SOURCE_CAPABILITIES[key],
+      resolved,
       () => this.app.requestTick(`${this.deviceId()}:${key}`),
     );
+    this.app.requestTick(`${this.deviceId()}:${key}:bound`);
   }
 
   private sourceId(key: SourceKey): string | null {

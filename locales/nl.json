@@ -29,12 +29,43 @@
     "default_name": "Thermostaat",
     "central_name": "Centrale configuratie",
     "error": {
-      "incomplete": "Kies een kamersensor en een verwarming voordat u deze thermostaat toevoegt."
+      "incomplete": "Kies een kamersensor en een verwarming voordat u deze thermostaat toevoegt.",
+      "no_api": "Adaptive Thermostat kan uw apparaten nog niet lezen. De toegang tot de Homey API is niet actief — probeer over enkele seconden opnieuw of herstart de app.",
+      "repair_no_create": "Dit apparaat bestaat al — u repareert het, u maakt er geen nieuw aan."
+    },
+    "finish": "Thermostaat aanmaken",
+    "creating": "Aanmaken…",
+    "updated": "Wijziging opgeslagen.",
+    "done": "Klaar",
+    "edit": {
+      "title": "Bronnen van deze thermostaat",
+      "lead": "Wijzig er een of meer. Elke keuze werkt meteen — de thermostaat regelt vanaf de volgende cyclus op de nieuwe bron.",
+      "required": "Verplicht",
+      "room": "Kamertemperatuursensor",
+      "room_hint": "De thermometer die de temperatuur meet waar het u om gaat — die in de kamer.",
+      "emitter": "Verwarming",
+      "emitter_hint": "Wijzigen herlaadt het apparaat: de regeling begint opnieuw."
     }
   },
   "settings": {
-    "title": "Zigbee2MQTT-ruggengraat",
-    "subtitle": "Optioneel. Ontgrendelt directe kraanbesturing op SONOFF TRVZB en vergelijkbare kranen.",
+    "title": "Adaptive Thermostat",
+    "subtitle": "De bronnen van je thermostaten en de optionele Zigbee2MQTT-ruggengraat.",
+    "sources": {
+      "title": "Thermostaten",
+      "lead": "Elke thermostaat leest een kamersensor en stuurt een verwarming aan; de vier andere bronnen zijn optioneel. Wijzig ze hier — de keuze werkt meteen, en de thermostaat behoudt zijn naam, instellingen, geschiedenis en Flows.",
+      "loading": "Je apparaten worden gelezen…",
+      "refresh": "Opnieuw laden",
+      "empty": "Nog geen thermostaat. Voeg er een toe via Apparaten en kom terug — de bronnen staan dan hier.",
+      "hub_offline": "Je apparaten kunnen nu niet gelezen worden: de app heeft de Homey-API nog niet bereikt. Laad over enkele seconden opnieuw.",
+      "saving": "Opslaan…",
+      "missing": "Het gekoppelde apparaat bestaat niet meer ({{id}}). Deze bron is dood — kies een andere.",
+      "orphan_option": "Verdwenen apparaat ({{id}})",
+      "unavailable": "De lijst met apparaten voor deze bron kon niet geladen worden.",
+      "unknown_thermostat": "Deze thermostaat bestaat niet meer. Laad de pagina opnieuw.",
+      "failed": "Je thermostaten konden niet gelezen worden: {{detail}}"
+    },
+    "backbone_title": "Zigbee2MQTT-ruggengraat",
+    "backbone_subtitle": "Optioneel. Ontgrendelt directe kraanbesturing op SONOFF TRVZB en vergelijkbare kranen.",
     "lead": "De Zigbee2MQTT-app voor Homey toont niet alles wat een thermostaatkraan kan: vier van de eigenschappen die deze thermostaat nodig heeft bestaan simpelweg niet als Homey-capability. Geeft u toegang tot uw MQTT-broker, dan publiceert de app zelf naar Zigbee2MQTT en ontgrendelt twee dingen:",
     "lead_valve": "Directe kraanopening — het algoritme bepaalt hoe ver de kraan opengaat, in plaats van dat indirect via een doeltemperatuur te sturen.",
     "lead_sensor": "Injectie van de kamertemperatuur — de kraan regelt op uw kamersensor in plaats van op zijn eigen thermometer, die tegen de radiator zit en altijd te warm meet.",
@@ -66,7 +97,11 @@
     "test_refused": "De broker is niet bereikbaar ({{detail}}). Controleer het adres en de poort.",
     "test_timeout": "Geen antwoord van de broker binnen tien seconden. Controleer het adres en de poort, en of de broker vanaf Homey bereikbaar is.",
     "test_invalid_config": "Deze instellingen zijn onvolledig of ongeldig. Controleer het adres, de poort en het basistopic.",
-    "test_unknown": "De test gaf een onverwacht antwoord."
+    "test_unknown": "De test gaf een onverwacht antwoord.",
+    "linked": {
+      "none": "Niet ingesteld",
+      "missing": "Apparaat bestaat niet meer — stel het opnieuw in bij de app-instellingen"
+    }
   },
   "device": {
     "no_emitter": "Er is geen verwarming gekoppeld. Gebruik Repareren om er een te kiezen.",

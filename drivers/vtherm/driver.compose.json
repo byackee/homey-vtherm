@@ -14,10 +14,7 @@
     "vtherm_regulated_setpoint",
     "vtherm_power_percent",
     "vtherm_valve_open",
-    "vtherm_slope",
-    "alarm_contact",
-    "alarm_motion",
-    "vtherm_emitter_battery"
+    "vtherm_slope"
   ],
   "capabilitiesOptions": {
     "target_temperature": {
@@ -71,34 +68,13 @@
     {
       "id": "pick_optional",
       "navigation": {
-        "prev": "pick_emitter",
-        "next": "add_devices"
+        "prev": "pick_emitter"
       }
-    },
-    {
-      "id": "add_devices",
-      "template": "add_devices"
     }
   ],
   "repair": [
     {
-      "id": "pick_room_sensor",
-      "navigation": {
-        "next": "pick_emitter"
-      }
-    },
-    {
-      "id": "pick_emitter",
-      "navigation": {
-        "prev": "pick_room_sensor",
-        "next": "pick_optional"
-      }
-    },
-    {
-      "id": "pick_optional",
-      "navigation": {
-        "prev": "pick_emitter"
-      }
+      "id": "edit_sources"
     }
   ]
 }

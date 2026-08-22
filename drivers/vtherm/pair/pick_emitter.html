@@ -1,87 +1,206 @@
-<!-- Vue de pairing générée à la main : elle liste les appareils Homey d'une capability
-     donnée pour que l'utilisateur en désigne un comme source du thermostat. -->
-<script type="text/javascript" src="/homey.js" data-origin="pair"></script>
+<!-- Vue de pairing : désigne un appareil Homey comme source du thermostat. -->
 <style>
+    /* Portée limitée à cette vue : le document est partagé avec les autres vues du driver. */
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
            margin: 0; padding: 16px; color: #1f2933; }
     h2 { font-size: 17px; margin: 0 0 4px; }
     p.lead { font-size: 13px; color: #62707d; margin: 0 0 16px; line-height: 1.45; }
     ul { list-style: none; margin: 0; padding: 0; }
     li { border: 1px solid #dfe4e8; border-radius: 10px; padding: 11px 13px; margin-bottom: 8px;
-         cursor: pointer; display: flex; align-items: center; gap: 11px; transition: border-color .12s; }
-    li:hover { border-color: #b9c2ca; }
+         cursor: pointer; display: flex; align-items: center; gap: 11px; }
     li.selected { border-color: #E8590C; background: #fff6f0; }
     li .radio { width: 17px; height: 17px; border-radius: 50%; border: 2px solid #c3cbd2; flex: 0 0 auto; }
     li.selected .radio { border-color: #E8590C; border-width: 5px; }
-    li .body { min-width: 0; }
     li .name { font-size: 14px; font-weight: 600; }
     li .meta { font-size: 12px; color: #7b8794; margin-top: 2px; }
-    .skip { font-size: 13px; color: #62707d; text-align: center; margin-top: 14px; }
-    .skip a { color: #E8590C; text-decoration: none; cursor: pointer; }
-    .empty { border: 1px dashed #dfe4e8; border-radius: 10px; padding: 20px; text-align: center;
+    .state { border: 1px dashed #dfe4e8; border-radius: 10px; padding: 18px; text-align: center;
              color: #7b8794; font-size: 13px; line-height: 1.5; }
+    .state.error { border-color: #f0b6b6; background: #fff5f5; color: #a12727; text-align: left;
+                   white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace;
+                   font-size: 12px; }
+    section { margin-bottom: 22px; }
+    h3 { font-size: 14px; margin: 0 0 3px; }
+    p.hint { font-size: 12px; color: #7b8794; margin: 0 0 9px; line-height: 1.45; }
 </style>
 
 <h2 data-i18n="pair.emitter.title"></h2>
 <p class="lead" data-i18n="pair.emitter.lead"></p>
-<div id="list"></div>
-
+<div id="pick_emitter-state" class="state">…</div>
+<div id="pick_emitter-list"></div>
 
 <script type="text/javascript">
-    var SELECT_EVENT = 'select_emitter';
+(function () {
+    /** Les vues d'un même driver partagent le document : chaque identifiant porte le sien. */
+    var PREFIX = 'pick_emitter-';
 
-    var selected = null;
-
-    function render(devices, allowNone, noneLabel) {
-      var root = document.getElementById('list');
-      if (!devices.length) {
-        root.innerHTML = '';
-        var e = document.createElement('div');
-        e.className = 'empty';
-        e.textContent = Homey.__('pair.empty');
-        root.appendChild(e);
-        return;
+      // Configuration de la vue, en TÊTE de script : rien ne doit pouvoir la lire avant.
+      var VIEW = { source: 'emitter', selectEvent: 'select_emitter' };
+  
+      var H = null;
+      /** 'pair' ou 'repair'. Les mêmes vues servent aux deux, et elles ne doivent pas agir pareil. */
+      var MODE = 'pair';
+  
+      function report(message) {
+        try { if (H && H.emit) H.emit('viewLog', String(message)); } catch (e) { /* rien à faire */ }
       }
-      var ul = document.createElement('ul');
-      if (allowNone) devices = [{ id: null, name: noneLabel, zoneName: null }].concat(devices);
-      devices.forEach(function (d) {
+  
+      window.addEventListener('error', function (event) {
+        report('erreur JS : ' + (event && event.message));
+        showError('' + (event && event.message));
+      });
+  
+      function showError(message) {
+        var box = document.getElementById(PREFIX + 'state');
+        if (!box) return;
+        box.className = 'state error';
+        box.textContent = message;
+        box.style.display = '';
+      }
+  
+      function showText(message) {
+        var box = document.getElementById(PREFIX + 'state');
+        if (!box) return;
+        box.className = 'state';
+        box.textContent = message;
+        box.style.display = '';
+      }
+  
+      function hideState() {
+        var box = document.getElementById(PREFIX + 'state');
+        if (box) box.style.display = 'none';
+      }
+  
+      /** `Homey.emit` est tantôt à promesse, tantôt à callback selon le contexte. On accepte les deux. */
+      function emit(event, data) {
+        return new Promise(function (resolve, reject) {
+          var settled = false;
+          function ok(v) { if (!settled) { settled = true; resolve(v); } }
+          function ko(e) { if (!settled) { settled = true; reject(e instanceof Error ? e : new Error(String(e))); } }
+          try {
+            var returned = H.emit(event, data, function (err, result) {
+              if (err) ko(err); else ok(result);
+            });
+            if (returned && typeof returned.then === 'function') returned.then(ok, ko);
+          } catch (e) { ko(e); }
+        });
+      }
+  
+      /** Traduction : `data-i18n` n'est pas garanti d'être appliqué, on le fait nous-mêmes. */
+      function translate() {
+        if (!H || typeof H.__ !== 'function') return;
+        var nodes = document.querySelectorAll('[data-i18n]');
+        for (var i = 0; i < nodes.length; i++) {
+          var key = nodes[i].getAttribute('data-i18n');
+          var text = H.__(key);
+          if (text && text !== key) nodes[i].textContent = text;
+        }
+      }
+  
+      function label(key, fallback) {
+        if (H && typeof H.__ === 'function') {
+          var t = H.__(key);
+          if (t && t !== key) return t;
+        }
+        return fallback;
+      }
+  
+      /**
+       * Passe à l'étape suivante.
+       *
+       * Il n'existe AUCUN moyen de griser le bouton « Suivant » depuis une vue de pairing :
+       * `setNavigationNext` n'existe pas dans l'objet Homey — vérifié contre la documentation
+       * officielle, les mocks communautaires et les apps publiées. Les apps réelles avancent donc
+       * à la sélection, ce que fait cette vue. Le driver refuse de toute façon de créer un
+       * thermostat sans capteur ni émetteur, donc rien ne dépend d'un bouton qu'on ne contrôle pas.
+       */
+      function goNext() {
+        try {
+          if (H && typeof H.nextView === 'function') H.nextView();
+        } catch (e) { report('nextView : ' + e.message); }
+      }
+  
+      function buildItem(device, onPick) {
         var li = document.createElement('li');
-        li.onclick = function () { choose(d, li); };
+        li.onclick = function () { onPick(li); };
         var r = document.createElement('div'); r.className = 'radio';
-        var b = document.createElement('div'); b.className = 'body';
-        var n = document.createElement('div'); n.className = 'name'; n.textContent = d.name;
+        var b = document.createElement('div');
+        var n = document.createElement('div'); n.className = 'name'; n.textContent = device.name;
         b.appendChild(n);
-        if (d.zoneName) {
-          var m = document.createElement('div'); m.className = 'meta'; m.textContent = d.zoneName;
+        if (device.zoneName) {
+          var m = document.createElement('div'); m.className = 'meta'; m.textContent = device.zoneName;
           b.appendChild(m);
         }
         li.appendChild(r); li.appendChild(b);
-        ul.appendChild(li);
-      });
-      root.innerHTML = '';
-      root.appendChild(ul);
-    }
-
-    function choose(device, li) {
-      selected = device;
-      var items = document.querySelectorAll('#list li');
-      for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
-      li.classList.add('selected');
-      Homey.emit(SELECT_EVENT, device.id).catch(function (err) { Homey.alert(err.message || String(err)); });
-      Homey.setNavigationNext(true);
-    }
-
-    function onHomeyReady(Homey) {
-      window.Homey = Homey;
-      Homey.setNavigationNext(false);
-      Homey.emit('list_candidates', { capability: 'target_temperature' })
-        .then(function (devices) {
-          render(devices, false, '');
-          Homey.ready();
-        })
-        .catch(function (err) {
-          Homey.alert(err.message || String(err));
-          Homey.ready();
+        return li;
+      }
+  
+  
+      function boot(homey) {
+        if (H) return;                 // déjà démarré par l'autre convention
+        H = homey || window.Homey;
+        if (!H) { showError('Objet Homey introuvable dans cette vue.'); return; }
+        try {
+          translate();
+          // Le mode est demandé EN PARALLÈLE, jamais en amont : il ne sert qu'au moment du clic, et
+          // enchaîner le chargement de la liste derrière lui ferait dépendre l'affichage d'un
+          // aller-retour de plus. Une vue qui n'affiche rien tant qu'une question secondaire n'a pas
+          // répondu, c'est la panne qu'on vient de corriger.
+          emit('pair_mode', null)
+            .then(function (mode) { if (mode === 'repair') MODE = 'repair'; })
+            .catch(function () { /* un driver sans ce gestionnaire est en pairing */ });
+          start();
+        } catch (e) {
+          report('démarrage : ' + e.message);
+          showError('Démarrage de la vue impossible : ' + e.message);
+        }
+        try { if (typeof H.ready === 'function') H.ready(); } catch (e) { /* facultatif */ }
+      }
+  
+      function render(devices) {
+        report('reçu ' + ((devices && devices.length) || 0) + ' element(s) pour ' + VIEW.source
+          + ' : ' + ((devices || []).map(function (d) { return d && d.name; }).join(' | ') || 'aucun'));
+        var root = document.getElementById(PREFIX + 'list');
+        root.innerHTML = '';
+        if (!devices || !devices.length) {
+          showText(label('pair.empty', 'Aucun appareil adapté trouvé.'));
+          return;
+        }
+        hideState();
+        var ul = document.createElement('ul');
+        devices.forEach(function (d) {
+          ul.appendChild(buildItem(d, function (li) {
+            var items = root.querySelectorAll('li');
+            for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
+            li.classList.add('selected');
+            emit(VIEW.selectEvent, d.id)
+              .then(goNext)
+              .catch(function (err) { showError(err.message); });
+          }));
         });
-    }
+        root.appendChild(ul);
+      }
+  
+      function start() {
+        showText('…');
+        emit('list_candidates', { source: VIEW.source })
+          .then(render)
+          .catch(function (err) {
+            report('list_candidates : ' + err.message);
+            showError(err.message);
+          });
+      }
+  
+      var previousReady = window.onHomeyReady;
+  window.onHomeyReady = function (homey) {
+    if (typeof previousReady === 'function') previousReady(homey);
+    boot(homey);
+  };
+      if (typeof Homey !== 'undefined' && Homey) { boot(Homey); }
+      else {
+        document.addEventListener('DOMContentLoaded', function () {
+          if (typeof Homey !== 'undefined' && Homey) boot(Homey);
+        });
+      }
+  
+})();
 </script>

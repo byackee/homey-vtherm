@@ -12,10 +12,12 @@ import Homey from 'homey';
 import type { Preset } from '../../lib/types.mjs';
 import type { PresenceOverride } from '../../runtime/participants.mjs';
 import type VThermApp from '../../app.mjs';
-import VThermDevice, { SOURCE_STORE_KEYS, toPreset, type SourceKey } from './device.mjs';
+import VThermDevice, { SOURCE_STORE_KEYS, toPreset, type SourceKey, SOURCE_CAPABILITIES } from './device.mjs';
 
 /** `@types/homey` n'exporte pas `PairSession` : on le reprend de la signature qui l'emploie. */
 type PairSession = Parameters<Homey.Driver['onPair']>[0];
+
+const DRIVER_TAG = 'vtherm';
 
 /** Événement émis par la vue de pairing, et clé de source qu'il désigne. */
 const SELECT_EVENTS: ReadonlyArray<{ event: string; key: SourceKey }> = [
@@ -29,7 +31,8 @@ const SELECT_EVENTS: ReadonlyArray<{ event: string; key: SourceKey }> = [
 
 const PRESENCE_OVERRIDES: readonly PresenceOverride[] = ['auto', 'home', 'away'];
 
-interface CandidateSummary {
+/** Un appareil proposable pour une source. Exporté : `api.mts` le rend tel quel à la page de réglages. */
+export interface CandidateSummary {
   id: string;
   name: string;
   zoneName: string | null;
@@ -47,6 +50,17 @@ export default class VThermDriver extends Homey.Driver {
   override async onPair(session: PairSession): Promise<void> {
     const selection = new Map<SourceKey, string | null>();
 
+    // Une erreur JavaScript dans une vue de pairing est autrement invisible : la page reste
+    // blanche, et une app installée par CLI n'a pas de log lisible. La vue nous les renvoie ici.
+    session.setHandler('viewLog', async (message: unknown) => {
+      this.app.trace(`[${DRIVER_TAG}] vue : ${String(message)}`);
+      return true;
+    });
+
+    // Les mêmes vues servent au pairing et à la réparation. Sans cette réponse, la vue
+    // terminale proposerait « créer l'appareil » pendant une réparation, où l'appareil existe déjà.
+    session.setHandler('pair_mode', async () => 'pair');
+
     session.setHandler('list_candidates', async (data: unknown) => this.listCandidates(data));
 
     for (const { event, key } of SELECT_EVENTS) {
@@ -56,9 +70,10 @@ export default class VThermDriver extends Homey.Driver {
       });
     }
 
-    // `onPairListDevices` n'est plus appelé dès qu'un `onPair` existe : la vue `add_devices`
-    // interroge ce gestionnaire, et lui seul.
-    session.setHandler('list_devices', async () => [await this.buildDevice(selection)]);
+    // La vue crée l'appareil elle-même. Naviguer d'une vue custom vers le template
+    // `add_devices` ferme l'assistant sans rien créer sur Homey Pro 2023 ; les apps publiées
+    // appellent `Homey.createDevice()` puis `Homey.done()` depuis la vue, c'est ce qu'on fait.
+    session.setHandler('build_device', async () => this.buildDevice(selection));
   }
 
   /**
@@ -70,6 +85,25 @@ export default class VThermDriver extends Homey.Driver {
    */
   override async onRepair(session: PairSession, device: Homey.Device): Promise<void> {
     const target = device as VThermDevice;
+
+    // Une erreur JavaScript dans une vue de pairing est autrement invisible : la page reste
+    // blanche, et une app installée par CLI n'a pas de log lisible. La vue nous les renvoie ici.
+    session.setHandler('viewLog', async (message: unknown) => {
+      this.app.trace(`[${DRIVER_TAG}] vue : ${String(message)}`);
+      return true;
+    });
+
+    session.setHandler('pair_mode', async () => 'repair');
+
+    // La page d'édition montre d'où l'on part : sans ça, l'utilisateur choisit à l'aveugle et
+    // ne peut pas vérifier ce qui est lié aujourd'hui.
+    session.setHandler('current_sources', async () => target.currentSources());
+
+    // La vue ne devrait jamais l'appeler en réparation — mais si elle le fait, mieux vaut un
+    // message qu'un « no such event » opaque affiché à l'utilisateur.
+    session.setHandler('build_device', async () => {
+      throw new Error(this.homey.__('pair.error.repair_no_create'));
+    });
 
     session.setHandler('list_candidates', async (data: unknown) => this.listCandidates(data));
 
@@ -87,12 +121,42 @@ export default class VThermDriver extends Homey.Driver {
     return typeof manifest?.id === 'string' ? manifest.id : '';
   }
 
-  private async listCandidates(data: unknown): Promise<CandidateSummary[]> {
-    const capability = isRecord(data) && typeof data.capability === 'string' ? data.capability : null;
-    if (capability === null) return [];
+  /**
+   * Publique, et pas seulement pour les vues de pairing : `GET /candidates` de `api.mts` passe par
+   * ici. C'est le seul endroit qui sache traduire une source en capabilities acceptées, et la page
+   * de réglages doit proposer exactement les mêmes appareils que le pairing — pas « presque ».
+   */
+  async listCandidates(data: unknown): Promise<CandidateSummary[]> {
+    // La vue demande une SOURCE, pas une capability : la correspondance vit dans
+    // `SOURCE_CAPABILITIES`, à côté du code qui lie réellement l'appareil. Recopier la liste
+    // dans les vues créerait une seconde vérité, et c'est déjà ce qui a rendu les détecteurs de
+    // présence introuvables — ils publient `alarm_presence`, pas `alarm_motion`.
+    const source = isRecord(data) && typeof data.source === 'string' ? data.source : null;
+    const wanted = source !== null && source in SOURCE_CAPABILITIES
+      ? SOURCE_CAPABILITIES[source as SourceKey]
+      : null;
+    if (wanted === null) {
+      this.app.trace(`[${DRIVER_TAG}] list_candidates SANS source connue : ${JSON.stringify(data)}`);
+      return [];
+    }
+    const capability = wanted.join('/');
+    if (!this.app.hub.connected) {
+      // Cause n°1 d'une liste vide, et la seule qui ne vienne pas de la vue : sans le hub, l'app
+      // ne voit aucun appareil de l'utilisateur. Mieux vaut le dire que rendre un tableau vide.
+      this.app.trace(`[${DRIVER_TAG}] list_candidates(${capability}) REFUSÉ : hub non connecté`);
+      throw new Error(this.homey.__('pair.error.no_api'));
+    }
 
-    const summaries = await this.app.hub.listDevicesByCapability(capability);
-    return summaries
+    // Union des capabilities acceptées, dédupliquée : un appareil qui en porte deux ne doit
+    // pas apparaître deux fois dans la liste.
+    const byId = new Map<string, Awaited<ReturnType<typeof this.app.hub.listDevicesByCapability>>[number]>();
+    for (const accepted of wanted) {
+      for (const summary of await this.app.hub.listDevicesByCapability(accepted)) {
+        if (!byId.has(summary.id)) byId.set(summary.id, summary);
+      }
+    }
+    const summaries = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const candidates = summaries
       // Ne jamais se proposer soi-même. Un thermostat de cette app porte `target_temperature` et
       // apparaîtrait donc dans la liste des émetteurs ; le désigner créerait une boucle où chacun
       // écrit la consigne que l'autre relit, et la vanne dériverait jusqu'à sa butée.
@@ -102,12 +166,36 @@ export default class VThermDriver extends Homey.Driver {
         name: summary.name,
         zoneName: summary.zoneName,
       }));
+
+    this.app.trace(
+      `[${DRIVER_TAG}] list_candidates(${capability}) : ${summaries.length} trouvé(s), `
+      + `${candidates.length} transmis — ${candidates.map((c) => c.name).join(' | ') || 'aucun'}`,
+    );
+    return candidates;
   }
+
+  /**
+   * Capabilities toujours présentes, quelles que soient les sources choisies.
+   *
+   * Le manifeste ne déclare que celles-ci. Les autres dépendent de ce que l'utilisateur a
+   * désigné au pairing et sont ajoutées ici, appareil par appareil : une tuile « Fenêtre »
+   * perpétuellement fausse sur un thermostat sans capteur d'ouverture est une promesse que
+   * l'app ne tient pas.
+   *
+   * Elles sont fixées à la CRÉATION et jamais modifiées ensuite : `addCapability` et
+   * `removeCapability` détruisent l'historique Insights de l'appareil.
+   */
+  private static readonly BASE_CAPABILITIES = [
+    'onoff', 'target_temperature', 'measure_temperature',
+    'vtherm_preset', 'vtherm_state',
+    'vtherm_regulated_setpoint', 'vtherm_power_percent', 'vtherm_valve_open', 'vtherm_slope',
+  ] as const;
 
   private async buildDevice(selection: ReadonlyMap<SourceKey, string | null>): Promise<{
     name: string;
     data: { id: string };
     store: Record<string, string | null>;
+    capabilities: string[];
   }> {
     const roomId = selection.get('room') ?? null;
     const emitterId = selection.get('emitter') ?? null;
@@ -120,12 +208,24 @@ export default class VThermDriver extends Homey.Driver {
       store[SOURCE_STORE_KEYS[key]] = selection.get(key) ?? null;
     }
 
+    const capabilities: string[] = [...VThermDriver.BASE_CAPABILITIES];
+    if (selection.get('window')) capabilities.push('alarm_contact');
+    if (selection.get('motion') || selection.get('presence')) capabilities.push('alarm_motion');
+
+    // La pile n'est affichée que si l'émetteur en rapporte une : un radiateur sur secteur n'en
+    // a pas, et une tuile de pile vide sur un appareil branché n'apprend rien à personne.
+    const emitter = await this.app.hub.getDeviceSummary(emitterId);
+    if (emitter?.capabilities.some((id) => id === 'measure_battery' || id.startsWith('measure_battery.'))) {
+      capabilities.push('vtherm_emitter_battery');
+    }
+
     return {
       name: await this.proposeName(roomId),
       // Tiré une fois, immuable : `data` est l'identité du device pour Homey et le `tickId` du
       // participant. Le dériver d'une source le rendrait mortel dès la première réparation.
       data: { id: randomUUID() },
       store,
+      capabilities,
     };
   }
 

@@ -32,6 +32,22 @@
     "testBroker": {
       "method": "POST",
       "path": "/broker/test"
+    },
+    "getDiagnostics": {
+      "method": "GET",
+      "path": "/diagnostics"
+    },
+    "getThermostats": {
+      "method": "GET",
+      "path": "/thermostats"
+    },
+    "getSourceCandidates": {
+      "method": "GET",
+      "path": "/candidates"
+    },
+    "setThermostatSource": {
+      "method": "PUT",
+      "path": "/thermostats/source"
     }
   },
   "tags": {
@@ -850,14 +866,7 @@
       },
       "pair": [
         {
-          "id": "pick_boiler",
-          "navigation": {
-            "next": "add_devices"
-          }
-        },
-        {
-          "id": "add_devices",
-          "template": "add_devices"
+          "id": "pick_boiler"
         }
       ],
       "repair": [
@@ -867,6 +876,41 @@
       ],
       "id": "central",
       "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "Linked devices",
+            "fr": "Appareils liés",
+            "nl": "Gekoppelde apparaten"
+          },
+          "children": [
+            {
+              "id": "linked_hint",
+              "type": "label",
+              "label": {
+                "en": "Where to change this",
+                "fr": "Où le changer",
+                "nl": "Waar te wijzigen"
+              },
+              "value": "",
+              "hint": {
+                "en": "Read-only here. To point the central configuration at a different switch, open the app settings — Homey app, Settings, Apps, Adaptive Thermostat.",
+                "fr": "En lecture seule ici. Pour désigner un autre interrupteur, ouvrez les réglages de l'app — Homey, Réglages, Applications, Adaptive Thermostat.",
+                "nl": "Alleen-lezen. Wijzig via de app-instellingen — Homey, Instellingen, Apps, Adaptive Thermostat."
+              }
+            },
+            {
+              "id": "linked_boiler",
+              "type": "label",
+              "label": {
+                "en": "Boiler switch",
+                "fr": "Interrupteur de chaudière",
+                "nl": "Ketelschakelaar"
+              },
+              "value": ""
+            }
+          ]
+        },
         {
           "type": "group",
           "label": {
@@ -976,10 +1020,7 @@
         "vtherm_regulated_setpoint",
         "vtherm_power_percent",
         "vtherm_valve_open",
-        "vtherm_slope",
-        "alarm_contact",
-        "alarm_motion",
-        "vtherm_emitter_battery"
+        "vtherm_slope"
       ],
       "capabilitiesOptions": {
         "target_temperature": {
@@ -1033,38 +1074,102 @@
         {
           "id": "pick_optional",
           "navigation": {
-            "prev": "pick_emitter",
-            "next": "add_devices"
-          }
-        },
-        {
-          "id": "add_devices",
-          "template": "add_devices"
-        }
-      ],
-      "repair": [
-        {
-          "id": "pick_room_sensor",
-          "navigation": {
-            "next": "pick_emitter"
-          }
-        },
-        {
-          "id": "pick_emitter",
-          "navigation": {
-            "prev": "pick_room_sensor",
-            "next": "pick_optional"
-          }
-        },
-        {
-          "id": "pick_optional",
-          "navigation": {
             "prev": "pick_emitter"
           }
         }
       ],
+      "repair": [
+        {
+          "id": "edit_sources"
+        }
+      ],
       "id": "vtherm",
       "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "Linked devices",
+            "fr": "Appareils liés",
+            "nl": "Gekoppelde apparaten"
+          },
+          "children": [
+            {
+              "id": "linked_hint",
+              "type": "label",
+              "label": {
+                "en": "Where to change these",
+                "fr": "Où les changer",
+                "nl": "Waar te wijzigen"
+              },
+              "value": "",
+              "hint": {
+                "en": "These are read-only here. To point this thermostat at different devices, open the app settings — Homey app, Settings, Apps, Adaptive Thermostat — and use the Thermostats section. Changes take effect immediately.",
+                "fr": "Ils sont en lecture seule ici. Pour désigner d'autres appareils, ouvrez les réglages de l'app — Homey, Réglages, Applications, Adaptive Thermostat — et utilisez la section Thermostats. Le changement prend effet immédiatement.",
+                "nl": "Deze zijn hier alleen-lezen. Wijzig ze via de app-instellingen — Homey, Instellingen, Apps, Adaptive Thermostat — in de sectie Thermostaten."
+              }
+            },
+            {
+              "id": "linked_room",
+              "type": "label",
+              "label": {
+                "en": "Room temperature sensor",
+                "fr": "Capteur de température de la pièce",
+                "nl": "Kamertemperatuursensor"
+              },
+              "value": ""
+            },
+            {
+              "id": "linked_emitter",
+              "type": "label",
+              "label": {
+                "en": "Heater",
+                "fr": "Émetteur de chaleur",
+                "nl": "Verwarming"
+              },
+              "value": ""
+            },
+            {
+              "id": "linked_outdoor",
+              "type": "label",
+              "label": {
+                "en": "Outdoor temperature",
+                "fr": "Température extérieure",
+                "nl": "Buitentemperatuur"
+              },
+              "value": ""
+            },
+            {
+              "id": "linked_window",
+              "type": "label",
+              "label": {
+                "en": "Window or door contact",
+                "fr": "Contact d'ouverture",
+                "nl": "Raamcontact"
+              },
+              "value": ""
+            },
+            {
+              "id": "linked_motion",
+              "type": "label",
+              "label": {
+                "en": "Motion sensor",
+                "fr": "Détecteur de mouvement",
+                "nl": "Bewegingssensor"
+              },
+              "value": ""
+            },
+            {
+              "id": "linked_presence",
+              "type": "label",
+              "label": {
+                "en": "Presence sensor",
+                "fr": "Capteur de présence",
+                "nl": "Aanwezigheidssensor"
+              },
+              "value": ""
+            }
+          ]
+        },
         {
           "type": "group",
           "label": {
