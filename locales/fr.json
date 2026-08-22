@@ -100,7 +100,14 @@
     "test_unknown": "Le test a renvoyé une réponse inattendue.",
     "linked": {
       "none": "Non défini",
-      "missing": "Appareil introuvable — redésignez-le dans les réglages de l'app"
+      "missing": "Appareil introuvable — redésignez-le dans les réglages de l'app",
+      "room": "Capteur de pièce",
+      "emitter": "Émetteur",
+      "outdoor": "Extérieur",
+      "window": "Ouverture",
+      "motion": "Mouvement",
+      "presence": "Présence",
+      "boiler": "Interrupteur de chaudière"
     }
   },
   "device": {

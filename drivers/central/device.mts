@@ -82,7 +82,7 @@ export default class CentralDevice extends Homey.Device {
       value = name ?? this.homey.__('settings.linked.missing');
     }
     try {
-      await this.setSettings({ linked_boiler: value });
+      await this.setSettings({ linked_devices: `${this.homey.__('settings.linked.boiler')} : ${value}` });
     } catch (err) {
       this.error('Mise à jour de l\'appareil lié :', err);
     }

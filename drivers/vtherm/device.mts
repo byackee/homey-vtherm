@@ -352,21 +352,31 @@ export default class VThermDevice extends Homey.Device {
    * perdu.
    */
   /**
-   * Recopie le NOM des appareils liés dans les réglages, en lecture seule.
+   * Recopie la liste des appareils liés dans les réglages, en un seul champ.
    *
-   * Les réglages ne savent pas afficher un sélecteur d'appareil : leurs listes déroulantes sont
-   * figées dans le manifeste. On y montre donc ce qui est lié, et on dit où le changer — voir
-   * un identifiant technique n'aiderait personne, et ne rien voir du tout encore moins.
+   * Les réglages de Homey ne savent pas ouvrir une page personnalisée ni afficher un sélecteur
+   * d'appareil : leurs listes déroulantes sont figées dans le manifeste et il n'existe aucune
+   * action de maintenance. Le plus proche est un groupe unique, que Homey présente comme une
+   * entrée dépliable — d'où un seul champ qui porte les six sources, plutôt que six champs.
    *
    * Écrit à l'initialisation et après chaque re-liaison, jamais en boucle : c'est de la mémoire
    * flash.
    */
   private async refreshLinkedLabels(): Promise<void> {
-    const entries = await Promise.all(
+    const labels: Record<SourceKey, string> = {
+      room: this.homey.__('settings.linked.room'),
+      emitter: this.homey.__('settings.linked.emitter'),
+      outdoor: this.homey.__('settings.linked.outdoor'),
+      window: this.homey.__('settings.linked.window'),
+      motion: this.homey.__('settings.linked.motion'),
+      presence: this.homey.__('settings.linked.presence'),
+    };
+
+    const lines = await Promise.all(
       (Object.keys(SOURCE_STORE_KEYS) as SourceKey[]).map(async (key) => {
         const deviceId = this.sourceId(key);
         if (deviceId === null) {
-          return [`linked_${key}`, this.homey.__('settings.linked.none')] as const;
+          return `${labels[key]} : ${this.homey.__('settings.linked.none')}`;
         }
         let name: string | null = null;
         try {
@@ -376,12 +386,12 @@ export default class VThermDevice extends Homey.Device {
         }
         // Un identifiant orphelin est le cas le plus fréquent : un appareil Zigbee ré-appairé
         // change d'identifiant, et sans ce message rien n'expliquerait le silence du thermostat.
-        return [`linked_${key}`, name ?? this.homey.__('settings.linked.missing')] as const;
+        return `${labels[key]} : ${name ?? this.homey.__('settings.linked.missing')}`;
       }),
     );
 
     try {
-      await this.setSettings(Object.fromEntries(entries));
+      await this.setSettings({ linked_devices: lines.join('\n') });
     } catch (err) {
       this.error('Mise à jour des appareils liés :', err);
     }

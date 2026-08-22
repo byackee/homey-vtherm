@@ -100,7 +100,14 @@
     "test_unknown": "The test returned an unexpected answer.",
     "linked": {
       "none": "Not set",
-      "missing": "Device no longer exists — set it again in the app settings"
+      "missing": "Device no longer exists — set it again in the app settings",
+      "room": "Room sensor",
+      "emitter": "Heater",
+      "outdoor": "Outdoor",
+      "window": "Window",
+      "motion": "Motion",
+      "presence": "Presence",
+      "boiler": "Boiler switch"
     }
   },
   "device": {

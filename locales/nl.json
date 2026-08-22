@@ -100,7 +100,14 @@
     "test_unknown": "De test gaf een onverwacht antwoord.",
     "linked": {
       "none": "Niet ingesteld",
-      "missing": "Apparaat bestaat niet meer — stel het opnieuw in bij de app-instellingen"
+      "missing": "Apparaat bestaat niet meer — stel het opnieuw in bij de app-instellingen",
+      "room": "Kamersensor",
+      "emitter": "Verwarming",
+      "outdoor": "Buiten",
+      "window": "Raam",
+      "motion": "Beweging",
+      "presence": "Aanwezigheid",
+      "boiler": "Ketelschakelaar"
     }
   },
   "device": {
