@@ -115,9 +115,25 @@ export function stepBoiler(
   if (!commanded) {
     lastKeepAliveMs = null;
   } else if (command === null && params.keepAliveSec > 0) {
-    // Un keep-alive n'est pas une commutation : il ne touche pas lastChangeMs.
-    const baseline = lastKeepAliveMs ?? (lastChangeMs as number);
-    if (nowMs - baseline >= params.keepAliveSec * 1000) {
+    /*
+     * Un keep-alive n'est pas une commutation : il ne touche pas `lastChangeMs`.
+     *
+     * Le repli sur `nowMs` n'est pas décoratif. `lastChangeMs` est bel et bien `null | number`, et
+     * l'ancien `as number` mentait au compilateur : sur un état relu portant `commanded: true` et
+     * `lastChangeMs: null` — un horodatage écarté parce qu'il venait du futur suffit — la
+     * soustraction devenait `nowMs - 0`, qui dépasse toujours la période face à une horloge
+     * d'époque réelle. Un keep-alive partait donc au premier pas suivant ce redémarrage, quelle
+     * que soit la période réglée. Les essais ne le voyaient pas : leur horloge se compte en
+     * milliers de millisecondes, pas en milliers de milliards.
+     *
+     * Sans référence, on en POSE une au lieu d'en inventer une : la période part de maintenant et
+     * s'écoulera pour de bon. La reporter à plus tard ne marcherait pas — sans ancre stockée, le
+     * pas suivant repartirait lui aussi de zéro et le keep-alive ne partirait jamais.
+     */
+    const baseline = lastKeepAliveMs ?? lastChangeMs;
+    if (baseline === null) {
+      lastKeepAliveMs = nowMs;
+    } else if (nowMs - baseline >= params.keepAliveSec * 1000) {
       command = true;
       keepAlive = true;
       lastKeepAliveMs = nowMs;

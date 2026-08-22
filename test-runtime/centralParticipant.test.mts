@@ -355,3 +355,20 @@ test('l\'échéance annoncée réveille une correction différée', async () => 
 
   assert.equal(central.dueAtMs(), 61_000 + 30_000);
 });
+
+test('un relais désigné APRÈS coup est réaffirmé, pas oublié', async () => {
+  // L'appareil central existe sans relais tant que l'utilisateur n'en a pas choisi un. Le premier
+  // pas consomme alors la réaffirmation de démarrage dans le vide — rien à écrire — et le relais
+  // désigné ensuite n'était jamais remis en accord.
+  const { relay, central } = world();
+  central.setBoilerBinding(null);
+
+  await central.applyBoiler([INACTIVE], 0);   // la réaffirmation part dans le vide
+  await central.applyBoiler([INACTIVE], 10_000);
+
+  central.setBoilerBinding(relay);
+  await central.applyBoiler([INACTIVE], 20_000);
+
+  assert.equal(relay.writes.length, 1, 'le nouveau relais reçoit son ordre');
+  assert.equal(relayState(relay), false);
+});

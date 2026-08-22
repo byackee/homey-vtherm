@@ -673,6 +673,21 @@ export class CentralParticipant {
   setBoilerBinding(binding: SourceBinding | null): void {
     this.boiler?.destroy();
     this.boiler = binding;
+
+    /*
+     * Un relais fraîchement lié doit être RÉAFFIRMÉ, donc on redésarme le drapeau.
+     *
+     * La réaffirmation de démarrage est une fois-pour-toutes. Quand l'appareil central existe sans
+     * relais désigné — cas normal jusqu'à ce que l'utilisateur en choisisse un — le premier pas la
+     * consomme dans le vide : `applyBoiler` n'écrit rien faute de liaison, mais l'état marque
+     * l'affirmation comme faite. Le relais désigné plus tard n'était alors jamais remis en accord.
+     *
+     * La réaffirmation sur divergence rattrape ce cas dès que le relais est LISIBLE, mais elle ne
+     * peut rien quand il ne l'est pas. Redésarmer ici traite la cause plutôt que le symptôme.
+     */
+    if (binding !== null) {
+      this.boilerState = { ...this.boilerState, affirmed: false };
+    }
   }
 
   /** Délai d'activation en cours, ou prochain keep-alive. `Infinity` quand rien n'attend. */

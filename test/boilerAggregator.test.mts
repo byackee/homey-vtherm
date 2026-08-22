@@ -438,3 +438,59 @@ test('la correction vers l\'allumage attend elle aussi la coupure imposée', () 
   const tooSoon = stepBoiler(state, 1, PARAMS, 1_000 + DWELL_MS + 1_000, false);
   assert.equal(tooSoon.command, null);
 });
+
+// --- L'horloge réelle, que les essais masquaient ------------------------------
+
+test('keep-alive : un état relu sans instant de commutation ne déclenche pas tout de suite', () => {
+  // L'ancien `lastChangeMs as number` faisait `nowMs - 0`, ce qui dépasse toujours la période face
+  // à une horloge d'époque. Les essais ne le voyaient pas : leur horloge se compte en milliers de
+  // millisecondes, pas en milliers de milliards. Cette date-ci est réelle, et c'est le point.
+  const EPOCH = 1_770_000_000_000;
+  const params: BoilerParams = { ...PARAMS, keepAliveSec: 600 };
+  const restored: BoilerState = {
+    commanded: true, lastChangeMs: null, pendingSinceMs: null, lastKeepAliveMs: null,
+    affirmed: true, lastDivergenceFixMs: null, lastForcedOffMs: null,
+  };
+
+  const first = stepBoiler(restored, 1, params, EPOCH);
+  assert.equal(first.command, null, 'aucun keep-alive au premier pas');
+  assert.equal(first.keepAlive, false);
+
+  // La période part de maintenant, et s'écoule pour de bon.
+  const early = stepBoiler(first.nextState, 1, params, EPOCH + 599_000);
+  assert.equal(early.command, null);
+
+  const due = stepBoiler(first.nextState, 1, params, EPOCH + 600_000);
+  assert.equal(due.command, true);
+  assert.equal(due.keepAlive, true);
+});
+
+// --- Le réglage anti-cyclage, et pas seulement son plancher -------------------
+
+test('un minDwellSec supérieur au plancher est réellement honoré', () => {
+  // Toutes les autres fixtures règlent `minDwellSec` à 60, identique au plancher : remplacer le
+  // `Math.max` par le plancher seul laissait la suite entièrement verte, et le réglage de
+  // l'utilisateur n'était vérifié par rien.
+  const params: BoilerParams = { ...PARAMS, minDwellSec: 600 };
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, params, 0));
+  ({ nextState: state } = stepBoiler(state, 0, params, 1_000));
+
+  const pastFloor = stepBoiler(state, 1, params, 1_000 + 90_000);
+  assert.equal(pastFloor.command, null, 'le plancher de 60 s ne suffit pas : le réglage dit 600 s');
+  assert.equal(pastFloor.ignitionBlocked, true);
+
+  const allowed = stepBoiler(state, 1, params, 1_000 + 600_000);
+  assert.equal(allowed.command, true);
+});
+
+test('un minDwellSec sous le plancher ne désarme pas le garde-fou', () => {
+  // La contrepartie : une valeur venue d'un import ou d'une restauration ne descend pas sous 60 s.
+  const params: BoilerParams = { ...PARAMS, minDwellSec: 5 };
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, params, 0));
+  ({ nextState: state } = stepBoiler(state, 0, params, 1_000));
+
+  assert.equal(stepBoiler(state, 1, params, 7_000).command, null);
+  assert.equal(stepBoiler(state, 1, params, 1_000 + DWELL_MS).command, true);
+});
