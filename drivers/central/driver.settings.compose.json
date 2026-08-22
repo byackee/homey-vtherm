@@ -33,6 +33,21 @@
     },
     "children": [
       {
+        "id": "boiler_hint",
+        "type": "label",
+        "value": "",
+        "label": {
+          "en": "Starting a real boiler",
+          "fr": "Démarrer une vraie chaudière",
+          "nl": "Een echte ketel starten"
+        },
+        "hint": {
+          "en": "The app counts how many emitters are calling for heat across the home and switches the relay when enough of them are. Driving a real boiler carries a risk: one running against closed valves builds pressure. Check that yours has its own safety cut-out before letting anything switch it.",
+          "fr": "L'app compte combien d'émetteurs demandent de la chaleur dans tout le logement et commute le relais quand il y en a assez. Piloter une vraie chaudière comporte un risque : une chaudière qui tourne vannes fermées monte en pression. Vérifiez que la vôtre a ses propres sécurités avant de laisser quoi que ce soit la commuter.",
+          "nl": "De app telt hoeveel verwarmingen warmte vragen en schakelt het relais. Een ketel die tegen gesloten kranen draait, bouwt druk op — controleer de eigen beveiligingen."
+        }
+      },
+      {
         "id": "boiler_threshold",
         "type": "number",
         "label": {

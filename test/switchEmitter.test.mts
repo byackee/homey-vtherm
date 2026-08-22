@@ -66,6 +66,9 @@ const CONFIG: VThermConfig = {
 
 const CYCLE_MS = 300_000;
 
+/** Borne de durée du mode sécurité : 24 h, la valeur par défaut. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function config(overrides: Partial<VThermConfig> = {}): VThermConfig {
   return { ...CONFIG, ...overrides };
 }
@@ -78,6 +81,7 @@ function reading<T>(value: T, atMs = 0, stale = false): Reading<T> {
 function inputs(overrides: Partial<VThermInputs> = {}): VThermInputs {
   return {
     roomTemp: reading(18),
+    roomSensorBound: true,
     outdoorTemp: reading(5),
     windowContact: null,
     motion: null,
@@ -247,33 +251,102 @@ test('action fenêtre `turn_off` confirmée : l\'interrupteur est éteint', () =
   assert.deepEqual(result.outputs.demand, { kind: 'inactive' });
 });
 
-test('capteur muet : sortie gelée, on ne touche pas au relais', () => {
+test('capteur muet : le relais est COUPÉ, jamais laissé en l\'état', () => {
+  // Le gel de sortie est le bon repli pour une vanne : passive, sans eau chaude dedans elle ne
+  // chauffe rien. Transposé à un relais, il laissait un convecteur allumé indéfiniment sur une
+  // mesure morte — un radiateur qui a sa propre source d'énergie et que plus rien n'arrête.
   const first = stepVTherm(freshState(), inputs(), CONFIG, 0);
   assert.equal(first.outputs.switchOn, true);
 
   const world = inputs({ roomTemp: reading(18, 0, true) });
-  const { outputs, nextState } = stepVTherm(first.nextState, world, CONFIG, 100_000);
+  const { outputs } = stepVTherm(first.nextState, world, CONFIG, 100_000);
 
-  assert.equal(outputs.switchOn, null, 'aucune commande sur une mesure figée');
-  assert.deepEqual(outputs.demand, { kind: 'unknown' });
-  assert.deepEqual(
-    nextState.persistent.dutyCycle,
-    first.nextState.persistent.dutyCycle,
-    'le cycle n\'avance pas non plus',
-  );
+  assert.equal(outputs.switchOn, false, 'le convecteur doit s\'éteindre, pas rester allumé');
+  assert.deepEqual(outputs.demand, { kind: 'inactive' }, 'décision délibérée, pas une ignorance');
+  assert.equal(outputs.capabilities.vtherm_power_percent, 0,
+    'et l\'écran le dit : 74 % affichés sur un convecteur éteint serait un mensonge');
 });
 
-test('le mode sécurité ne s\'étend pas à l\'interrupteur', () => {
+test('capteur muet : la coupure ne se réécrit pas à chaque pas', () => {
+  // Une fois coupé, le relais reste coupé sans qu'on use le contacteur à le redire.
+  let state = stepVTherm(freshState(), inputs(), CONFIG, 0).nextState;
+  const world = inputs({ roomTemp: reading(18, 0, true) });
+
+  const cut = stepVTherm(state, world, CONFIG, 100_000);
+  assert.equal(cut.outputs.switchOn, false);
+  state = cut.nextState;
+
+  assert.equal(stepVTherm(state, world, CONFIG, 160_000).outputs.switchOn, null);
+});
+
+test('le mode sécurité ne s\'étend pas à l\'interrupteur : on coupe, on ne chauffe pas à l\'aveugle', () => {
   // Une pièce qui chauffait fort, puis un capteur muet : en mode vanne la sécurité force une
-  // ouverture minimale. Sur un relais, VT ne le fait pas — et nous non plus.
-  const cfg = config({ safety: { enabled: true, minOnPercent: 0.5, defaultOnPercent: 0.1 } });
+  // ouverture minimale, en mode consigne une consigne de repli. Sur un relais il n'y a rien à
+  // doser — le repli sûr est de couper, et c'est bien ce qui doit se produire.
+  const cfg = config({
+    safety: {
+      enabled: true, minOnPercent: 0.5, defaultOnPercent: 0.1, fallbackSetpoint: 19, maxDurationMs: DAY_MS,
+    },
+  });
   const state = freshState({ lastOnPercent: 0.9, dutyCycle: { cycleStartMs: 0, commanded: true } });
 
   const world = inputs({ roomTemp: reading(18, 0, true) });
   const { outputs } = stepVTherm(state, world, cfg, 100_000);
 
-  assert.equal(outputs.switchOn, null);
+  assert.equal(outputs.switchOn, false);
   assert.notEqual(outputs.stateLabel, 'safety');
+});
+
+// --- Réaffirmation sur divergence --------------------------------------------
+
+test('le relais revenu à OFF tout seul est rallumé, même à puissance saturée', () => {
+  // À `on_percent >= 1` l'état commandé ne change JAMAIS : `changed` est éternellement faux et
+  // plus aucune écriture ne partait. Une micro-coupure Zigbee (la prise revient sur son
+  // `power_on_behavior`, souvent OFF), une coupure de courant ou une bascule à la main, et la
+  // pièce restait froide toute la journée pendant que l'app s'affichait « en chauffe ».
+  const world = inputs({ roomTemp: reading(10), outdoorTemp: null });
+
+  const first = stepVTherm(freshState(), world, CONFIG, 0);
+  assert.equal(first.outputs.switchOn, true, 'puissance saturée : marche continue');
+
+  // Le relais dit OFF alors qu'on le commande ON : divergence.
+  const diverged = stepVTherm(
+    first.nextState,
+    { ...world, emitterHeating: reading(false, 100_000) },
+    CONFIG,
+    100_000,
+  );
+  assert.equal(diverged.outputs.switchOn, true, 'réaffirmé sur divergence');
+});
+
+test('aucune réaffirmation tant que le relais est d\'accord avec nous', () => {
+  const world = inputs({ roomTemp: reading(10), outdoorTemp: null });
+
+  const first = stepVTherm(freshState(), world, CONFIG, 0);
+  const agreed = stepVTherm(
+    first.nextState,
+    { ...world, emitterHeating: reading(true, 100_000) },
+    CONFIG,
+    100_000,
+  );
+
+  assert.equal(agreed.outputs.switchOn, null, 'un contacteur se compte en commutations');
+});
+
+test('un état de relais périmé ne déclenche aucune réaffirmation', () => {
+  // Une lecture périmée n'est pas une divergence : c'est une ignorance. Réaffirmer là-dessus
+  // ferait claquer le contacteur sur une information qui date d'on ne sait quand.
+  const world = inputs({ roomTemp: reading(10), outdoorTemp: null });
+
+  const first = stepVTherm(freshState(), world, CONFIG, 0);
+  const stale = stepVTherm(
+    first.nextState,
+    { ...world, emitterHeating: reading(false, 0, true) },
+    CONFIG,
+    100_000,
+  );
+
+  assert.equal(stale.outputs.switchOn, null);
 });
 
 // --- Demande de chaleur ------------------------------------------------------

@@ -63,7 +63,9 @@
       "unavailable": "La liste des appareils pour cette source n'a pas pu être chargée.",
       "unknown_thermostat": "Ce thermostat n'existe plus. Rechargez la page.",
       "failed": "Vos thermostats n’ont pas pu être lus : {{detail}}",
-      "no_room": "Sans pièce"
+      "no_room": "Sans pièce",
+      "unknown_source": "Source inconnue. Rechargez la page et réessayez.",
+      "invalid_device": "Cet appareil ne convient pas à cette source. Rechargez la page et choisissez-en un dans la liste."
     },
     "backbone_title": "Dorsale Zigbee2MQTT",
     "backbone_subtitle": "Facultatif. Débloque le contrôle direct de vanne sur les SONOFF TRVZB et similaires.",
@@ -75,7 +77,7 @@
     "enabled": "Activer la dorsale Zigbee2MQTT",
     "enabled_hint": "Prend effet au redémarrage de l'app.",
     "host": "Adresse",
-    "host_hint": "Nom d'hôte ou adresse IP du broker. Un schéma et un port peuvent être inclus, par exemple mqtts://broker.local:8883.",
+    "host_hint": "Nom d'hôte ou adresse IP du broker. Un schéma et un port peuvent y figurer, par exemple mqtts://broker.local:8883. Jamais d'identifiant ni de mot de passe : ils vont dans les deux champs ci-dessous.",
     "port": "Port",
     "username": "Identifiant",
     "username_hint": "Laissez vide si votre broker accepte les connexions anonymes.",
@@ -113,11 +115,24 @@
     "tab": {
       "sources": "Thermostats",
       "backbone": "Zigbee2MQTT"
-    }
+    },
+    "test_host_has_credentials": "Ne mettez ni identifiant ni mot de passe dans l'adresse. Servez-vous des deux champs ci-dessous : eux seuls gardent le mot de passe hors du journal."
   },
   "device": {
     "no_emitter": "Aucun émetteur n'est lié. Utilisez Réparer pour en désigner un.",
     "central_duplicate": "Une autre configuration centrale existe déjà. Une seule est autorisée — supprimez celle-ci.",
-    "sync_restart": "Enregistré. Les réglages d'intervalle d'écriture vers l'émetteur prendront effet au redémarrage de l'app."
+    "sync_restart": "Enregistré. Les réglages d'intervalle d'écriture vers l'émetteur prendront effet au redémarrage de l'app.",
+    "warning": {
+      "no_sensor": "Aucun capteur de température de pièce exploitable : la régulation est suspendue et rien n'est envoyé à l'émetteur.",
+      "sensor_stale": "Mesure de température de pièce périmée : la régulation est suspendue et rien n'est envoyé à l'émetteur.",
+      "sensor_stale_safety": "Mesure de température de pièce périmée. Le mode sécurité maintient un repli de chauffe jusqu'au retour du capteur, puis il abandonne.",
+      "valve_stuck": "La dorsale Zigbee2MQTT a disparu et la vanne est restée sur sa dernière ouverture : la pièce peut ne pas chauffer, quelle que soit la consigne. La régulation continue par consigne."
+    }
+  },
+  "flow": {
+    "error": {
+      "unknown_presence": "Valeur de présence inconnue.",
+      "unknown_preset": "Preset inconnu."
+    }
   }
 }

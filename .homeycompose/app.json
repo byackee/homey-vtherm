@@ -26,27 +26,33 @@
   "api": {
     "getBrokerStatus": {
       "method": "GET",
-      "path": "/broker/status"
+      "path": "/broker/status",
+      "role": "owner"
     },
     "testBroker": {
       "method": "POST",
-      "path": "/broker/test"
+      "path": "/broker/test",
+      "role": "owner"
     },
     "getDiagnostics": {
       "method": "GET",
-      "path": "/diagnostics"
+      "path": "/diagnostics",
+      "role": "owner"
     },
     "getThermostats": {
       "method": "GET",
-      "path": "/thermostats"
+      "path": "/thermostats",
+      "role": "owner"
     },
     "getSourceCandidates": {
       "method": "GET",
-      "path": "/candidates"
+      "path": "/candidates",
+      "role": "owner"
     },
     "setThermostatSource": {
       "method": "PUT",
-      "path": "/thermostats/source"
+      "path": "/thermostats/source",
+      "role": "owner"
     }
   },
   "tags": {

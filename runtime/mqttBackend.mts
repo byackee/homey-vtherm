@@ -30,6 +30,7 @@ import type { ErrorWithReasonCode, IClientOptions, MqttClient } from 'mqtt';
 import {
   buildBridgeDevicesTopic,
   buildBrokerUrl,
+  redactBrokerUrl,
   buildCalibrationPayload,
   buildExternalTemperaturePayload,
   buildSensorSelectPayload,
@@ -302,9 +303,15 @@ export class MqttValveBackend implements ValveBackend {
     return !this.stopped && this.client?.connected === true && this.bridgeDevicesSeen;
   }
 
-  /** Adresse du broker, sans le mot de passe. Le seul texte de connexion qu'on journalise. */
+  /**
+   * Adresse du broker, sans le mot de passe. Le seul texte de connexion qu'on journalise.
+   *
+   * Expurgée : la page de réglages invite à saisir une URL complète, donc l'adresse peut porter
+   * `user:motdepasse@` — et `GET /diagnostics` resert ce journal tel quel.
+   */
   get describeTarget(): string {
-    return `${buildBrokerUrl(this.config.host, this.config.port)} (base_topic « ${this.config.baseTopic} »)`;
+    const url = redactBrokerUrl(buildBrokerUrl(this.config.host, this.config.port));
+    return `${url} (base_topic « ${this.config.baseTopic} »)`;
   }
 
   /**
@@ -393,8 +400,14 @@ export class MqttValveBackend implements ValveBackend {
     this.bridgeDevicesSeen = true;
     // Les noms ont pu changer : tout réappariement doit repartir de la liste fraîche, et les
     // avertissements déjà émis redeviennent pertinents.
+    //
+    // `hints` est vidé AUSSI, et c'est le point le moins évident : les indices viennent des
+    // réglages Homey posés par l'app Z2M, qui ont pu changer en même temps que les noms côté Z2M
+    // — c'est le même événement vu des deux côtés. Les garder condamnerait chaque vanne renommée
+    // à rester `not_found` jusqu'au redémarrage de l'app, sans que rien ne les répare.
     this.resolved.clear();
     this.warned.clear();
+    this.hints.clear();
 
     if (devices.length === 0) {
       this.logError(
@@ -408,42 +421,48 @@ export class MqttValveBackend implements ValveBackend {
 
   // --- Contrat ValveBackend ------------------------------------------------
 
-  async setValveOpening(deviceId: string, percent: number): Promise<void> {
+  async setValveOpening(deviceId: string, percent: number): Promise<boolean> {
     // Ouverture ET fermeture en un seul message (SPEC §5.5) : ces vannes sont sur piles.
-    await this.publish(deviceId, buildValvePayload(percent), 'valve_opening_degree');
+    return this.publish(deviceId, buildValvePayload(percent), 'valve_opening_degree');
   }
 
-  async setExternalTemperature(deviceId: string, celsius: number): Promise<void> {
-    await this.publish(deviceId, buildExternalTemperaturePayload(celsius), 'external_temperature_input');
+  async setExternalTemperature(deviceId: string, celsius: number): Promise<boolean> {
+    return this.publish(deviceId, buildExternalTemperaturePayload(celsius), 'external_temperature_input');
   }
 
-  async setTemperatureSensorSelect(deviceId: string, source: TemperatureSensorSource): Promise<void> {
-    await this.publish(deviceId, buildSensorSelectPayload(source), 'temperature_sensor_select');
+  async setTemperatureSensorSelect(deviceId: string, source: TemperatureSensorSource): Promise<boolean> {
+    return this.publish(deviceId, buildSensorSelectPayload(source), 'temperature_sensor_select');
   }
 
-  async setLocalTemperatureCalibration(deviceId: string, offsetC: number): Promise<void> {
-    await this.publish(deviceId, buildCalibrationPayload(offsetC), 'local_temperature_calibration');
+  async setLocalTemperatureCalibration(deviceId: string, offsetC: number): Promise<boolean> {
+    return this.publish(deviceId, buildCalibrationPayload(offsetC), 'local_temperature_calibration');
   }
 
   /**
-   * Publie, ou renonce en le disant. Ne lève jamais : voir l'en-tête, règle 1.
+   * Publie, ou renonce en le disant — et le DIT à l'appelant.
+   *
+   * Ne lève jamais (voir l'en-tête, règle 1), mais un renoncement silencieux ne suffit pas : tant
+   * que cette méthode rendait `void`, l'émetteur mémorisait l'écriture comme faite et la
+   * dédupliquait pendant une heure. Cinq vannes renommées dans Zigbee2MQTT devenaient
+   * `not_found` en même temps, restaient à leur position de nuit, et l'app enclenchait le relais
+   * de chaudière sur un circuit fermé. Le booléen ferme ce chemin.
    */
-  private async publish(deviceId: string, payload: Z2mPayload | null, what: string): Promise<void> {
+  private async publish(deviceId: string, payload: Z2mPayload | null, what: string): Promise<boolean> {
     if (payload === null) {
       this.logError(`Dorsale MQTT : valeur inexploitable pour ${what} sur ${deviceId}, rien publié.`);
-      return;
+      return false;
     }
 
     const client = this.client;
-    if (this.stopped || client === null || !client.connected) return;
+    if (this.stopped || client === null || !client.connected) return false;
 
     const friendlyName = await this.friendlyNameOf(deviceId);
-    if (friendlyName === null) return;
+    if (friendlyName === null) return false;
 
     const topic = buildSetTopic(this.config.baseTopic, friendlyName);
     if (topic === null) {
       this.logError(`Dorsale MQTT : topic impossible pour « ${friendlyName} », rien publié.`);
-      return;
+      return false;
     }
 
     const body = JSON.stringify(payload);
@@ -462,6 +481,9 @@ export class MqttValveBackend implements ValveBackend {
     client.publish(topic, body, { qos: PUBLISH_QOS, retain: false }, (err) => {
       if (err) this.logError(`Dorsale MQTT : publication sur ${topic} échouée :`, describeError(err));
     });
+    // Vrai = le message est remis à la pile `mqtt`, qui le réémettra jusqu'à l'acquittement.
+    // C'est la seule confirmation qu'on puisse rendre sans attendre le PUBACK — voir ci-dessus.
+    return true;
   }
 
   /**

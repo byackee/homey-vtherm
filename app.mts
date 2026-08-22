@@ -44,6 +44,27 @@ const TICK_TIMEOUT_MS = 20_000;
 /** Les clés dont un changement doit reconstruire la dorsale. */
 const BROKER_KEYS = new Set<string>(Object.values(BROKER_SETTINGS));
 
+/**
+ * Bornes du tampon de diagnostic. Trois cents lignes de 500 caractères font au pire 150 ko — une
+ * réponse HTTP que Homey sait servir, contrairement aux mégaoctets qu'une vue de pairing pouvait
+ * y pousser en une seule ligne.
+ */
+const TRACE_MAX_LINES = 300;
+const TRACE_MAX_CHARS = 500;
+
+/**
+ * Échéance d'un participant, débarrassée d'un `NaN`.
+ *
+ * `Math.min(x, NaN)` vaut `NaN` : un SEUL participant empoisonné — un argument de carte Flow non
+ * validé suffisait — rendait illisible l'échéance du Tickable unique, et l'ordonnanceur ne le
+ * jugeait plus jamais dû. Plus aucune régulation périodique dans tout le logement, uniquement sur
+ * événement, en silence. On préfère tiquer une fois de trop, comme l'ordonnanceur le fait déjà
+ * devant un `dueAtMs()` qui lève. `±Infinity` sont des réponses légitimes et passent telles quelles.
+ */
+function usableDue(due: number): number {
+  return Number.isNaN(due) ? Number.NEGATIVE_INFINITY : due;
+}
+
 export default class VThermApp extends Homey.App {
 
   /**
@@ -61,6 +82,8 @@ export default class VThermApp extends Homey.App {
   private readonly vtherms = new Map<string, VThermParticipant>();
   private central: CentralParticipant | null = null;
   private valveBackendImpl: ValveBackend | null = null;
+  /** Dernière disponibilité connue de la dorsale : on n'agit que sur les TRANSITIONS. */
+  private brokerWasAvailable = false;
 
   /**
    * L'unique participant enregistré auprès de l'ordonnanceur : le cycle complet.
@@ -204,10 +227,10 @@ export default class VThermApp extends Homey.App {
     let due = Number.POSITIVE_INFINITY;
 
     for (const participant of this.vtherms.values()) {
-      due = Math.min(due, participant.dueAtMs());
+      due = Math.min(due, usableDue(participant.dueAtMs()));
     }
     if (this.central !== null) {
-      due = Math.min(due, this.central.dueAtMs());
+      due = Math.min(due, usableDue(this.central.dueAtMs()));
     }
     return due;
   }
@@ -215,6 +238,10 @@ export default class VThermApp extends Homey.App {
   private async runCycle(nowMs: number): Promise<void> {
     const hub = this.hubImpl;
     if (hub === null) return;
+
+    // 0. La dorsale a-t-elle changé d'état ? AVANT les pas, pour qu'ils voient une vanne rendue et
+    //    non une vanne figée à 12 % sur laquelle la consigne de repli n'aura aucun effet.
+    await this.syncValveBackendAvailability(nowMs);
 
     // 1. Au plus un appel réseau, pour tout le monde. Le hub y ajoute son propre plancher.
     await hub.refresh(nowMs);
@@ -247,6 +274,31 @@ export default class VThermApp extends Homey.App {
     }
   }
 
+  /**
+   * Propage les TRANSITIONS de disponibilité de la dorsale Zigbee2MQTT.
+   *
+   * `setValveBackend()` ne part que sur un changement de réglages : une chute de connexion en
+   * cours de journée n'y passe jamais, seul `backend.available` bascule. Les émetteurs
+   * retombaient bien en régulation par consigne, mais leurs vannes restaient figées sur la
+   * dernière ouverture commandée — une vanne ramenée à 12 % par le TPI ne s'ouvre plus quelle que
+   * soit la consigne écrite ensuite, et la pièce ne remonte jamais.
+   */
+  private async syncValveBackendAvailability(nowMs: number): Promise<void> {
+    const available = this.isBrokerAvailable();
+    if (available === this.brokerWasAvailable) return;
+    this.brokerWasAvailable = available;
+
+    this.trace(available
+      ? 'dorsale Zigbee2MQTT disponible : les vannes sont reprises en main'
+      : 'dorsale Zigbee2MQTT perdue : les vannes sont rendues, régulation par consigne');
+
+    // `allSettled` : une vanne qu'on n'arrive pas à rendre ne doit pas empêcher les autres de
+    // l'être. Le participant en tire lui-même l'avertissement affiché sur son appareil.
+    await Promise.allSettled(
+      [...this.vtherms.values()].map((p) => p.onValveBackendAvailability(available, nowMs)),
+    );
+  }
+
   private withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const timer = this.homey.setTimeout(() => {
@@ -261,12 +313,23 @@ export default class VThermApp extends Homey.App {
 
   // --- Arrêt -----------------------------------------------------------------
 
-  /** Ajoute une ligne au tampon de diagnostic, et au log au cas où quelqu'un puisse le lire. */
+  /**
+   * Ajoute une ligne au tampon de diagnostic, et au log au cas où quelqu'un puisse le lire.
+   *
+   * La ligne est bornée en LONGUEUR autant qu'en nombre : une vue de pairing pousse ici ce qu'elle
+   * veut, et `GET /diagnostics` resert le tampon entier. Plafonner seulement le nombre de lignes
+   * laissait passer des mégaoctets sur trois cents lignes. Les retours à la ligne sont neutralisés
+   * pour la même raison : sans ça, un message forgé fabrique de fausses entrées de journal.
+   */
   trace(message: string): void {
-    const line = `${new Date().toISOString()} ${message}`;
-    this.traces.push(line);
-    if (this.traces.length > 300) this.traces.splice(0, this.traces.length - 300);
-    this.log(message);
+    const flattened = message.replace(/[\r\n]+/g, ' ⏎ ');
+    const bounded = flattened.length > TRACE_MAX_CHARS
+      ? `${flattened.slice(0, TRACE_MAX_CHARS)}…`
+      : flattened;
+
+    this.traces.push(`${new Date().toISOString()} ${bounded}`);
+    if (this.traces.length > TRACE_MAX_LINES) this.traces.splice(0, this.traces.length - TRACE_MAX_LINES);
+    this.log(bounded);
   }
 
   /** Servi par `GET /diagnostics`. Ne contient rien de secret : ni mot de passe, ni jeton. */
@@ -337,7 +400,10 @@ export default class VThermApp extends Homey.App {
   }
 
   override async onUninit(): Promise<void> {
-    this.schedulerImpl?.stop();
+    // ATTENDU, pas seulement demandé : `stop()` rend la promesse du tick en vol. Sans cette
+    // attente, les écritures restantes de ce tick atterrissent APRÈS la remise en état sûr, et un
+    // convecteur qu'on vient d'éteindre est rallumé par un pas déjà lancé.
+    await this.schedulerImpl?.stop();
 
     // SPEC §11.1 : remise en état sûr AVANT de fermer le hub — après, il n'y a plus de quoi
     // écrire, et les vannes resteraient figées sur la dernière consigne d'une app qui ne les

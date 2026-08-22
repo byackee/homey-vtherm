@@ -191,4 +191,14 @@ export const DEFAULT_SAFETY = {
   enabled: true,
   minOnPercent: 0.5,
   defaultOnPercent: 0.1,
+  /**
+   * Consigne de repli du mode consigne : la température du preset confort.
+   *
+   * Ni le hors-gel — la pièce chauffait franchement, la laisser tomber à 7 °C est ce qu'on cherche
+   * à éviter — ni une valeur haute qui ferait chauffer à l'aveugle. La consigne que l'utilisateur
+   * a lui-même choisie pour être bien est le seul repli qui ne soit pas une invention.
+   */
+  fallbackSetpoint: DEFAULT_PRESET_TEMPS.comfort,
+  /** 24 h. Au-delà, ce n'est plus une pile à changer, c'est un capteur à remplacer. */
+  maxDurationMs: 24 * 60 * 60 * 1000,
 } as const;

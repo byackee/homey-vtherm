@@ -192,6 +192,7 @@ export default class VThermDevice extends Homey.Device {
   private deviceHost(): DeviceHost {
     return {
       id: this.deviceId(),
+      translate: (key) => this.homey.__(key),
       getCapabilityValue: (capabilityId) => {
         if (!this.hasCapability(capabilityId)) return null;
         const value: unknown = this.getCapabilityValue(capabilityId);
@@ -627,6 +628,12 @@ export default class VThermDevice extends Homey.Device {
         // Saisis en %, attendus en fraction sur l'échelle de `on_percent`.
         minOnPercent: num(s, 'safety_min_on_percent', DEFAULT_SAFETY.minOnPercent * 100) / 100,
         defaultOnPercent: num(s, 'safety_default_on_percent', DEFAULT_SAFETY.defaultOnPercent * 100) / 100,
+        // Consigne de repli du mode consigne. Défaut : la température du preset confort de CET
+        // appareil, et non la constante — c'est celle que l'utilisateur a choisie pour être bien.
+        fallbackSetpoint: num(s, 'safety_setpoint', num(s, 'temp_comfort', DEFAULT_PRESET_TEMPS.comfort)),
+        // Saisi en heures : une durée de sécurité se pense en « le temps de changer une pile »,
+        // pas en millisecondes. Zéro passe tel quel et supprime la borne.
+        maxDurationMs: num(s, 'safety_max_duration_h', DEFAULT_SAFETY.maxDurationMs / 3_600_000) * 3_600_000,
       },
       useCentralMode: bool(s, 'use_central_mode', true),
     };

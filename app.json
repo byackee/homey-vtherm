@@ -27,27 +27,33 @@
   "api": {
     "getBrokerStatus": {
       "method": "GET",
-      "path": "/broker/status"
+      "path": "/broker/status",
+      "role": "owner"
     },
     "testBroker": {
       "method": "POST",
-      "path": "/broker/test"
+      "path": "/broker/test",
+      "role": "owner"
     },
     "getDiagnostics": {
       "method": "GET",
-      "path": "/diagnostics"
+      "path": "/diagnostics",
+      "role": "owner"
     },
     "getThermostats": {
       "method": "GET",
-      "path": "/thermostats"
+      "path": "/thermostats",
+      "role": "owner"
     },
     "getSourceCandidates": {
       "method": "GET",
-      "path": "/candidates"
+      "path": "/candidates",
+      "role": "owner"
     },
     "setThermostatSource": {
       "method": "PUT",
-      "path": "/thermostats/source"
+      "path": "/thermostats/source",
+      "role": "owner"
     }
   },
   "tags": {
@@ -910,6 +916,21 @@
           },
           "children": [
             {
+              "id": "boiler_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "Starting a real boiler",
+                "fr": "Démarrer une vraie chaudière",
+                "nl": "Een echte ketel starten"
+              },
+              "hint": {
+                "en": "The app counts how many emitters are calling for heat across the home and switches the relay when enough of them are. Driving a real boiler carries a risk: one running against closed valves builds pressure. Check that yours has its own safety cut-out before letting anything switch it.",
+                "fr": "L'app compte combien d'émetteurs demandent de la chaleur dans tout le logement et commute le relais quand il y en a assez. Piloter une vraie chaudière comporte un risque : une chaudière qui tourne vannes fermées monte en pression. Vérifiez que la vôtre a ses propres sécurités avant de laisser quoi que ce soit la commuter.",
+                "nl": "De app telt hoeveel verwarmingen warmte vragen en schakelt het relais. Een ketel die tegen gesloten kranen draait, bouwt druk op — controleer de eigen beveiligingen."
+              }
+            },
+            {
               "id": "boiler_threshold",
               "type": "number",
               "label": {
@@ -1109,6 +1130,21 @@
           },
           "children": [
             {
+              "id": "presets_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "What each preset means",
+                "fr": "Ce que chaque preset signifie",
+                "nl": "Wat elk preset betekent"
+              },
+              "hint": {
+                "en": "The temperature this thermostat aims for under each preset. Presets are how you drive it day to day — from a Flow, from the tile, or from a schedule — instead of typing a number each time.",
+                "fr": "La température visée par ce thermostat sous chaque preset. Les presets sont la façon de le piloter au quotidien — depuis un Flow, depuis la tuile, ou depuis un planning — plutôt que de saisir un nombre à chaque fois.",
+                "nl": "De temperatuur die deze thermostaat per preset nastreeft. Presets zijn hoe u hem dagelijks aanstuurt, in plaats van telkens een getal in te typen."
+              }
+            },
+            {
               "id": "temp_frost",
               "type": "number",
               "label": {
@@ -1122,6 +1158,11 @@
               "step": 0.5,
               "units": {
                 "en": "°C"
+              },
+              "hint": {
+                "en": "The floor. Enough to protect pipes and furniture, not to be comfortable.",
+                "fr": "Le plancher. De quoi protéger les canalisations et le mobilier, pas d'être bien.",
+                "nl": "De ondergrens. Genoeg om leidingen te beschermen, niet om comfortabel te zijn."
               }
             },
             {
@@ -1138,6 +1179,11 @@
               "step": 0.5,
               "units": {
                 "en": "°C"
+              },
+              "hint": {
+                "en": "For an empty or sleeping room. Low enough to save, high enough to come back up quickly.",
+                "fr": "Pour une pièce vide ou endormie. Assez bas pour économiser, assez haut pour remonter vite.",
+                "nl": "Voor een lege of slapende kamer."
               }
             },
             {
@@ -1154,6 +1200,11 @@
               "step": 0.5,
               "units": {
                 "en": "°C"
+              },
+              "hint": {
+                "en": "The temperature you actually live at. This is the one worth getting right.",
+                "fr": "La température à laquelle vous vivez réellement. C'est celle qui mérite d'être juste.",
+                "nl": "De temperatuur waarbij u werkelijk leeft."
               }
             },
             {
@@ -1170,6 +1221,11 @@
               "step": 0.5,
               "units": {
                 "en": "°C"
+              },
+              "hint": {
+                "en": "A deliberate overshoot, for a bathroom in the morning or a room to warm quickly.",
+                "fr": "Un dépassement volontaire, pour une salle de bain le matin ou une pièce à réchauffer vite.",
+                "nl": "Een bewuste overschrijding, voor een badkamer of om snel op te warmen."
               }
             }
           ]
@@ -1182,6 +1238,21 @@
             "nl": "Afwezigheidstemperaturen"
           },
           "children": [
+            {
+              "id": "away_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "Used when nobody is home",
+                "fr": "Utilisées quand personne n'est là",
+                "nl": "Gebruikt als niemand thuis is"
+              },
+              "hint": {
+                "en": "When the presence sensor reports an empty home, each preset falls back to the temperature below instead of its normal one. The preset shown on the tile does not change — only what the thermostat aims for. Without a presence sensor, these values are never used.",
+                "fr": "Quand le capteur de présence indique un logement vide, chaque preset se rabat sur la température ci-dessous au lieu de la sienne. Le preset affiché sur la tuile ne change pas — seule la cible change. Sans capteur de présence, ces valeurs ne servent jamais.",
+                "nl": "Als de aanwezigheidssensor een leeg huis meldt, valt elk preset terug op de onderstaande temperatuur. Het getoonde preset verandert niet. Zonder aanwezigheidssensor blijven deze ongebruikt."
+              }
+            },
             {
               "id": "away_eco",
               "type": "number",
@@ -1217,6 +1288,11 @@
               "step": 0.5,
               "units": {
                 "en": "°C"
+              },
+              "hint": {
+                "en": "Replaces Comfort while nobody is home.",
+                "fr": "Remplace Confort quand personne n'est là.",
+                "nl": "Vervangt Comfort bij afwezigheid."
               }
             },
             {
@@ -1233,6 +1309,11 @@
               "step": 0.5,
               "units": {
                 "en": "°C"
+              },
+              "hint": {
+                "en": "Replaces Boost while nobody is home.",
+                "fr": "Remplace Boost quand personne n'est là.",
+                "nl": "Vervangt Boost bij afwezigheid."
               }
             }
           ]
@@ -1245,6 +1326,21 @@
             "nl": "Proportioneel algoritme (TPI)"
           },
           "children": [
+            {
+              "id": "tpi_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "How hard to heat, and when to stop",
+                "fr": "Avec quelle force chauffer, et quand cesser",
+                "nl": "Hoe hard verwarmen, en wanneer stoppen"
+              },
+              "hint": {
+                "en": "This is what separates a real thermostat from a bimetallic strip. Instead of switching fully on and fully off, the app computes how much heat the room actually needs and delivers exactly that. The defaults suit a normally insulated room; change them only if you observe a problem.",
+                "fr": "C'est ce qui sépare un vrai thermostat d'un bilame. Au lieu de basculer à fond puis rien, l'app calcule la puissance dont la pièce a réellement besoin et ne délivre que celle-là. Les valeurs par défaut conviennent à une pièce normalement isolée ; ne les changez qu'en cas de problème observé.",
+                "nl": "Dit onderscheidt een echte thermostaat van een bimetaal. De app berekent hoeveel warmte de kamer nodig heeft. De standaardwaarden passen bij een normaal geïsoleerde kamer."
+              }
+            },
             {
               "id": "tpi_coef_int",
               "type": "number",
@@ -1337,6 +1433,11 @@
               "step": 0.1,
               "units": {
                 "en": "°C"
+              },
+              "hint": {
+                "en": "Same idea while the room is cooling. Both thresholds work as a pair: leave them at zero unless you have observed real overshoot.",
+                "fr": "Même idée pendant que la pièce refroidit. Les deux seuils vont par paire : laissez-les à zéro tant que vous n'avez pas constaté un vrai dépassement.",
+                "nl": "Zelfde idee tijdens afkoelen. Beide drempels werken als paar."
               }
             }
           ]
@@ -1349,6 +1450,21 @@
             "nl": "Zelfregulering"
           },
           "children": [
+            {
+              "id": "regulation_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "Correcting a heater that measures itself",
+                "fr": "Corriger un émetteur qui se mesure lui-même",
+                "nl": "Een verwarming corrigeren die zichzelf meet"
+              },
+              "hint": {
+                "en": "A radiator valve measures the radiator, not the room — it reads warm and closes too early. Self-regulation offsets the setpoint sent to it so the room reaches your target. It needs an outdoor temperature sensor: without one, no offset is applied at all.",
+                "fr": "Une vanne mesure le radiateur, pas la pièce — elle lit chaud et ferme trop tôt. L'auto-régulation décale la consigne qu'on lui envoie pour que la pièce atteigne votre cible. Elle exige un capteur de température extérieure : sans lui, aucun offset n'est appliqué.",
+                "nl": "Een radiatorkraan meet de radiator, niet de kamer. Zelfregulering verschuift het setpoint. Vereist een buitentemperatuursensor."
+              }
+            },
             {
               "id": "regulation_mode",
               "type": "dropdown",
@@ -1449,6 +1565,11 @@
               "step": 1,
               "units": {
                 "en": "min"
+              },
+              "hint": {
+                "en": "These valves run on batteries and each write costs one. Below this interval the setpoint is not rewritten, even if the correction changed.",
+                "fr": "Ces vannes sont sur piles et chaque écriture en coûte une. En dessous de cet intervalle, la consigne n'est pas réécrite, même si la correction a changé.",
+                "nl": "Deze kranen werken op batterijen. Onder dit interval wordt niets herschreven."
               }
             }
           ]
@@ -1462,6 +1583,21 @@
           },
           "children": [
             {
+              "id": "expert_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "Only used in Expert mode",
+                "fr": "Utilisés uniquement en mode Expert",
+                "nl": "Alleen in Expert-modus"
+              },
+              "hint": {
+                "en": "These values replace the preset self-regulation modes when you choose Expert above. They are the raw coefficients of the correction; the preset modes are just named combinations of them. If you have not deliberately chosen Expert, nothing here has any effect.",
+                "fr": "Ces valeurs remplacent les modes d'auto-régulation préréglés lorsque vous choisissez Expert ci-dessus. Ce sont les coefficients bruts de la correction ; les modes préréglés n'en sont que des combinaisons nommées. Si vous n'avez pas délibérément choisi Expert, rien ici n'a d'effet.",
+                "nl": "Deze waarden vervangen de vooraf ingestelde modi als u hierboven Expert kiest. Zonder Expert heeft niets hier effect."
+              }
+            },
+            {
               "id": "expert_kp",
               "type": "number",
               "label": {
@@ -1472,7 +1608,12 @@
               "value": 0.3,
               "min": 0,
               "max": 5,
-              "step": 0.01
+              "step": 0.01,
+              "hint": {
+                "en": "Weight of the current gap. Raise it to react faster, at the risk of oscillating.",
+                "fr": "Poids de l'écart courant. Augmentez pour réagir plus vite, au risque d'osciller.",
+                "nl": "Gewicht van het huidige verschil."
+              }
             },
             {
               "id": "expert_ki",
@@ -1485,7 +1626,12 @@
               "value": 0.05,
               "min": 0,
               "max": 5,
-              "step": 0.001
+              "step": 0.001,
+              "hint": {
+                "en": "Weight of the accumulated gap. This is what eventually closes a persistent offset.",
+                "fr": "Poids de l'écart accumulé. C'est lui qui finit par combler un décalage persistant.",
+                "nl": "Gewicht van het opgetelde verschil."
+              }
             },
             {
               "id": "expert_k_ext",
@@ -1498,7 +1644,12 @@
               "value": 0.1,
               "min": 0,
               "max": 5,
-              "step": 0.001
+              "step": 0.001,
+              "hint": {
+                "en": "Weight of the gap between the room and outdoors. Anticipates heat loss.",
+                "fr": "Poids de l'écart entre la pièce et l'extérieur. Anticipe les déperditions.",
+                "nl": "Gewicht van het verschil tussen kamer en buiten."
+              }
             },
             {
               "id": "expert_offset_max",
@@ -1514,6 +1665,11 @@
               "step": 0.1,
               "units": {
                 "en": "°C"
+              },
+              "hint": {
+                "en": "Hard limit on the correction, whatever the calculation says.",
+                "fr": "Limite dure de la correction, quoi que dise le calcul.",
+                "nl": "Harde limiet op de correctie."
               }
             },
             {
@@ -1527,7 +1683,12 @@
               "value": 20,
               "min": 0,
               "max": 1000,
-              "step": 1
+              "step": 1,
+              "hint": {
+                "en": "Ceiling on the accumulated gap, so a long cold spell cannot make the correction run away.",
+                "fr": "Plafond de l'écart accumulé, pour qu'une longue période froide ne fasse pas s'emballer la correction.",
+                "nl": "Plafond op het opgetelde verschil."
+              }
             },
             {
               "id": "expert_overheat",
@@ -1554,6 +1715,21 @@
             "nl": "Raamdetectie"
           },
           "children": [
+            {
+              "id": "window_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "Stop heating a room being aired",
+                "fr": "Cesser de chauffer une pièce qu'on aère",
+                "nl": "Stop met verwarmen bij luchten"
+              },
+              "hint": {
+                "en": "Two ways to notice, and they are mutually exclusive. A contact sensor is immediate and reliable. Detection by temperature drop needs no sensor at all but reacts more slowly, and only once the app has enough readings to measure a slope.",
+                "fr": "Deux façons de s'en apercevoir, et elles s'excluent. Un contact d'ouverture est immédiat et fiable. La détection par chute de température ne demande aucun capteur mais réagit plus lentement, et seulement une fois que l'app a assez de mesures pour calculer une pente.",
+                "nl": "Twee manieren, die elkaar uitsluiten. Een contactsensor is direct en betrouwbaar. Detectie via temperatuurdaling vereist geen sensor maar reageert trager."
+              }
+            },
             {
               "id": "window_mode",
               "type": "dropdown",
@@ -1637,7 +1813,12 @@
                     "nl": "Alleen ventilator"
                   }
                 }
-              ]
+              ],
+              "hint": {
+                "en": "Turning off is the safest and the most common. Frost protection or Eco keep a floor, which suits a room aired for a long time in winter.",
+                "fr": "Éteindre est le plus sûr et le plus courant. Hors-gel ou Éco gardent un plancher, ce qui convient à une pièce aérée longtemps en hiver.",
+                "nl": "Uitschakelen is het veiligst. Vorstbeveiliging of Eco houden een ondergrens."
+              }
             },
             {
               "id": "window_delay",
@@ -1674,6 +1855,11 @@
               "step": 5,
               "units": {
                 "en": "s"
+              },
+              "hint": {
+                "en": "Waited after the window closes, before heating again. A separate setting from the one above, on purpose.",
+                "fr": "Attendu après la fermeture, avant de rechauffer. Réglage distinct du précédent, à dessein.",
+                "nl": "Gewacht na het sluiten, voordat opnieuw wordt verwarmd."
               }
             },
             {
@@ -1690,6 +1876,11 @@
               "step": 0.5,
               "units": {
                 "en": "°C/h"
+              },
+              "hint": {
+                "en": "How fast the room must be cooling to count as an open window. Three degrees per hour is a real draught, not a normal cooldown.",
+                "fr": "À quelle vitesse la pièce doit refroidir pour compter comme une ouverture. Trois degrés par heure, c'est un vrai courant d'air, pas un refroidissement normal.",
+                "nl": "Hoe snel de kamer moet afkoelen om als open raam te tellen."
               }
             },
             {
@@ -1706,6 +1897,11 @@
               "step": 0.5,
               "units": {
                 "en": "°C/h"
+              },
+              "hint": {
+                "en": "The slope at which detection ends. Zero means: as soon as the room stops cooling.",
+                "fr": "La pente à laquelle la détection prend fin. Zéro signifie : dès que la pièce cesse de refroidir.",
+                "nl": "De helling waarbij detectie eindigt."
               }
             },
             {
@@ -1739,6 +1935,21 @@
             "nl": "Aanwezigheid en beweging"
           },
           "children": [
+            {
+              "id": "presence_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "Two different things",
+                "fr": "Deux choses différentes",
+                "nl": "Twee verschillende dingen"
+              },
+              "hint": {
+                "en": "Presence is about the home: nobody there, every preset falls back to its away temperature. Motion is about this room only, and drives the Activity preset — which is offered only once all four settings below are filled in.",
+                "fr": "La présence concerne le logement : personne, et chaque preset se rabat sur sa température d'absence. Le mouvement ne concerne que cette pièce, et pilote le preset Activité — qui n'est proposé qu'une fois les quatre réglages ci-dessous renseignés.",
+                "nl": "Aanwezigheid gaat over het huis, beweging alleen over deze kamer en stuurt het Activiteit-preset."
+              }
+            },
             {
               "id": "motion_delay",
               "type": "number",
@@ -1774,6 +1985,11 @@
               "step": 10,
               "units": {
                 "en": "s"
+              },
+              "hint": {
+                "en": "How long stillness must last before the room is considered empty. Short values make the temperature flap.",
+                "fr": "Combien de temps l'immobilité doit durer avant de considérer la pièce vide. Une valeur courte fait battre la température.",
+                "nl": "Hoelang stilte moet duren voordat de kamer als leeg geldt."
               }
             },
             {
@@ -1818,7 +2034,12 @@
                     "nl": "Boost"
                   }
                 }
-              ]
+              ],
+              "hint": {
+                "en": "Applied while movement is confirmed, under the Activity preset.",
+                "fr": "Appliqué tant que le mouvement est confirmé, sous le preset Activité.",
+                "nl": "Toegepast zolang beweging bevestigd is."
+              }
             },
             {
               "id": "no_motion_preset",
@@ -1862,7 +2083,12 @@
                     "nl": "Boost"
                   }
                 }
-              ]
+              ],
+              "hint": {
+                "en": "Applied once the room has been still long enough.",
+                "fr": "Appliqué une fois la pièce immobile assez longtemps.",
+                "nl": "Toegepast zodra de kamer lang genoeg stil is."
+              }
             }
           ]
         },
@@ -1875,6 +2101,21 @@
           },
           "children": [
             {
+              "id": "central_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "Letting the home decide for this room",
+                "fr": "Laisser le logement décider pour cette pièce",
+                "nl": "Het huis laten beslissen voor deze kamer"
+              },
+              "hint": {
+                "en": "The Central configuration device carries one switch for the whole home — everything off, heating only, or frost protection — and one boiler relay. The two settings below decide whether this thermostat obeys that switch, and whether its demand counts towards starting the boiler. Both are on by default. Turn the first off for a room you want to keep controlling by hand; turn the second off for a heater that has nothing to do with the boiler, such as an electric radiator.",
+                "fr": "L'appareil Configuration centrale porte un interrupteur unique pour tout le logement — tout arrêté, chauffage seul, ou hors-gel — et un relais de chaudière. Les deux réglages ci-dessous décident si ce thermostat obéit à cet interrupteur, et si sa demande compte pour démarrer la chaudière. Les deux sont actifs par défaut. Désactivez le premier pour une pièce que vous voulez continuer à piloter à la main ; désactivez le second pour un émetteur qui n'a rien à voir avec la chaudière, un radiateur électrique par exemple.",
+                "nl": "Het apparaat Centrale configuratie heeft één schakelaar voor het hele huis en één ketelrelais. De twee instellingen hieronder bepalen of deze thermostaat die schakelaar volgt, en of zijn vraag meetelt om de ketel te starten."
+              }
+            },
+            {
               "id": "use_central_mode",
               "type": "checkbox",
               "label": {
@@ -1882,7 +2123,12 @@
                 "fr": "Suivre le mode central",
                 "nl": "Volg de centrale modus"
               },
-              "value": true
+              "value": true,
+              "hint": {
+                "en": "When on, the switch on the Central configuration device applies to this thermostat: everything off, heating only, or frost protection. Turn it off for a room you want to keep controlling by hand, whatever the rest of the home is doing.",
+                "fr": "Quand c'est actif, l'interrupteur de l'appareil Configuration centrale s'applique à ce thermostat : tout arrêté, chauffage seul, ou hors-gel. Désactivez-le pour une pièce que vous voulez continuer à piloter à la main, quoi que fasse le reste du logement.",
+                "nl": "Indien aan, geldt de schakelaar van de Centrale configuratie ook voor deze thermostaat."
+              }
             },
             {
               "id": "controls_boiler",
@@ -1909,6 +2155,21 @@
             "nl": "Verwarming"
           },
           "children": [
+            {
+              "id": "emitter_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "How the app talks to your heater",
+                "fr": "Comment l'app parle à votre émetteur",
+                "nl": "Hoe de app met uw verwarming praat"
+              },
+              "hint": {
+                "en": "The app drives whatever it can: a setpoint, a valve opening, or a plain switch. The valve settings below only apply when the Zigbee2MQTT backend is configured in the app settings — valve opening is not something Homey exposes on its own.",
+                "fr": "L'app pilote ce qu'elle peut : une consigne, une ouverture de vanne, ou un simple interrupteur. Les réglages de vanne ci-dessous ne s'appliquent que si la dorsale Zigbee2MQTT est configurée dans les réglages de l'app — l'ouverture de vanne n'est pas quelque chose que Homey expose.",
+                "nl": "De app stuurt aan wat kan: een setpoint, een klepopening of een schakelaar. De klepinstellingen gelden alleen met de Zigbee2MQTT-backend."
+              }
+            },
             {
               "id": "sync_mode",
               "type": "dropdown",
@@ -1985,6 +2246,11 @@
               "step": 1,
               "units": {
                 "en": "%"
+              },
+              "hint": {
+                "en": "Where the valve starts when heating begins. Some radiators need a minimum to circulate at all.",
+                "fr": "Où démarre la vanne quand la chauffe commence. Certains radiateurs ont besoin d'un minimum pour que l'eau circule.",
+                "nl": "Waar de klep begint bij het opwarmen."
               }
             },
             {
@@ -2001,6 +2267,11 @@
               "step": 1,
               "units": {
                 "en": "%"
+              },
+              "hint": {
+                "en": "Caps the opening, to balance a radiator that is oversized for its room.",
+                "fr": "Plafonne l'ouverture, pour équilibrer un radiateur surdimensionné pour sa pièce.",
+                "nl": "Begrenst de opening, om een te grote radiator te balanceren."
               }
             },
             {
@@ -2017,6 +2288,11 @@
               "step": 1,
               "units": {
                 "en": "%"
+              },
+              "hint": {
+                "en": "Below this share of demand, the valve counts as closed and the room stops asking the boiler for heat.",
+                "fr": "En dessous de cette part de la demande, la vanne compte comme fermée et la pièce cesse de demander de la chaleur à la chaudière.",
+                "nl": "Onder dit aandeel telt de klep als gesloten."
               }
             },
             {
@@ -2033,6 +2309,11 @@
               "step": 1,
               "units": {
                 "en": "%"
+              },
+              "hint": {
+                "en": "How far the valve is allowed to close. Below a hundred it never shuts completely, which suits a circuit that must keep some flow.",
+                "fr": "Jusqu'où la vanne a le droit de se fermer. En dessous de cent, elle ne ferme jamais complètement, ce qui convient à un circuit qui doit garder un peu de débit.",
+                "nl": "Hoe ver de klep mag sluiten. Onder honderd sluit hij nooit volledig."
               }
             },
             {
@@ -2088,6 +2369,21 @@
           },
           "children": [
             {
+              "id": "safety_hint",
+              "type": "label",
+              "value": "",
+              "label": {
+                "en": "When the room sensor goes silent",
+                "fr": "Quand le capteur de pièce se tait",
+                "nl": "Als de kamersensor stilvalt"
+              },
+              "hint": {
+                "en": "A flat battery in January would otherwise leave the room unheated until someone notices: the app refuses to compute on a frozen reading, so it stops asking for heat. Instead, it keeps a minimum going until the sensor comes back — and gives up after the delay below, because a boiler running for days on a dead sensor is a bigger risk than the frost it was avoiding.",
+                "fr": "Une pile morte en janvier laisserait sinon la pièce sans chauffage jusqu'à ce que quelqu'un s'en aperçoive : l'app refuse de calculer sur une mesure figée, donc elle cesse de demander de la chaleur. À la place, elle maintient un minimum jusqu'au retour du capteur — et abandonne au bout du délai ci-dessous, parce qu'une chaudière qui tourne des jours sur un capteur mort est un risque plus grand que le gel qu'on évitait.",
+                "nl": "Een lege batterij in januari zou de kamer anders onverwarmd laten. De app houdt een minimum aan tot de sensor terugkomt, en geeft op na de onderstaande termijn."
+              }
+            },
+            {
               "id": "safety_enabled",
               "type": "checkbox",
               "value": true,
@@ -2097,9 +2393,9 @@
                 "nl": "Blijf verwarmen als de sensor stilvalt"
               },
               "hint": {
-                "en": "When the room sensor stops reporting, regulation has nothing to work from and the boiler would stop. Rather than leave the room unheated, a minimum power is applied until the sensor comes back. Only applies when the valve opening is driven directly.",
-                "fr": "Quand le capteur de pièce cesse de répondre, la régulation n'a plus rien sur quoi travailler et la chaudière s'arrêterait. Plutôt que de laisser la pièce sans chauffage, une puissance minimale est appliquée jusqu'au retour du capteur. Ne s'applique qu'au pilotage direct de la vanne.",
-                "nl": "Als de kamersensor stopt met melden, zou de ketel stoppen. In plaats daarvan wordt een minimaal vermogen toegepast tot de sensor terugkomt."
+                "en": "When the room sensor stops reporting, regulation has nothing to work from and the boiler would stop. Rather than leave the room unheated, a fallback is applied until the sensor comes back: a minimum power when the valve opening is driven directly, a fallback setpoint otherwise. Never on a relay — there the safe move is to switch off.",
+                "fr": "Quand le capteur de pièce cesse de répondre, la régulation n'a plus rien sur quoi travailler et la chaudière s'arrêterait. Plutôt que de laisser la pièce sans chauffage, un repli est appliqué jusqu'au retour du capteur : une puissance minimale en pilotage direct de la vanne, une consigne de repli sinon. Jamais sur un relais — là, le geste sûr est de couper.",
+                "nl": "Als de kamersensor stopt met melden, zou de ketel stoppen. In plaats daarvan wordt een terugval toegepast tot de sensor terugkomt: een minimaal vermogen bij directe klepsturing, anders een terugvalinstelpunt. Nooit op een relais — daar is uitschakelen de veilige keuze."
               }
             },
             {
@@ -2124,6 +2420,48 @@
               }
             },
             {
+              "id": "safety_max_duration_h",
+              "type": "number",
+              "value": 24,
+              "min": 0,
+              "max": 336,
+              "step": 1,
+              "units": {
+                "en": "h"
+              },
+              "label": {
+                "en": "Give up after",
+                "fr": "Abandonner au bout de",
+                "nl": "Opgeven na"
+              },
+              "hint": {
+                "en": "A dead battery in February would otherwise heat the room for weeks. Past this delay the safety mode switches itself off: a boiler running for days on a sensor that no longer reports is a bigger risk than the freezing it was meant to prevent. Zero removes the limit.",
+                "fr": "Sans cette borne, une pile morte en février ferait chauffer la pièce pendant des semaines. Passé ce délai le mode sécurité se désactive : une chaudière qui tourne des jours sur un capteur mort est un risque plus grand que le gel qu'on voulait éviter. Zéro supprime la limite.",
+                "nl": "Zonder deze grens zou een lege batterij in februari de kamer wekenlang verwarmen. Na deze tijd schakelt de veiligheidsmodus zichzelf uit. Nul verwijdert de limiet."
+              }
+            },
+            {
+              "id": "safety_setpoint",
+              "type": "number",
+              "value": 19,
+              "min": 5,
+              "max": 35,
+              "step": 0.5,
+              "units": {
+                "en": "°C"
+              },
+              "label": {
+                "en": "Fallback setpoint",
+                "fr": "Consigne de repli",
+                "nl": "Terugvalinstelpunt"
+              },
+              "hint": {
+                "en": "Used when the heater is driven by setpoint rather than by valve opening: a power level has nowhere to go there. Without it the heater keeps whatever was written last before the failure — which may well be the night-time eco value.",
+                "fr": "Utilisée quand l'émetteur est piloté par consigne et non par ouverture de vanne : une puissance n'y a nulle part où aller. Sans elle, l'émetteur reste sur la dernière valeur écrite avant la panne — qui peut très bien être l'éco de la nuit.",
+                "nl": "Gebruikt wanneer de verwarming via het instelpunt wordt aangestuurd in plaats van via de klepopening. Zonder dit blijft de verwarming staan op de laatste waarde vóór de storing."
+              }
+            },
+            {
               "id": "safety_default_on_percent",
               "type": "number",
               "value": 10,
@@ -2139,9 +2477,9 @@
                 "nl": "Terugvalvermogen"
               },
               "hint": {
-                "en": "Enough to avoid freezing, not enough to heat.",
-                "fr": "De quoi éviter le gel, pas de quoi chauffer.",
-                "nl": "Genoeg om bevriezing te voorkomen, niet om te verwarmen."
+                "en": "Enough to avoid freezing, not enough to heat. Used when the valve opening is driven directly.",
+                "fr": "De quoi éviter le gel, pas de quoi chauffer. Utilisée en pilotage direct de la vanne.",
+                "nl": "Genoeg om bevriezing te voorkomen, niet om te verwarmen. Gebruikt bij directe klepsturing."
               }
             }
           ]

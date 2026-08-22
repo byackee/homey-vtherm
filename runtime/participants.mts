@@ -13,7 +13,7 @@
 
 import type {
   CentralMode, Demand, Preset, Reading, SyncMode, VThermConfig, VThermEvent,
-  VThermInputs, VThermOutputs, VThermState, VThermStateDefaults,
+  VThermInputs, VThermOutputs, VThermState, VThermStateDefaults, VThermWarning,
 } from '../lib/types.mjs';
 import type { BoilerParams, BoilerState } from '../lib/types.mjs';
 import {
@@ -63,6 +63,25 @@ export const FRESHNESS = {
  */
 const PERSIST_INTERVAL_MS = 5 * MS_PER_MINUTE;
 
+/**
+ * Avertissement du noyau → clé de traduction.
+ *
+ * Trois cas distincts, et l'ancien texte les confondait : il annonçait « aucune commande envoyée »
+ * y compris quand le mode sécurité venait précisément d'en envoyer une.
+ */
+const WARNING_KEYS: Record<VThermWarning, string> = {
+  no_sensor: 'device.warning.no_sensor',
+  sensor_stale: 'device.warning.sensor_stale',
+  sensor_stale_safety: 'device.warning.sensor_stale_safety',
+};
+
+/**
+ * La dorsale a disparu et la vanne n'a pas pu être rendue : elle est restée sur sa dernière
+ * ouverture. Le seul repli de l'app qui échouait en silence — le journal n'est lisible par
+ * personne, et une vanne à 12 % ne chauffe pas quelle que soit la consigne écrite ensuite.
+ */
+const VALVE_STUCK_WARNING_KEY = 'device.warning.valve_stuck';
+
 const VTHERM_STORE_KEY = 'vtherm.state';
 const BOILER_STORE_KEY = 'central.boiler';
 
@@ -82,6 +101,11 @@ export type ParticipantEvent = VThermEvent | CentralEvent;
  */
 export interface DeviceHost {
   readonly id: string;
+  /**
+   * `homey.__()`. Le noyau rend des CLÉS de traduction — `lib/` est pur et ne connaît aucune
+   * langue — et c'est ici, au contact de Homey, qu'elles deviennent une phrase.
+   */
+  translate(key: string): string;
   getCapabilityValue(capabilityId: string): CapValue | null;
   setCapabilityValue(capabilityId: string, value: CapValue): Promise<void>;
   setWarning(message: string | null): Promise<void>;
@@ -192,7 +216,15 @@ export class VThermParticipant implements Tickable {
 
   /** Ce qui a réellement été poussé sur les capabilities, pour ne pas réécrire à l'identique. */
   private readonly publishedCaps = new Map<string, CapValue>();
-  private publishedWarning: string | null = null;
+  /** La CLÉ publiée, pas la phrase : comparer des phrases traduites n'aurait aucun sens. */
+  private publishedWarningKey: string | null = null;
+  /** Dernier avertissement du noyau, pour recomposer l'affichage hors d'un pas. */
+  private coreWarning: VThermWarning | null = null;
+  /** La dorsale est tombée ET la vanne est restée figée : voir `onValveBackendAvailability`. */
+  private valveStuck = false;
+
+  /** Vrai pendant qu'un pas est en vol. Garde de réentrance, voir `tick`. */
+  private ticking = false;
 
   constructor(options: VThermParticipantOptions) {
     this.tickId = options.host.id;
@@ -242,6 +274,26 @@ export class VThermParticipant implements Tickable {
   }
 
   async tick(nowMs: number): Promise<void> {
+    // Un pas est déjà en vol : on ne l'attend pas, on renonce à celui-ci.
+    //
+    // Le délai de garde de l'app (20 s) REJETTE mais n'annule rien — rien ne peut annuler une
+    // écriture Zigbee déjà partie. Le pas abandonné continue donc d'écrire pendant que le suivant
+    // démarre, dix secondes plus tard. Les deux liraient puis écraseraient `this.state`,
+    // `dutyCycle`, `lastWrite` et `lastPublished` : le second réécrirait par-dessus les décisions
+    // du premier, et le premier viendrait ensuite ressusciter un état déjà périmé.
+    if (this.ticking) {
+      this.host.log('Pas précédent encore en cours : celui-ci est abandonné.');
+      return;
+    }
+    this.ticking = true;
+    try {
+      await this.runTick(nowMs);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async runTick(nowMs: number): Promise<void> {
     // Remise à `unknown` D'ABORD : si ce pas échoue ou expire, l'agrégateur ne doit pas compter
     // une demande périmée. Une chaudière ne s'allume jamais sur de l'inconnu (PLAN lot 2).
     this.demandValue = { kind: 'unknown' };
@@ -262,12 +314,14 @@ export class VThermParticipant implements Tickable {
     const { outputs, nextState } = stepVTherm(this.state, inputs, this.config, nowMs);
     this.state = nextState;
     this.wakeUpAt = outputs.wakeUpAtMs;
-    this.demandValue = outputs.demand;
 
     const target = outputs.capabilities.target_temperature;
     if (typeof target === 'number') this.userSetpoint = target;
 
     await this.applyOutputs(outputs, roomTemp, nowMs);
+    // APRÈS les écritures, jamais avant : c'est seulement une fois la commande tentée qu'on sait
+    // si l'émetteur a reçu quelque chose. Voir `confirmedDemand`.
+    this.demandValue = this.confirmedDemand(outputs.demand);
     await this.persistIfNeeded(nowMs);
   }
 
@@ -276,6 +330,9 @@ export class VThermParticipant implements Tickable {
 
     return {
       roomTemp,
+      // La LIAISON, pas la lecture : une liaison orpheline — capteur ré-appairé, donc introuvable —
+      // rend `null` comme une absence de capteur, et le noyau doit pouvoir les distinguer.
+      roomSensorBound: this.sources.room !== null,
       outdoorTemp: readNumber(this.sources.outdoor, nowMs, FRESHNESS.outdoorTempMs),
       windowContact: readBoolean(this.sources.windowContact, nowMs, FRESHNESS.windowContactMs),
       motion: readBoolean(this.sources.motion, nowMs, FRESHNESS.motionMs),
@@ -352,10 +409,44 @@ export class VThermParticipant implements Tickable {
       await this.safely(`déclencheur ${event.kind}`, () => this.host.triggerFlow(event));
     }
 
-    if (outputs.warning !== this.publishedWarning) {
-      this.publishedWarning = outputs.warning;
-      await this.safely('avertissement', () => this.host.setWarning(outputs.warning));
-    }
+    this.coreWarning = outputs.warning;
+    await this.refreshWarning();
+  }
+
+  /**
+   * Un seul bandeau pour deux sources : le noyau, et la perte de la dorsale.
+   *
+   * L'appareil n'a qu'un `setWarning` ; deux écrivains qui s'ignorent finiraient par effacer
+   * l'avertissement de l'autre. Le capteur muet passe devant : il suspend la régulation, alors
+   * qu'une vanne figée la dégrade.
+   */
+  private async refreshWarning(): Promise<void> {
+    const core = this.coreWarning;
+    const key = core !== null
+      ? WARNING_KEYS[core]
+      : (this.valveStuck ? VALVE_STUCK_WARNING_KEY : null);
+
+    if (key === this.publishedWarningKey) return;
+    this.publishedWarningKey = key;
+
+    const message = key === null ? null : this.host.translate(key);
+    await this.safely('avertissement', () => this.host.setWarning(message));
+  }
+
+  /**
+   * Rabat la demande sur `unknown` quand l'ouverture de vanne n'a pas pu partir.
+   *
+   * Le noyau déduit la demande de chaleur de son INTENTION (`on_percent >= openingThreshold`),
+   * jamais d'une confirmation de la vanne — il ne peut pas faire autrement, aucune capability
+   * Homey ne relit `valve_opening_degree`. Tant que l'écriture part, cette intention est fidèle.
+   * Quand elle ne part pas — vannes renommées dans Zigbee2MQTT, donc introuvables — la vanne reste
+   * là où elle était, souvent presque fermée, pendant que l'app la croit ouverte : le relais de
+   * chaudière s'enclencherait alors sur un circuit fermé. `unknown` est le seul verdict honnête,
+   * et le contrat du type veut qu'il laisse la chaudière éteinte.
+   */
+  private confirmedDemand(demand: Demand): Demand {
+    if (this.emitter.mode !== 'valve' || !this.emitter.valveUnconfirmed) return demand;
+    return { kind: 'unknown' };
   }
 
   private async publish(capabilityId: string, value: CapValue): Promise<void> {
@@ -420,6 +511,13 @@ export class VThermParticipant implements Tickable {
   }
 
   setTimedPreset(preset: Preset, minutes: number, nowMs: number): void {
+    // `minutes` est typé `number` mais vient d'une carte Flow : un argument absent ou mal saisi
+    // arrive `undefined`. `Math.round(undefined)` rend `NaN`, que `Math.min`/`Math.max` propagent
+    // jusqu'à `untilMs`, puis `wakeUpAtMs`, puis `dueAtMs()` — et l'agrégation `Math.min` de l'app
+    // rend alors `NaN` pour TOUT le logement : l'ordonnanceur ne juge plus jamais le cycle dû, et
+    // la régulation périodique s'arrête en silence. Même garde que `setManualSetpoint`.
+    if (!Number.isFinite(minutes)) return;
+
     const bounded = Math.min(TIMED_PRESET_MAX_MINUTES, Math.max(TIMED_PRESET_MIN_MINUTES, Math.round(minutes)));
     const previous = this.state.persistent.timedPreset?.previous ?? this.state.persistent.preset;
     this.mutate({
@@ -461,6 +559,30 @@ export class VThermParticipant implements Tickable {
   setValveBackend(backend: ValveBackend | null): void {
     this.emitter.setBackend(backend);
     this.requestTick('valve-backend');
+  }
+
+  /**
+   * La dorsale Zigbee2MQTT vient de tomber, ou de revenir.
+   *
+   * Ne pas confondre avec `setValveBackend` : celui-là ne part que sur un changement de RÉGLAGES.
+   * Une chute de connexion en cours de journée n'y passe jamais — seul `backend.available`
+   * bascule. Le mode retombait bien sur la consigne, mais la vanne restait figée sur sa dernière
+   * ouverture : ramenée à 12 % par le TPI, une pièce à 16 °C ne remontait plus jamais, et le seul
+   * signe en était une ligne de journal que personne ne lit.
+   */
+  async onValveBackendAvailability(available: boolean, nowMs: number): Promise<void> {
+    if (available) {
+      // La vanne est reprise en main par le pas suivant : plus rien à signaler.
+      this.valveStuck = false;
+      await this.refreshWarning();
+      this.requestTick('valve-backend-back');
+      return;
+    }
+
+    const released = await this.emitter.releaseValve(nowMs);
+    this.valveStuck = !released;
+    await this.refreshWarning();
+    this.requestTick('valve-backend-lost');
   }
 
   /** Un ré-abonnement a eu lieu : le jeu de capabilities de l'émetteur est peut-être différent. */
@@ -592,6 +714,11 @@ export class CentralParticipant {
         // L'ordre n'est pas parti : revenir à l'état précédent pour que le tick suivant le
         // retente. Garder l'état optimiste laisserait la chaudière allumée dans le modèle et
         // éteinte dans la maison, sans que rien ne le rattrape.
+        //
+        // Ce chemin couvre AUSSI la liaison pas encore résolue, cas le plus insidieux : le hub
+        // monte en tâche de fond, le premier tick part avant lui, et `stepBoiler` ne produit un
+        // ordre que sur CHANGEMENT. Un ordre avalé au démarrage n'était jamais réémis — la maison
+        // ne chauffait pas de la journée, la tuile affichait « en marche », aucune erreur.
         this.boilerState = previous;
         this.host.error('Commande de la chaudière :', err);
       }
@@ -629,8 +756,30 @@ export class CentralParticipant {
     const binding = this.boiler;
     if (binding === null) return;
 
+    const nowMs = Date.now();
     await this.safely('extinction de la chaudière', () =>
-      binding.write(false, { nowMs: Date.now(), maxIntervalMs: 1 }));
+      binding.write(false, { nowMs, maxIntervalMs: 1 }));
+
+    /*
+     * Persister l'extinction, sinon elle n'a jamais eu lieu du point de vue du redémarrage.
+     *
+     * L'état relu dirait encore `commanded: true` : la réaffirmation partirait au premier pas —
+     * et elle est délibérément exemptée du garde-fou anti-pulsation, alors que la commutation
+     * précédente daterait de quelques secondes. Une mise à jour d'app à 3 h du matin donnait ainsi
+     * OFF puis ON quinze secondes plus tard, exactement le court-cycle que la SPEC §9.2 interdit.
+     *
+     * Écrit même si la commande n'est pas partie : le relais est alors dans un état qu'on ne
+     * connaît pas, et repartir d'« éteinte » est le seul point de départ qui ne l'allume pas.
+     */
+    this.boilerState = {
+      ...this.boilerState,
+      commanded: false,
+      lastChangeMs: nowMs,
+      pendingSinceMs: null,
+      lastKeepAliveMs: null,
+      affirmed: true,
+    };
+    await this.persist();
   }
 
   destroy(): void {

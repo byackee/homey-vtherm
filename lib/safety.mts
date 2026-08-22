@@ -7,7 +7,10 @@
  * dedans elle ne chauffe rien.
  *
  * VT résout ça en forçant une chauffe minimale plutôt qu'en s'arrêtant. On reprend le principe et
- * ses trois paramètres.
+ * ses trois paramètres, avec une différence assumée : le repli s'exprime dans l'unité de
+ * l'émetteur. Une puissance quand on pilote une vanne, une CONSIGNE quand on ne sait lui parler
+ * qu'en degrés — sans quoi la sécurité resterait inerte sur toute installation sans dorsale MQTT,
+ * qui est la configuration standard de l'app.
  */
 
 import type { EmitterMode } from './types.mjs';
@@ -22,8 +25,29 @@ export interface SafetyParams {
    * Fraction 0..1, défaut 0,5.
    */
   minOnPercent: number;
-  /** Puissance de repli appliquée pendant la sécurité. Fraction 0..1, défaut 0,1. */
+  /** Puissance de repli appliquée pendant la sécurité, en mode vanne. Fraction 0..1, défaut 0,1. */
   defaultOnPercent: number;
+  /**
+   * Consigne de repli appliquée pendant la sécurité, en mode consigne, en °C.
+   *
+   * Une PUISSANCE n'a aucun sens sur un émetteur qu'on pilote par consigne : on ne lui parle qu'en
+   * degrés. Sans cette consigne connue, il resterait sur la dernière valeur écrite avant la panne
+   * — qui peut être l'éco de la nuit, ou une consigne décalée VERS LE BAS par l'auto-régulation.
+   * Défaut : la température du preset confort.
+   */
+  fallbackSetpoint: number;
+  /**
+   * Durée maximale du mode sécurité, en millisecondes. Défaut 24 h.
+   *
+   * Pourquoi une borne : sans elle, une pile morte en février fait chauffer la pièce jusqu'à ce
+   * que quelqu'un s'en aperçoive — des semaines. Le mode sécurité est fait pour tenir le temps
+   * qu'on remplace une pile, pas pour remplacer un capteur. Passé ce délai, une chaudière qui
+   * tourne à l'aveugle sur une mesure morte est un risque plus grand que le gel qu'on voulait
+   * éviter : facture, usure, et surtout plus personne pour dire d'arrêter.
+   *
+   * Zéro ou valeur non finie : borne désactivée, on retombe sur l'ancien comportement.
+   */
+  maxDurationMs: number;
 }
 
 export interface SafetyInput {
@@ -35,16 +59,33 @@ export interface SafetyInput {
   /** Dernière puissance calculée avant que la mesure ne se taise. */
   lastOnPercent: number;
   onoff: boolean;
+  /**
+   * Instant de la dernière mesure de pièce exploitable. `null` = on n'en a jamais eu depuis le
+   * démarrage, auquel cas la borne de durée ne peut pas s'appliquer faute d'origine.
+   */
+  lastGoodReadingAtMs: number | null;
+  nowMs: number;
 }
 
 export interface SafetyResult {
   active: boolean;
-  /** Puissance à appliquer quand `active` est vrai. */
+  /** Puissance à appliquer quand `active` est vrai, en mode vanne. */
   onPercent: number;
+  /**
+   * Consigne à appliquer quand `active` est vrai, en mode consigne. Sans objet quand la sécurité
+   * ne s'applique pas : l'appelant ne doit la lire que sur `active`.
+   */
+  setpoint: number;
+  /**
+   * Vrai quand la sécurité s'est désactivée d'elle-même parce que le capteur se tait depuis plus
+   * de `maxDurationMs`. Distinct de « jamais déclenchée » : c'est un abandon délibéré, et
+   * l'appelant peut vouloir le dire autrement à l'utilisateur.
+   */
+  expired: boolean;
 }
 
 export function evaluateSafety(input: SafetyInput, params: SafetyParams): SafetyResult {
-  const inactive: SafetyResult = { active: false, onPercent: 0 };
+  const inactive: SafetyResult = { active: false, onPercent: 0, setpoint: 0, expired: false };
 
   if (!params.enabled || !input.onoff) return inactive;
 
@@ -54,18 +95,41 @@ export function evaluateSafety(input: SafetyInput, params: SafetyParams): Safety
   if (!input.sensorBound || !input.sensorStale) return inactive;
 
   /*
-   * Réservé au pilotage par vanne, comme chez VT.
+   * Hors du pilotage par interrupteur, et cette exclusion-là est la seule qui tienne.
    *
-   * En mode consigne, l'émetteur régule sur son propre thermomètre : privé de nos écritures il
-   * continue de tenir sa dernière consigne, tout seul. Il n'y a donc pas de risque physique, et
-   * forcer une puissance ici reviendrait à se substituer à un régulateur qui fonctionne.
+   * Le mode consigne était exclu lui aussi, au motif que l'émetteur « régule tout seul sur son
+   * propre thermomètre ». C'est justement le problème : le thermomètre d'une TRVZB est collé au
+   * radiateur, livrée à elle-même elle lit chaud, ferme la vanne, et la pièce refroidit. Pire, le
+   * mode consigne est le SEUL disponible sans dorsale MQTT — la sécurité ne s'armait donc jamais
+   * dans la configuration standalone, c'est-à-dire exactement dans celle où le capteur muet ne
+   * peut plus être secouru autrement.
+   *
+   * Un interrupteur, lui, reste dehors : sur un relais le repli sûr n'est pas de chauffer un peu,
+   * c'est de COUPER — il a sa propre source d'énergie et rien ne l'arrêterait (voir lib/step.mts).
    */
-  if (input.emitterMode !== 'valve') return inactive;
+  if (input.emitterMode === 'switch') return inactive;
 
   // La pièce ne chauffait pas assez pour qu'un arrêt soit dangereux.
   if (input.lastOnPercent < params.minOnPercent) return inactive;
 
-  return { active: true, onPercent: clampFraction(params.defaultOnPercent) };
+  // Borne de durée. Comparée en valeur absolue : une horloge qui recule (changement d'heure,
+  // resynchronisation NTP) ne doit pas remettre le compteur à zéro et relancer la sécurité pour
+  // un tour de plus.
+  if (hasExpired(input, params)) return { active: false, onPercent: 0, setpoint: 0, expired: true };
+
+  return {
+    active: true,
+    onPercent: clampFraction(params.defaultOnPercent),
+    setpoint: params.fallbackSetpoint,
+    expired: false,
+  };
+}
+
+function hasExpired(input: SafetyInput, params: SafetyParams): boolean {
+  const max = params.maxDurationMs;
+  if (!Number.isFinite(max) || max <= 0) return false;
+  if (input.lastGoodReadingAtMs === null) return false;
+  return Math.abs(input.nowMs - input.lastGoodReadingAtMs) > max;
 }
 
 function clampFraction(value: number): number {

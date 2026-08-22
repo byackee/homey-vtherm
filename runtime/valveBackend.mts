@@ -25,11 +25,18 @@ export interface ValveBackend {
    */
   readonly available: boolean;
 
-  /** `valve_opening_degree`, en % 0..100. L'implémentation publie aussi `valve_closing_degree = 100 − percent` (SPEC §5.1). */
-  setValveOpening(deviceId: string, percent: number): Promise<void>;
+  /**
+   * `valve_opening_degree`, en % 0..100. L'implémentation publie aussi
+   * `valve_closing_degree = 100 − percent` (SPEC §5.1).
+   *
+   * Rend VRAI seulement si le message est réellement parti vers le broker. Un `false` n'est pas
+   * une erreur — c'est un renoncement propre, et l'appelant DOIT en tenir compte : croire une
+   * vanne ouverte alors que rien n'est parti fait enclencher la chaudière sur un circuit fermé.
+   */
+  setValveOpening(deviceId: string, percent: number): Promise<boolean>;
 
-  /** `external_temperature_input`, en °C (SPEC §5.3). */
-  setExternalTemperature(deviceId: string, celsius: number): Promise<void>;
+  /** `external_temperature_input`, en °C (SPEC §5.3). Vrai si la publication est partie. */
+  setExternalTemperature(deviceId: string, celsius: number): Promise<boolean>;
 
   /**
    * `temperature_sensor_select`. Écrit UNE SEULE FOIS à la liaison de l'émetteur
@@ -37,10 +44,10 @@ export interface ValveBackend {
    * `external_temperature_input`, sans quoi elle continue de réguler sur son propre thermomètre
    * collé au radiateur.
    */
-  setTemperatureSensorSelect(deviceId: string, source: 'internal' | 'external'): Promise<void>;
+  setTemperatureSensorSelect(deviceId: string, source: 'internal' | 'external'): Promise<boolean>;
 
-  /** `local_temperature_calibration`, en °C, borné par le matériel à ±12,7. */
-  setLocalTemperatureCalibration(deviceId: string, offsetC: number): Promise<void>;
+  /** `local_temperature_calibration`, en °C, borné par le matériel à ±12,7. Vrai si parti. */
+  setLocalTemperatureCalibration(deviceId: string, offsetC: number): Promise<boolean>;
 
   /**
    * Ferme la dorsale. Doit pouvoir être appelée sur une dorsale jamais démarrée, deux fois de

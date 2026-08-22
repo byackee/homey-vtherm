@@ -136,10 +136,15 @@ export class Scheduler {
   }
 
   /**
-   * Arrête les battements. Un tick déjà en vol va jusqu'au bout : l'interrompre laisserait une
-   * écriture à moitié partie vers une vanne.
+   * Arrête les battements et REND la promesse du tick en vol.
+   *
+   * Un tick déjà parti va jusqu'au bout — l'interrompre laisserait une écriture à moitié partie
+   * vers une vanne. Mais l'appelant doit l'attendre : sans ça, les écritures restantes de ce tick
+   * atterrissent APRÈS la remise en état sûr de `onUninit`, et un convecteur qu'on vient
+   * d'éteindre est rallumé par un pas déjà lancé. C'est ce que la SPEC §11.1 existe pour
+   * empêcher, et ça se joue à chaque mise à jour de l'app.
    */
-  stop(): void {
+  stop(): Promise<void> {
     this.started = false;
 
     if (this.intervalId !== null) {
@@ -151,6 +156,10 @@ export class Scheduler {
       this.deferredId = null;
     }
     this.pendingReasons = [];
+
+    // Un pas qui a échoué a déjà été journalisé par `execute` : l'arrêt ne doit pas lever, il doit
+    // seulement attendre que plus rien n'écrive.
+    return this.running === null ? Promise.resolve() : this.running.catch(() => undefined);
   }
 
   /**

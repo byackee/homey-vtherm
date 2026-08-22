@@ -22,6 +22,7 @@
 import type { Reading, SyncMode } from '../lib/types.mjs';
 import { SETPOINT_MAX, SETPOINT_MIN } from '../lib/constants.mjs';
 import { shouldWrite, type LastWrite } from '../lib/writePolicy.mjs';
+import { UnresolvedBindingError } from './hub.mjs';
 import type { CapValue, DeviceSummary, HomeyApiHub, SourceBinding } from './hub.mjs';
 import {
   CALIBRATION_ABS_MAX, EXTERNAL_TEMPERATURE_MAX, EXTERNAL_TEMPERATURE_MIN,
@@ -47,12 +48,26 @@ export interface EmitterAdapter {
   readonly caps: EmitterCapabilities;
   get mode(): EmitterWriteMode;
   get available(): boolean;
+  /**
+   * Vrai quand la dernière commande d'ouverture de vanne n'a PAS pu partir.
+   *
+   * L'app déduit la demande de chaleur de son intention, jamais d'une confirmation de la vanne :
+   * sans ce drapeau, cinq vannes devenues introuvables côté Zigbee2MQTT resteraient à leur
+   * position de nuit pendant que la demande passe `active` et que le relais de chaudière
+   * s'enclenche sur un circuit fermé.
+   */
+  get valveUnconfirmed(): boolean;
   applySetpoint(v: number, nowMs: number): Promise<void>;
   applyValve(percent: number, nowMs: number): Promise<void>;
   applySwitch(on: boolean, nowMs: number): Promise<void>;
   pushRoomTemperature(t: number, mode: SyncMode, nowMs: number): Promise<void>;
   readHeating(nowMs: number): Reading<boolean> | null;
   readBattery(nowMs: number): Reading<number> | null;
+  /**
+   * Rend la vanne neutre quand la dorsale disparaît en cours de route. `false` = elle est restée
+   * figée sur sa dernière ouverture, et l'utilisateur doit le savoir. Voir l'implémentation.
+   */
+  releaseValve(nowMs: number): Promise<boolean>;
   /** SPEC §11.1 : `onDeleted` et `onUninit`. Ne lève jamais — une sortie propre doit aller au bout. */
   restoreSafeState(userSetpoint: number): Promise<void>;
 
@@ -165,6 +180,8 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
   private systemModeBinding: SourceBinding | null = null;
 
   private readonly lastSent = new Map<WriteChannel, LastWrite>();
+  /** Canaux dont on a déjà dit qu'ils n'étaient pas liés. Voir `writeBinding`. */
+  private readonly unresolvedWarned = new Set<WriteChannel>();
 
   /** [ÉCART] SPEC §5.3 : écrit une seule fois, à la liaison de l'émetteur. */
   private sensorSelectApplied = false;
@@ -176,6 +193,8 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
   private calibrationC = 0;
   private backendWarned = false;
   private destroyed = false;
+  /** Voir `EmitterAdapter.valveUnconfirmed`. Faux tant qu'aucune ouverture n'a été tentée. */
+  private valveWriteFailed = false;
 
   constructor(options: EmitterAdapterOptions) {
     this.hub = options.hub;
@@ -220,6 +239,10 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
 
   get available(): boolean {
     return this.summary !== null && this.summary.available;
+  }
+
+  get valveUnconfirmed(): boolean {
+    return this.valveWriteFailed;
   }
 
   setBackend(backend: ValveBackend | null): void {
@@ -333,38 +356,60 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
     if (binding === null) return;
 
     const value = clamp(v, SETPOINT_MIN, SETPOINT_MAX);
-    const wrote = await binding.write(value, { nowMs, maxIntervalMs: this.forceRefreshMs });
+    const wrote = await this.writeBinding(binding, value, { nowMs, maxIntervalMs: this.forceRefreshMs }, 'setpoint');
     if (wrote) this.remember('setpoint', value, nowMs);
   }
 
+  /**
+   * Ouverture de vanne.
+   *
+   * La mémorisation est CONDITIONNÉE au départ réel du message. Mémoriser une écriture qui n'est
+   * pas partie la dédupliquerait pendant l'heure du rafraîchissement forcé : la vanne resterait
+   * à sa position précédente pendant que l'app la croit ouverte. `valveWriteFailed` porte ce
+   * doute jusqu'au participant, qui dégrade alors la demande de chaleur.
+   */
   async applyValve(percent: number, nowMs: number): Promise<void> {
     const backend = this.backend;
     if (backend === null || !backend.available) {
       this.warnNoBackend();
+      this.valveWriteFailed = true;
       return;
     }
 
     // Pas de 1 % accepté par la TRVZB : arrondir AVANT de comparer, sinon 42,4 et 42,6 comptent
     // pour deux écritures vers un appareil qui les ramène toutes deux à 42.
     const value = clamp(Math.round(percent), 0, 100);
-    if (!this.allowWrite('valve', value, nowMs, { maxIntervalMs: this.forceRefreshMs })) return;
+    if (!this.allowWrite('valve', value, nowMs, { maxIntervalMs: this.forceRefreshMs })) {
+      // Déduplication : `lastSent` ne contient QUE des écritures parties, donc la vanne porte
+      // déjà ce qu'on veut d'elle. Le doute est levé — sans cette ligne, un échec passé resterait
+      // collé au thermostat tant que la consigne d'ouverture ne bouge pas, c'est-à-dire une nuit
+      // entière avec la chaudière éteinte alors que la vanne est à la bonne position.
+      this.valveWriteFailed = false;
+      return;
+    }
 
-    await backend.setValveOpening(this.deviceId, value);
-    this.remember('valve', value, nowMs);
+    const sent = await backend.setValveOpening(this.deviceId, value);
+    this.valveWriteFailed = !sent;
+    if (sent) this.remember('valve', value, nowMs);
   }
 
   /**
    * Bascule d'un émetteur de type interrupteur.
    *
-   * Aucun rafraîchissement forcé ici, contrairement à la consigne et à la vanne : le noyau
-   * n'appelle cette méthode que sur une bascule réelle, et réaffirmer périodiquement un relais déjà
-   * dans le bon état l'userait pour rien — un contacteur se compte en commutations.
+   * Écriture FORCÉE, et c'est la seule façon dont elle a un sens : le noyau ne l'appelle que sur
+   * une bascule réelle, sur divergence constatée entre l'état lu du relais et l'état commandé, ou
+   * quand rien n'est encore parti. Laisser la déduplication décider annulerait précisément le cas
+   * de la divergence — le relais est revenu à OFF tout seul après une micro-coupure Zigbee, notre
+   * dernière écriture dit ON, les valeurs coïncident et rien ne repartirait jamais.
+   *
+   * La parcimonie reste entière : c'est le noyau qui décide s'il faut écrire, et lui ne commande
+   * pas sans raison — un contacteur se compte en commutations.
    */
   async applySwitch(on: boolean, nowMs: number): Promise<void> {
     const binding = this.switchBinding;
     if (binding === null) return;
 
-    const wrote = await binding.write(on, { nowMs });
+    const wrote = await this.writeBinding(binding, on, { nowMs, maxIntervalMs: 1 }, 'switch');
     if (wrote) this.remember('switch', on ? 1 : 0, nowMs);
   }
 
@@ -391,15 +436,17 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
 
     if (mode === 'external') {
       if (!this.sensorSelectApplied) {
-        await backend.setTemperatureSensorSelect(this.deviceId, 'external');
-        this.sensorSelectApplied = true;
+        // Non plus « tenté » mais « parti » : sans ce message la vanne continue de réguler sur son
+        // propre thermomètre, et le croire appliqué condamnerait la pièce jusqu'au redémarrage.
+        this.sensorSelectApplied = await backend.setTemperatureSensorSelect(this.deviceId, 'external');
       }
 
       const value = roundTo(clamp(t, EXTERNAL_TEMPERATURE_MIN, EXTERNAL_TEMPERATURE_MAX), 1);
       if (!this.allowWrite('externalTemp', value, nowMs, opts)) return;
 
-      await backend.setExternalTemperature(this.deviceId, value);
-      this.remember('externalTemp', value, nowMs);
+      if (await backend.setExternalTemperature(this.deviceId, value)) {
+        this.remember('externalTemp', value, nowMs);
+      }
       return;
     }
 
@@ -418,7 +465,9 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
     );
     if (!this.allowWrite('calibration', value, nowMs, opts)) return;
 
-    await backend.setLocalTemperatureCalibration(this.deviceId, value);
+    // `calibrationC` n'est lisible nulle part : il ne suit que ce qu'on a réellement écrit. Le
+    // décaler sur une écriture qui n'est pas partie ferait diverger la formule incrémentale.
+    if (!await backend.setLocalTemperatureCalibration(this.deviceId, value)) return;
     this.calibrationC = value;
     this.remember('calibration', value, nowMs);
   }
@@ -461,6 +510,66 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
     return reading;
   }
 
+  /**
+   * Rend la vanne à un état neutre — ouverture 100 %, thermomètre interne, calibrage nul — sans
+   * toucher ni à la consigne, ni à l'interrupteur.
+   *
+   * Appelée quand la dorsale Zigbee2MQTT DISPARAÎT en cours de journée. Le mode retombe bien sur
+   * la consigne, mais la vanne, elle, reste où le TPI l'avait laissée : ramenée à 12 %, elle ne
+   * s'ouvrira plus quelle que soit la consigne écrite ensuite, et une pièce à 16 °C ne montera
+   * jamais à 20. Personne n'en serait averti — c'est le seul repli de l'app qui échouait en
+   * silence.
+   *
+   * La tentative peut évidemment échouer : c'est justement la dorsale qui vient de tomber. D'où le
+   * retour, qui dit si la vanne est réellement rendue ou restée figée.
+   */
+  async releaseValve(nowMs: number): Promise<boolean> {
+    // Aucune ouverture n'a jamais été commandée : rien à rendre, donc rien à signaler.
+    if (!this.lastSent.has('valve')) return true;
+
+    const released = await this.neutralizeValve();
+    // La vanne porte désormais 100 % : la mémoire d'écriture doit le dire, sinon la reprise en
+    // main dédupliquerait la première commande contre une position que la vanne n'a plus.
+    if (released) this.remember('valve', 100, nowMs);
+    return released;
+  }
+
+  /**
+   * Les trois écritures qui rendent une vanne inoffensive.
+   *
+   * Aucune garde sur `backend.available` : la seule situation où l'on veut vraiment les tenter est
+   * celle où la dorsale vient de tomber. Un renoncement d'avance laisserait la vanne fermée sans
+   * même essayer ; les publications, elles, savent renoncer proprement et le dire.
+   */
+  private async neutralizeValve(): Promise<boolean> {
+    const backend = this.backend;
+    if (backend === null) return false;
+
+    let opened = false;
+    await this.safely('valve_opening_degree', async () => {
+      opened = await backend.setValveOpening(this.deviceId, 100);
+    });
+
+    if (this.sensorSelectApplied) {
+      await this.safely('temperature_sensor_select', async () => {
+        // Remis à faux SEULEMENT si le message est parti : au retour de la dorsale, la vanne doit
+        // être rebasculée sur le capteur externe, sinon elle régule pour toujours sur son propre
+        // thermomètre collé au radiateur.
+        if (await backend.setTemperatureSensorSelect(this.deviceId, 'internal')) {
+          this.sensorSelectApplied = false;
+        }
+      });
+    }
+
+    if (this.calibrationC !== 0) {
+      await this.safely('local_temperature_calibration', async () => {
+        if (await backend.setLocalTemperatureCalibration(this.deviceId, 0)) this.calibrationC = 0;
+      });
+    }
+
+    return opened;
+  }
+
   // --- Sortie propre --------------------------------------------------------
 
   /**
@@ -486,18 +595,9 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
       return;
     }
 
-    const backend = this.backend;
-    if (backend !== null && backend.available) {
-      // Rendus AVANT la consigne : une vanne laissée à 20 % d'ouverture, ou attendant une
-      // température externe que plus personne ne publie, ne chauffera pas quelle que soit sa consigne.
-      await this.safely('valve_opening_degree', () => backend.setValveOpening(this.deviceId, 100));
-      if (this.sensorSelectApplied) {
-        await this.safely('temperature_sensor_select', () => backend.setTemperatureSensorSelect(this.deviceId, 'internal'));
-      }
-      if (this.calibrationC !== 0) {
-        await this.safely('local_temperature_calibration', () => backend.setLocalTemperatureCalibration(this.deviceId, 0));
-      }
-    }
+    // Rendue AVANT la consigne : une vanne laissée à 20 % d'ouverture, ou attendant une
+    // température externe que plus personne ne publie, ne chauffera pas quelle que soit sa consigne.
+    await this.neutralizeValve();
 
     const systemMode = this.systemModeBinding;
     if (systemMode !== null) {
@@ -528,6 +628,34 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
   }
 
   // --- Outils privés --------------------------------------------------------
+
+  /**
+   * Écrit sur une liaison en absorbant le SEUL échec attendu : la liaison pas encore résolue.
+   *
+   * C'est l'état normal des premières secondes de l'app — le hub monte en tâche de fond pendant
+   * que le premier tick part. Laisser remonter l'exception ferait une ligne d'erreur par pas et
+   * par canal au démarrage, et noierait celles qui comptent. Une seule ligne par canal, effacée
+   * dès qu'une écriture aboutit : la panne durable reste visible, la mise en route ne bavarde pas.
+   */
+  private async writeBinding(
+    binding: SourceBinding,
+    value: CapValue,
+    opts: { nowMs: number; maxIntervalMs?: number },
+    channel: WriteChannel,
+  ): Promise<boolean> {
+    try {
+      const wrote = await binding.write(value, opts);
+      this.unresolvedWarned.delete(channel);
+      return wrote;
+    } catch (err) {
+      if (!(err instanceof UnresolvedBindingError)) throw err;
+      if (!this.unresolvedWarned.has(channel)) {
+        this.unresolvedWarned.add(channel);
+        this.log(`Émetteur ${this.deviceId} : ${channel} pas encore lié, écriture reportée au prochain pas.`);
+      }
+      return false;
+    }
+  }
 
   private allowWrite(
     channel: WriteChannel,

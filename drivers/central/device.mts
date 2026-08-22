@@ -91,6 +91,7 @@ export default class CentralDevice extends Homey.Device {
   private deviceHost(): DeviceHost {
     return {
       id: this.deviceId(),
+      translate: (key) => this.homey.__(key),
       getCapabilityValue: (capabilityId) => {
         if (!this.hasCapability(capabilityId)) return null;
         const value: unknown = this.getCapabilityValue(capabilityId);

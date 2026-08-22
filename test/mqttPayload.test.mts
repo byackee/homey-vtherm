@@ -6,6 +6,8 @@ import {
   EXTERNAL_TEMPERATURE_MAX,
   buildBridgeDevicesTopic,
   buildBrokerUrl,
+  hostHasCredentials,
+  redactBrokerUrl,
   buildCalibrationPayload,
   buildExternalTemperaturePayload,
   buildSensorSelectPayload,
@@ -333,5 +335,74 @@ test('résolution : deux appareils à la même adresse IEEE ⇒ refus', () => {
   assert.deepEqual(
     resolveFriendlyName({ ieeeAddress: '0x00124B0022AA' }, ambiguous),
     { ok: false, reason: 'ambiguous' },
+  );
+});
+
+// --- Expurgation du mot de passe ---------------------------------------------
+//
+// `locales/*.json` invite à saisir une adresse complète : rien n'empêche d'y écrire
+// `mqtt://user:motdepasse@192.168.1.50`. Cette adresse est journalisée à chaque connexion, et
+// `GET /diagnostics` resert le journal entier.
+
+test('expurgation : le couple identifiant/mot de passe disparaît', () => {
+  assert.equal(
+    redactBrokerUrl('mqtt://user:s3cr3t@192.168.1.50:1883'),
+    'mqtt://***@192.168.1.50:1883',
+  );
+});
+
+test('expurgation : un identifiant seul disparaît aussi', () => {
+  assert.equal(redactBrokerUrl('mqtts://alice@broker.local:8883'), 'mqtts://***@broker.local:8883');
+});
+
+test('expurgation : une adresse sans identifiants n\'est pas touchée', () => {
+  assert.equal(redactBrokerUrl('mqtt://192.168.1.50:1883'), 'mqtt://192.168.1.50:1883');
+  assert.equal(redactBrokerUrl('mqtt://[fd00::1]:1883'), 'mqtt://[fd00::1]:1883');
+  assert.equal(redactBrokerUrl(''), '');
+});
+
+test('expurgation : un mot de passe qui contient un « @ » ne laisse pas fuiter sa tête', () => {
+  // Le `@` retenu est le DERNIER de l'autorité. Prendre le premier laisserait « pass@rest » dans
+  // le journal, c'est-à-dire la moitié du secret.
+  assert.equal(redactBrokerUrl('mqtt://user:a@b@broker.local:1883'), 'mqtt://***@broker.local:1883');
+});
+
+test('expurgation : un « @ » de chemin n\'est pas pris pour des identifiants', () => {
+  assert.equal(redactBrokerUrl('ws://broker.local:9001/mqtt@v5'), 'ws://broker.local:9001/mqtt@v5');
+});
+
+test('expurgation : une adresse sans schéma est traitée pareil', () => {
+  assert.equal(redactBrokerUrl('user:s3cr3t@192.168.1.50:1883'), '***@192.168.1.50:1883');
+});
+
+test('une adresse porteuse d\'identifiants est refusée, pas expurgée', () => {
+  // L'app a deux champs faits pour ça, et eux seuls tiennent le mot de passe hors des réponses
+  // HTTP. L'accepter ici le laisserait voyager dans un champ que la page relit.
+  assert.equal(
+    validateBrokerConfig({ host: 'mqtt://user:s3cr3t@192.168.1.50', port: 1883, baseTopic: 'zigbee2mqtt' }),
+    'host_has_credentials',
+  );
+  assert.equal(
+    validateBrokerConfig({ host: 'alice@broker.local', port: 1883, baseTopic: 'zigbee2mqtt' }),
+    'host_has_credentials',
+  );
+});
+
+test('le refus des identifiants passe avant le port et le base_topic', () => {
+  // Sinon un mot de passe accompagné d'un port fautif se ferait annoncer « port invalide », et
+  // l'utilisateur corrigerait le port en laissant le secret dans le champ.
+  assert.equal(
+    validateBrokerConfig({ host: 'user:p@h', port: 0, baseTopic: 'z2m/#' }),
+    'host_has_credentials',
+  );
+});
+
+test('une adresse propre reste acceptée', () => {
+  assert.equal(hostHasCredentials('192.168.1.50'), false);
+  assert.equal(hostHasCredentials('mqtts://broker.local:8883'), false);
+  assert.equal(hostHasCredentials('  mqtt://user@broker.local '), true);
+  assert.equal(
+    validateBrokerConfig({ host: 'mqtts://broker.local:8883', port: 1883, baseTopic: 'zigbee2mqtt' }),
+    null,
   );
 });

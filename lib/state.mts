@@ -132,6 +132,9 @@ export function createPersistentState(
     dutyCycle: createDutyCycleState(),
     lastRunAtMs: nowMs,
     lastOnPercent: 0,
+    // `null` et non `nowMs` : aucune mesure n'a encore été vue. Dater l'origine du compte à
+    // rebours du mode sécurité sur un démarrage d'app le remettrait à zéro à chaque mise à jour.
+    lastGoodReadingAtMs: null,
   };
 }
 
@@ -199,6 +202,7 @@ export function migratePersistentState(
     dutyCycle: parseDutyCycleState(raw.dutyCycle),
     lastRunAtMs,
     lastOnPercent: readFraction(raw.lastOnPercent),
+    lastGoodReadingAtMs: finiteOrNull(raw.lastGoodReadingAtMs),
   };
 }
 

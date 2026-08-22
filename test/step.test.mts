@@ -66,6 +66,9 @@ function reading<T>(value: T, atMs = 0, stale = false): Reading<T> {
 function inputs(overrides: Partial<VThermInputs> = {}): VThermInputs {
   return {
     roomTemp: reading(18),
+    // Un capteur est désigné. Le passer à faux, c'est un thermostat sans thermomètre ; le laisser
+    // vrai avec `roomTemp: null`, c'est un capteur désigné qui ne répond plus — deux cas distincts.
+    roomSensorBound: true,
     outdoorTemp: reading(5),
     windowContact: null,
     motion: null,
@@ -279,6 +282,23 @@ test('capteur périmé alors que la pièce chauffait : le mode sécurité prend 
     'la puissance de secours n\'écrase pas la dernière valeur vivante');
 });
 
+test('le mode sécurité publie ce qu\'il commande : l\'écran ne ment pas', () => {
+  // La garde du gel de sortie taisait ces trois capabilities pendant la sécurité. Elles gardaient
+  // donc la dernière valeur vivante : 74 % affichés pour 10 % réellement commandés, un facteur
+  // 7,4 gravé dans les Insights, et personne pour voir ce que l'app fait vraiment.
+  let state = freshState();
+  state = stepVTherm(state, inputs(), CONFIG, 0).nextState;
+
+  const { outputs } = stepVTherm(state, inputs({ roomTemp: reading(18, 0, true) }), CONFIG, 300_000);
+
+  assert.equal(outputs.stateLabel, 'safety');
+  assert.equal(outputs.capabilities.vtherm_power_percent, 10);
+  assert.equal(outputs.capabilities.vtherm_valve_open, 10);
+  assert.equal(outputs.capabilities.vtherm_regulated_setpoint, 19);
+  assert.equal('measure_temperature' in outputs.capabilities, false,
+    'la température, elle, n\'est pas connue : on n\'en invente pas');
+});
+
 test('capteur périmé alors que la pièce ne chauffait presque pas : on ne fait rien', () => {
   // Elle n'était pas en danger. Déclencher ferait tourner la chaudière longtemps, sans plus rien
   // pour dire d'arrêter.
@@ -300,23 +320,61 @@ test('aucun capteur désigné : jamais de sécurité', () => {
   let state = freshState();
   state = stepVTherm(state, inputs(), CONFIG, 0).nextState;
 
-  const result = stepVTherm(state, inputs({ roomTemp: null }), CONFIG, 300_000);
+  const result = stepVTherm(state, inputs({ roomTemp: null, roomSensorBound: false }), CONFIG, 300_000);
 
   assert.notEqual(result.outputs.stateLabel, 'safety');
   assert.deepEqual(result.outputs.demand, { kind: 'unknown' });
 });
 
-test('mode consigne : pas de sécurité, l\'émetteur régule tout seul', () => {
-  // Privé de nos écritures, un émetteur en mode consigne tient sa dernière consigne sur son
-  // propre thermomètre. Forcer une puissance reviendrait à se substituer à un régulateur qui
-  // fonctionne. C'est le choix de VT, pour la même raison.
+test('mode consigne : la sécurité impose une consigne de repli, pas une puissance', () => {
+  /*
+   * Ce cas était exclu de la sécurité. Or le mode consigne est le SEUL disponible sans dorsale
+   * MQTT : la sécurité n'était donc jamais armée dans la configuration standalone, c'est-à-dire
+   * dans la panne qu'elle existe pour couvrir. Et l'émetteur laissé à lui-même régule sur son
+   * propre thermomètre, collé au radiateur : il lit chaud, ferme, et la pièce refroidit.
+   *
+   * Une puissance n'a nulle part où aller sur un émetteur qu'on pilote par consigne — c'est donc
+   * une consigne de secours qu'on lui impose.
+   */
   let state = freshState();
   state = stepVTherm(state, inputs({ emitterMode: 'setpoint' }), CONFIG, 0).nextState;
+  assert.ok(state.persistent.lastOnPercent >= CONFIG.safety.minOnPercent);
+
+  const cfg = config({ safety: { ...CONFIG.safety, fallbackSetpoint: 20 } });
+  const result = stepVTherm(
+    state, inputs({ emitterMode: 'setpoint', roomTemp: reading(18, 0, true) }), cfg, 300_000);
+
+  assert.equal(result.outputs.stateLabel, 'safety');
+  assert.equal(result.outputs.setpointToEmitter, 20, 'la consigne de repli part réellement');
+  assert.equal(result.outputs.capabilities.vtherm_regulated_setpoint, 20,
+    'et elle est affichée : la sécurité ne doit pas mentir sur ce qu\'elle commande');
+  assert.equal(result.outputs.warning, 'sensor_stale_safety');
+});
+
+test('mode consigne : la sécurité ne s\'arme pas sur une pièce qui ne chauffait presque pas', () => {
+  let state = freshState();
+  state = stepVTherm(state, inputs({ emitterMode: 'setpoint', roomTemp: reading(19.5) }), CONFIG, 0).nextState;
+  assert.ok(state.persistent.lastOnPercent < CONFIG.safety.minOnPercent);
 
   const result = stepVTherm(
-    state, inputs({ emitterMode: 'setpoint', roomTemp: reading(18, 0, true) }), CONFIG, 300_000);
+    state, inputs({ emitterMode: 'setpoint', roomTemp: reading(19.5, 0, true) }), CONFIG, 300_000);
 
   assert.notEqual(result.outputs.stateLabel, 'safety');
+  assert.equal(result.outputs.setpointToEmitter, null, 'sortie gelée');
+});
+
+test('liaison orpheline : traitée comme un capteur muet, pas comme une absence de capteur', () => {
+  // Un capteur ré-appairé change d'identifiant : la liaison ne rend plus rien, exactement comme
+  // s'il n'y en avait jamais eu. Le déduire de la lecture privait de sécurité le seul cas où l'on
+  // ne peut plus rien attendre du capteur.
+  let state = freshState();
+  state = stepVTherm(state, inputs(), CONFIG, 0).nextState;
+
+  const orphan = inputs({ roomTemp: null, roomSensorBound: true });
+  const result = stepVTherm(state, orphan, CONFIG, 300_000);
+
+  assert.equal(result.outputs.stateLabel, 'safety');
+  assert.equal(result.outputs.warning, 'sensor_stale_safety', 'et non « aucun capteur »');
 });
 
 test('mode sécurité désactivé : la sortie reste gelée', () => {
@@ -674,7 +732,10 @@ test('une demande qui devient inconnue arrête la demande : jamais de chaudière
   let state = freshState();
   state = stepVTherm(state, inputs(), CONFIG, 0).nextState;
 
-  const { outputs } = stepVTherm(state, inputs({ roomTemp: null }), CONFIG, 60_000);
+  // Aucun capteur DÉSIGNÉ : rien à secourir, la demande devient inconnue. Un capteur désigné qui
+  // se tait, lui, passe désormais par le mode sécurité — c'est un autre cas, testé plus haut.
+  const world = inputs({ roomTemp: null, roomSensorBound: false });
+  const { outputs } = stepVTherm(state, world, CONFIG, 60_000);
   assert.deepEqual(outputs.demand, { kind: 'unknown' });
   assert.ok(outputs.events.some((e) => e.kind === 'demand_stopped'));
 });
@@ -874,9 +935,78 @@ test('capteur muet sur un thermostat éteint : rien à annoncer', () => {
 
 test('aucun capteur de pièce lié du tout : traité comme muet', () => {
   const first = stepVTherm(freshState(), inputs(), CONFIG, 0);
-  const none = stepVTherm(first.nextState, inputs({ roomTemp: null }), CONFIG, 60_000);
+  const none = stepVTherm(first.nextState, inputs({ roomTemp: null, roomSensorBound: false }), CONFIG, 60_000);
   assert.ok(none.outputs.events.some((e) => e.kind === 'sensor_quiet'));
   assert.equal(none.outputs.demand.kind, 'unknown');
   assert.equal(none.outputs.setpointToEmitter, null, 'et aucune écriture ne part');
   assert.equal(none.outputs.valvePercent, null);
+});
+
+// --- Avertissement : une clé, et trois cas distincts -------------------------
+//
+// L'ancien texte annonçait « régulation suspendue, aucune commande envoyée » exactement dans le
+// cas où le mode sécurité en envoyait une. Un avertissement qui dit le contraire de ce que fait
+// l'app est pire que pas d'avertissement.
+
+test('aucun capteur lié : la clé le dit, et ce n\'est pas la même que « périmé »', () => {
+  const first = stepVTherm(freshState(), inputs(), CONFIG, 0);
+  const none = stepVTherm(first.nextState, inputs({ roomTemp: null, roomSensorBound: false }), CONFIG, 60_000);
+  assert.equal(none.outputs.warning, 'no_sensor');
+});
+
+test('capteur périmé sans sécurité : régulation suspendue, rien n\'est envoyé', () => {
+  // La pièce ne chauffait pas assez pour que le mode sécurité s'applique.
+  const state = freshState({ lastOnPercent: 0.1, lastGoodReadingAtMs: 0 });
+  const { outputs } = stepVTherm(state, inputs({ roomTemp: reading(18, 0, true) }), CONFIG, 60_000);
+  assert.equal(outputs.warning, 'sensor_stale');
+  assert.equal(outputs.valvePercent, null, 'et l\'avertissement dit vrai : rien ne part');
+});
+
+test('capteur périmé avec sécurité : la clé ne prétend pas que rien n\'est envoyé', () => {
+  const state = freshState({ lastOnPercent: 0.9, lastGoodReadingAtMs: 0 });
+  const { outputs } = stepVTherm(state, inputs({ roomTemp: reading(18, 0, true) }), CONFIG, 60_000);
+  assert.equal(outputs.warning, 'sensor_stale_safety');
+  assert.equal(outputs.stateLabel, 'safety');
+  assert.notEqual(outputs.valvePercent, null, 'une commande part bel et bien');
+});
+
+test('l\'avertissement est une clé de traduction, jamais une phrase', () => {
+  // `lib/` est pur : il ne connaît aucune langue. Une phrase française en dur ferait échouer la
+  // revue Athom dans une app trilingue, et se lirait telle quelle par un utilisateur néerlandais.
+  const state = freshState({ lastOnPercent: 0.9, lastGoodReadingAtMs: 0 });
+  for (const world of [inputs({ roomTemp: null }), inputs({ roomTemp: reading(18, 0, true) })]) {
+    const warning = stepVTherm(state, world, CONFIG, 60_000).outputs.warning;
+    assert.ok(warning !== null);
+    assert.match(warning, /^[a-z_]+$/, `« ${warning} » n'est pas un identifiant de clé`);
+  }
+});
+
+// --- Origine du compte à rebours du mode sécurité ----------------------------
+
+test('l\'instant de la dernière mesure vivante est mémorisé', () => {
+  const { nextState } = stepVTherm(freshState(), inputs(), CONFIG, 42_000);
+  assert.equal(nextState.persistent.lastGoodReadingAtMs, 42_000);
+});
+
+test('capteur muet : l\'instant ne bouge plus, sinon la borne ne serait jamais atteinte', () => {
+  const first = stepVTherm(freshState(), inputs(), CONFIG, 10_000);
+  const quiet = stepVTherm(first.nextState, inputs({ roomTemp: reading(18, 0, true) }), CONFIG, 90_000);
+  assert.equal(quiet.nextState.persistent.lastGoodReadingAtMs, 10_000);
+});
+
+test('mode sécurité : au-delà de 24 h de silence, il abandonne et la chaudière reste éteinte', () => {
+  // C'est le cas de la pile morte en février : sans borne, la vanne resterait à 10 % et la
+  // chaudière tournerait des semaines sur une mesure morte.
+  const day = 24 * 60 * 60 * 1000;
+  const state = freshState({ lastOnPercent: 0.9, lastGoodReadingAtMs: 0 });
+  const world = inputs({ roomTemp: reading(18, 0, true) });
+
+  const within = stepVTherm(state, world, CONFIG, day - 1_000);
+  assert.equal(within.outputs.stateLabel, 'safety');
+  assert.equal(within.outputs.demand.kind, 'active');
+
+  const beyond = stepVTherm(state, world, CONFIG, day + 1_000);
+  assert.notEqual(beyond.outputs.stateLabel, 'safety');
+  assert.equal(beyond.outputs.demand.kind, 'unknown', 'et `unknown` laisse la chaudière éteinte');
+  assert.equal(beyond.outputs.warning, 'sensor_stale', 'l\'avertissement cesse de promettre une chauffe');
 });

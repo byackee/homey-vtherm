@@ -6,11 +6,13 @@
   "main": "app.mjs",
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.runtime-test.json --noEmit",
     "test": "tsc -p tsconfig.test.json && node --test \".testbuild/test/*.test.mjs\"",
     "validate": "homey app validate --level debug",
     "validate:publish": "homey app validate --level publish",
-    "app:run": "homey app run"
+    "app:run": "homey app run",
+    "test:runtime": "tsc -p tsconfig.runtime-test.json && node --experimental-test-module-mocks --test \".runtimebuild/test-runtime/**/*.test.mjs\"",
+    "test:all": "npm test && npm run test:runtime"
   },
   "dependencies": {
     "homey-api": "^3.0.0",

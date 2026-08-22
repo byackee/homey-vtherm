@@ -492,7 +492,12 @@
           case 'timeout':
             return [Homey.__('settings.test_timeout'), 'error'];
           case 'invalid_config':
-            return [Homey.__('settings.test_invalid_config'), 'error'];
+            // Une adresse qui porte des identifiants mérite mieux qu'un « saisie invalide » :
+            // c'est le seul cas où l'utilisateur a écrit quelque chose de plausible, et où on
+            // doit lui dire précisément quel champ utiliser à la place.
+            return result.detail === 'host_has_credentials'
+              ? [Homey.__('settings.test_host_has_credentials'), 'error']
+              : [Homey.__('settings.test_invalid_config'), 'error'];
           default:
             return [Homey.__('settings.test_unknown'), 'error'];
         }

@@ -369,6 +369,15 @@ export interface VThermPersistentState {
    * capteur ferait perdre le seul élément qui permet de décider.
    */
   lastOnPercent: number;
+  /**
+   * Instant de la dernière mesure de pièce exploitable, ou `null` si on n'en a jamais vu.
+   *
+   * Persisté pour la même raison que `lastOnPercent` : c'est l'origine du compte à rebours du
+   * mode sécurité (`SafetyParams.maxDurationMs`). Volatile, il repartirait de zéro à chaque
+   * redémarrage de l'app — et la borne de 24 h ne serait jamais atteinte sur un capteur mort
+   * depuis des semaines, ce qui est précisément le cas qu'elle existe pour fermer.
+   */
+  lastGoodReadingAtMs: number | null;
 
   readonly version: 1;
   preset: Preset;
@@ -514,6 +523,16 @@ export interface VThermConfig {
 /** Instantané du monde à l'instant T. Aucune de ces valeurs n'est lue par le noyau lui-même. */
 export interface VThermInputs {
   roomTemp: Reading<number> | null;
+  /**
+   * Vrai dès qu'un capteur de pièce est DÉSIGNÉ, même s'il ne rend rien.
+   *
+   * Distinct de `roomTemp !== null`, et la distinction n'est pas théorique : une liaison dont
+   * l'appareil a été ré-appairé rend `null` comme une absence de capteur. Déduire l'un de l'autre
+   * faisait passer une liaison orpheline pour une configuration incomplète, donc hors du mode
+   * sécurité — un capteur qui disparaît pour de bon était le seul cas que la sécurité ne couvrait
+   * pas.
+   */
+  roomSensorBound: boolean;
   outdoorTemp: Reading<number> | null;
   windowContact: Reading<boolean> | null;
   motion: Reading<boolean> | null;
@@ -558,6 +577,21 @@ export type VThermEvent =
   | { kind: 'sensor_quiet' }
   | { kind: 'sensor_recovered' };
 
+/**
+ * Avertissement à afficher sur l'appareil, sous forme de CLÉ de traduction.
+ *
+ * `lib/` est pur : il ne connaît aucune langue et ne peut donc pas rendre une phrase. C'est
+ * `runtime/participants.mts` qui traduit. Les trois cas sont distincts et ne se disent pas de la
+ * même façon — en particulier, le mode sécurité ENVOIE une commande, contrairement aux deux autres.
+ */
+export type VThermWarning =
+  /** Aucun capteur de pièce n'est désigné : défaut de configuration, pas panne. */
+  | 'no_sensor'
+  /** Capteur désigné mais muet, et le mode sécurité ne s'applique pas : régulation suspendue. */
+  | 'sensor_stale'
+  /** Capteur muet, mode sécurité actif : une puissance de repli est bel et bien commandée. */
+  | 'sensor_stale_safety';
+
 export interface VThermOutputs {
   stateLabel: EffectiveState;
   /** `null` = ne rien écrire (valeur dédupliquée, ou régulation suspendue). */
@@ -587,5 +621,6 @@ export interface VThermOutputs {
   events: VThermEvent[];
   /** Prochain instant où une décision changera sans nouvelle entrée. Remplace TOUS les `setTimeout`. */
   wakeUpAtMs: number | null;
-  warning: string | null;
+  /** Clé de traduction, jamais une phrase : voir `VThermWarning`. */
+  warning: VThermWarning | null;
 }

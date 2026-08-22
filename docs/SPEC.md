@@ -336,6 +336,17 @@ Les écritures de synchronisation partent **à chaque nouvelle mesure du capteur
 de régulation, mais restent soumises à `auto_regulation_dtemp` et `auto_regulation_period_min` — voir
 §5.5 : ces vannes sont sur piles.
 
+### 5.3bis Quand la dorsale MQTT tombe en cours de journée
+
+Le mode retombe sur la consigne, mais la vanne, elle, **reste physiquement figée sur sa dernière
+ouverture**. Ramenée à 12 % par le TPI, elle ne pourra plus ouvrir au-delà quelle que soit la
+consigne écrite ensuite : une pièce à 16 °C avec une consigne à 20 ne montera jamais.
+
+À la perte de la dorsale, la vanne est donc **neutralisée** — ouverture 100 %, capteur interne,
+calibrage à zéro — et un avertissement est posé sur l'appareil, retiré au retour. Une vanne grande
+ouverte avec une consigne juste chauffe ; une vanne à 12 % ne chauffe pas. L'asymétrie penche
+nettement d'un côté.
+
 ### 5.4 Anti-écho et changement manuel sur l'émetteur
 
 En mode offset, l'app écrit `consigne + offset` sur l'émetteur ; Z2M renvoie cette valeur. Si l'app
@@ -356,8 +367,10 @@ Cinq TRVZB × (ouverture + fermeture + consigne + température externe) toutes l
 6 000 écritures Zigbee par jour, sur des appareils alimentés par piles. VT justifie explicitement ses
 seuils par là. Trois règles :
 
-1. **Coalescence** : les recalculs hors pas (§3) sont regroupés — au plus un pas toutes les 30 secondes,
-   quel que soit le nombre d'événements reçus.
+1. **Coalescence** : les recalculs hors pas (§3) sont regroupés — au plus un pas toutes les
+   **5 secondes**, quel que soit le nombre d'événements reçus. À ne pas confondre avec le battement
+   de l'ordonnanceur (10 s), qui est la ronde vérifiant qui est dû : les avoir confondus faisait
+   attendre une demi-minute qu'une consigne modifiée à la main produise un effet.
 2. **Seuil de variation** : aucune écriture si l'écart avec la dernière valeur envoyée est inférieur à
    `regulation_threshold` (vanne) ou `auto_regulation_dtemp` (consigne).
 3. **Rafraîchissement forcé** : une écriture périodique est malgré tout imposée par `maxInterval`, sans
@@ -511,6 +524,22 @@ indiquer de supprimer les appareils avant de désinstaller.
 Le **mode sécurité** a finalement été implémenté (voir `lib/safety.mts`) : le laisser de côté
 revenait à accepter qu'une pile morte laisse une pièce sans chauffage une nuit d'hiver, ce qui n'est
 pas une fonctionnalité manquante mais un filet absent.
+
+Il a été étendu après revue, parce qu'une première version ne couvrait pas le cas qui compte :
+
+- **En pilotage par vanne**, il force une puissance minimale (10 % par défaut) et **maintient la
+  demande de chaleur** — sans quoi la vanne s'ouvrirait sur un circuit froid et ne chaufferait rien.
+- **En pilotage par consigne**, il force une **consigne de secours** plutôt qu'une puissance : une
+  puissance n'a aucun sens sur un émetteur qu'on pilote par consigne. Réservé d'abord au mode
+  vanne, il était inerte dans la configuration sans broker MQTT — c'est-à-dire dans le cas
+  majoritaire, et exactement la panne qu'il devait couvrir.
+- **En pilotage par interrupteur**, il ne s'applique pas : le relais est **coupé**. Un convecteur a
+  sa propre source d'énergie ; le geler dans son dernier état le laisserait chauffer sans limite et
+  sans personne pour l'arrêter. C'est l'inverse d'une vanne, qui est passive.
+- Une **liaison orpheline** — capteur ré-appairé, donc identifiant obsolète — compte comme un
+  capteur muet, pas comme une absence de capteur.
+- Durée maximale de **24 h**. Au-delà, la sécurité abandonne : une chaudière qui tourne des jours
+  sur un capteur mort est un risque plus grand que le gel qu'on cherchait à éviter.
 
 Restent hors v1, sans que l'architecture les rende coûteux : **délestage par puissance**, **auto start/stop prédictif**,
 **détection d'anomalie de chauffe**, **réparation d'état incorrect**, **Auto-TPI** (apprentissage

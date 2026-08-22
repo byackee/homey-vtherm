@@ -254,3 +254,26 @@ test('restoreVThermState relit le durable et repart d\'un volatile neuf', () => 
   assert.equal(state.volatile.lastWrite.setpoint, null);
   assert.equal(state.volatile.lastPublished.stateLabel, null);
 });
+
+// --- Origine du compte à rebours du mode sécurité ---------------------------
+
+test('lastGoodReadingAtMs se relit du store, et vaut null quand il n\'y était pas', () => {
+  // Persisté pour la même raison que `lastOnPercent` : volatile, il repartirait de zéro à chaque
+  // redémarrage et la borne de 24 h du mode sécurité ne serait jamais atteinte sur un capteur
+  // mort depuis des semaines — le cas même qu'elle existe pour fermer.
+  assert.equal(migratePersistentState(validRaw({ lastGoodReadingAtMs: 1234 }), NOW, DEFAULTS).lastGoodReadingAtMs, 1234);
+  assert.equal(migratePersistentState(validRaw(), NOW, DEFAULTS).lastGoodReadingAtMs, null);
+});
+
+test('lastGoodReadingAtMs illisible : null, jamais un NaN ni une origine inventée', () => {
+  for (const bogus of ['hier', Number.NaN, Number.POSITIVE_INFINITY, {}, null]) {
+    const state = migratePersistentState(validRaw({ lastGoodReadingAtMs: bogus }), NOW, DEFAULTS);
+    assert.equal(state.lastGoodReadingAtMs, null, `valeur relue : ${String(bogus)}`);
+  }
+});
+
+test('un état neuf n\'invente pas d\'origine de mesure', () => {
+  // `nowMs` ferait croire qu'une mesure vient d'arriver : la sécurité repartirait pour 24 h à
+  // chaque mise à jour de l'app.
+  assert.equal(createPersistentState(NOW, DEFAULTS).lastGoodReadingAtMs, null);
+});

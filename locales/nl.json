@@ -63,7 +63,9 @@
       "unavailable": "De lijst met apparaten voor deze bron kon niet geladen worden.",
       "unknown_thermostat": "Deze thermostaat bestaat niet meer. Laad de pagina opnieuw.",
       "failed": "Je thermostaten konden niet gelezen worden: {{detail}}",
-      "no_room": "Geen kamer"
+      "no_room": "Geen kamer",
+      "unknown_source": "Onbekende bron. Herlaad de pagina en probeer opnieuw.",
+      "invalid_device": "Dit apparaat past niet bij deze bron. Herlaad de pagina en kies er een uit de lijst."
     },
     "backbone_title": "Zigbee2MQTT-ruggengraat",
     "backbone_subtitle": "Optioneel. Ontgrendelt directe kraanbesturing op SONOFF TRVZB en vergelijkbare kranen.",
@@ -75,7 +77,7 @@
     "enabled": "Zigbee2MQTT-ruggengraat inschakelen",
     "enabled_hint": "Wordt van kracht zodra de app herstart.",
     "host": "Adres",
-    "host_hint": "Hostnaam of IP-adres van de broker. Een schema en een poort mogen erbij, bijvoorbeeld mqtts://broker.local:8883.",
+    "host_hint": "Hostnaam of IP-adres van de broker. Een schema en een poort mogen erbij, bijvoorbeeld mqtts://broker.local:8883. Nooit een gebruikersnaam of wachtwoord: die horen in de twee velden hieronder.",
     "port": "Poort",
     "username": "Gebruikersnaam",
     "username_hint": "Laat leeg als uw broker anonieme verbindingen accepteert.",
@@ -113,11 +115,24 @@
     "tab": {
       "sources": "Thermostaten",
       "backbone": "Zigbee2MQTT"
-    }
+    },
+    "test_host_has_credentials": "Zet geen gebruikersnaam of wachtwoord in het adres. Gebruik de twee velden hieronder: alleen die houden het wachtwoord uit het logboek."
   },
   "device": {
     "no_emitter": "Er is geen verwarming gekoppeld. Gebruik Repareren om er een te kiezen.",
     "central_duplicate": "Er bestaat al een andere centrale configuratie. Slechts één is toegestaan — verwijder deze.",
-    "sync_restart": "Opgeslagen. De schrijfinterval-instellingen voor de verwarming worden actief na een herstart van de app."
+    "sync_restart": "Opgeslagen. De schrijfinterval-instellingen voor de verwarming worden actief na een herstart van de app.",
+    "warning": {
+      "no_sensor": "Geen bruikbare kamertemperatuursensor: de regeling is opgeschort en er wordt niets naar de verwarming gestuurd.",
+      "sensor_stale": "De kamertemperatuurmeting is verouderd: de regeling is opgeschort en er wordt niets naar de verwarming gestuurd.",
+      "sensor_stale_safety": "De kamertemperatuurmeting is verouderd. De veiligheidsmodus houdt een terugval aan tot de sensor terugkomt, daarna geeft hij op.",
+      "valve_stuck": "De Zigbee2MQTT-verbinding is weggevallen en de klep bleef op zijn laatste opening staan: de kamer verwarmt mogelijk niet, ongeacht het instelpunt. De regeling gaat verder via het instelpunt."
+    }
+  },
+  "flow": {
+    "error": {
+      "unknown_presence": "Onbekende aanwezigheidswaarde.",
+      "unknown_preset": "Onbekende preset."
+    }
   }
 }

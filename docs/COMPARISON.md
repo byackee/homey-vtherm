@@ -40,13 +40,19 @@ et les quatre modes centraux avec leur sémantique réelle : seul `stopped` arr�
 `heat_only` continuent de réguler.
 
 **Mode sécurité.** Capteur muet, seuil de déclenchement sur la dernière puissance connue (0,5 par
-défaut), puissance de repli (0,1), désactivation en mode consigne — mêmes valeurs et même
-raisonnement que VT, y compris le refus de secourir une pièce qui ne chauffait presque pas.
+défaut), puissance de repli (0,1) — mêmes valeurs et même raisonnement que VT, y compris le refus de
+secourir une pièce qui ne chauffait presque pas.
 
-Deux différences, dans notre sens : la demande de chaleur est **maintenue** pendant la sécurité,
-sans quoi la vanne s'ouvrirait sur un circuit froid et ne chaufferait rien ; et l'utilisateur est
-**prévenu** — avertissement sur l'appareil, carte Flow « le capteur se tait » — là où VT compense
-en silence. Secourir et signaler, pas l'un ou l'autre.
+Quatre différences, toutes dans notre sens. La demande de chaleur est **maintenue** pendant la
+sécurité, sans quoi la vanne s'ouvrirait sur un circuit froid. En pilotage par consigne, où VT
+désactive la sécurité, nous forçons une **consigne de secours** — la désactiver laissait le filet
+inerte dans la configuration sans broker, c'est-à-dire dans le cas majoritaire. En pilotage par
+interrupteur, le relais est **coupé** plutôt que figé : un convecteur a sa propre source d'énergie.
+Et la sécurité **abandonne au bout de 24 h**, parce qu'une chaudière qui tourne des jours sur un
+capteur mort est un risque plus grand que le gel.
+
+Enfin l'utilisateur est **prévenu** — avertissement sur l'appareil, carte Flow « le capteur se
+tait » — là où VT compense en silence. Secourir et signaler, pas l'un ou l'autre.
 
 **Pilotage par interrupteur (`over_switch`).** Le pourcentage du TPI devient du temps de marche :
 30 % sur un cycle de dix minutes, c'est trois minutes allumé puis sept éteint. Avec les deux gardes

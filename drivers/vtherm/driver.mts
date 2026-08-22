@@ -315,7 +315,7 @@ export default class VThermDriver extends Homey.Driver {
     this.homey.flow.getActionCard('force_presence').registerRunListener(
       async (args: { device: VThermDevice; presence: string }) => {
         const override = PRESENCE_OVERRIDES.find((value) => value === args.presence);
-        if (override === undefined) throw new Error(`Présence inconnue : ${args.presence}`);
+        if (override === undefined) throw new Error(this.homey.__('flow.error.unknown_presence'));
         args.device.applyPresenceOverride(override);
       },
     );
@@ -329,7 +329,7 @@ export default class VThermDriver extends Homey.Driver {
 
   private requirePreset(value: string): Preset {
     const preset = toPreset(value);
-    if (preset === null) throw new Error(`Preset inconnu : ${value}`);
+    if (preset === null) throw new Error(this.homey.__('flow.error.unknown_preset'));
     return preset;
   }
 

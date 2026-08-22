@@ -14,7 +14,7 @@
 import type {
   CentralMode, Demand, EffectiveState, Preset, Reading, StateContext,
   VThermConfig, VThermEvent, VThermInputs, VThermLastWrite, VThermOutputs, VThermState,
-  WindowMemento, WindowPhase,
+  VThermWarning, WindowMemento, WindowPhase,
 } from './types.mjs';
 import { SETPOINT_MAX, SETPOINT_MIN, SETPOINT_STEP } from './constants.mjs';
 import { stepDutyCycle } from './dutyCycle.mjs';
@@ -231,12 +231,18 @@ export function stepVTherm(
   //
   // Évalué avant la régulation : il décide quoi faire quand il n'y a précisément rien à réguler.
 
+  // Une liaison orpheline — capteur ré-appairé, donc introuvable — rend `null` exactement comme
+  // une absence de capteur. La déduire de la lecture faisait passer un capteur DISPARU pour un
+  // capteur jamais configuré, et la sécurité ne s'armait pas dans le seul cas où on ne peut plus
+  // rien attendre du capteur. C'est le device qui sait s'il en a désigné un.
   const safety = evaluateSafety({
-    sensorStale: inputs.roomTemp !== null && roomTemp === null,
-    sensorBound: inputs.roomTemp !== null,
+    sensorStale: inputs.roomSensorBound && roomTemp === null,
+    sensorBound: inputs.roomSensorBound,
     emitterMode: inputs.emitterMode,
     lastOnPercent: persistent.lastOnPercent,
     onoff: inputs.onoff,
+    lastGoodReadingAtMs: persistent.lastGoodReadingAtMs,
+    nowMs,
   }, config.safety);
 
   // === 8. Régulation =======================================================
@@ -247,7 +253,7 @@ export function stepVTherm(
   let regulatedSetpoint: number | null = null;
   /**
    * Puissance visée par un émetteur de type interrupteur, avant découpage temporel.
-   * `null` = ne pas toucher au relais du tout — c'est le gel de sortie du capteur muet.
+   * `null` = l'émetteur n'est pas un interrupteur, il n'y a rien à découper.
    */
   let switchDemand: number | null = null;
 
@@ -262,16 +268,16 @@ export function stepVTherm(
     switchDemand = inputs.emitterMode === 'switch' ? 0 : null;
     regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint);
   } else if (roomTemp === null) {
-    // Capteur de pièce muet : SORTIE GELÉE. On ne calcule rien, on n'écrit rien, on n'accumule
-    // rien. Continuer le TPI sur une température figée, c'est l'emballement thermique : l'écart
-    // resterait constant, la vanne s'ouvrirait un peu plus à chaque cycle et personne ne le verrait
-    // avant d'entrer dans la pièce. `regulationState` reste tel quel : à la reprise, l'intégrale
-    // repart de là où la mesure s'est tue, pas de zéro.
+    // Capteur de pièce muet : SORTIE GELÉE, sauf sur un relais (voir plus bas). On ne calcule
+    // rien, on n'accumule rien. Continuer le TPI sur une température figée, c'est l'emballement
+    // thermique : l'écart resterait constant, la vanne s'ouvrirait un peu plus à chaque cycle et
+    // personne ne le verrait avant d'entrer dans la pièce. `regulationState` reste tel quel : à la
+    // reprise, l'intégrale repart de là où la mesure s'est tue, pas de zéro.
     //
     // Sauf si le mode sécurité s'applique : geler la sortie coupe la demande de chaleur, donc la
-    // chaudière, et une pièce qui chauffait franchement se retrouve sans rien. On force alors une
-    // puissance minimale plutôt que de s'arrêter.
-    if (safety.active) {
+    // chaudière, et une pièce qui chauffait franchement se retrouve sans rien. On force alors un
+    // repli minimal plutôt que de s'arrêter — exprimé dans l'unité de l'émetteur.
+    if (safety.active && inputs.emitterMode === 'valve') {
       onPercent = safety.onPercent;
       valveTarget = computeOpeningDegree(onPercent, {
         minOpeningDegree: config.minOpeningDegree,
@@ -280,6 +286,21 @@ export function stepVTherm(
         openingThreshold: config.openingThreshold,
       });
       regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint);
+    } else if (safety.active) {
+      // Mode consigne : une puissance n'a nulle part où aller, c'est une CONSIGNE de secours qu'on
+      // impose. Sans elle, l'émetteur reste sur la dernière valeur écrite avant la panne — qui
+      // peut être une consigne décalée vers le bas par l'auto-régulation, ou l'éco de la nuit.
+      // Un réglage illisible retombe sur la consigne effective, jamais sur un NaN qui partirait
+      // vers l'émetteur.
+      regulatedSetpoint = toEmitterSetpoint(
+        Number.isFinite(safety.setpoint) ? safety.setpoint : effectiveSetpoint,
+      );
+    } else if (inputs.emitterMode === 'switch') {
+      // Le gel de sortie est le bon repli pour une VANNE : passive, sans eau chaude dedans elle ne
+      // chauffe rien, et la demande passant à `unknown` la chaudière s'éteint d'elle-même. Un
+      // relais, lui, a sa propre source d'énergie : le laisser dans son état, c'est un convecteur
+      // allumé pour toujours sur une mesure morte. Le seul repli sûr est de COUPER.
+      switchDemand = 0;
     }
   } else {
     // `on_percent` est calculé dans les DEUX modes : SPEC §2.3 définit `vtherm_power_percent`
@@ -325,8 +346,8 @@ export function stepVTherm(
   // du pas (§14). Sans ce réveil, la coupure n'aurait lieu qu'au battement suivant et la puissance
   // réellement délivrée dépendrait de la période d'ordonnancement au lieu du calcul.
   //
-  // `switchDemand === null` (capteur muet) : on ne touche pas au relais et le cycle n'avance pas.
-  // Réaffirmer un état sur une mesure figée reviendrait à réguler sans mesure.
+  // `switchDemand === null` : rien à découper, l'émetteur n'est pas un interrupteur. Sur un
+  // capteur muet la demande vaut 0 et le relais est coupé — un relais ne se gèle pas, voir §8.
 
   let dutyCycle = persistent.dutyCycle;
   let switchCommanded: boolean | null = null;
@@ -348,10 +369,19 @@ export function stepVTherm(
     switchCommanded = duty.commanded;
     dutyWakeUpAtMs = duty.wakeUpAtMs;
 
+    // Le relais a pu diverger sans nous : micro-coupure Zigbee (la prise revient sur son
+    // `power_on_behavior`, souvent OFF), coupure de courant, bascule à la main. À puissance
+    // saturée (`on_percent >= 1`) l'état commandé ne change JAMAIS, donc `duty.changed` est
+    // éternellement faux et plus aucune écriture ne partirait : la pièce resterait froide toute la
+    // journée pendant que l'app affiche « en chauffe ». Réaffirmer sur DIVERGENCE plutôt que
+    // périodiquement ne coûte aucune commutation tant qu'il n'y en a pas — et un contacteur a une
+    // durée de vie qui se compte en commutations.
+    const diverged = emitterHeating !== null && emitterHeating !== duty.commanded;
+
     // Une écriture inutile use le contacteur autant qu'une utile : on ne commande que sur bascule
-    // réelle, ou tant que rien n'est parti depuis le démarrage de l'app — auquel cas le relais peut
-    // avoir été basculé à la main pendant l'arrêt, et l'écart ne serait jamais rattrapé.
-    if (duty.changed || volatile.lastWrite.switchOn === null) {
+    // réelle, sur divergence constatée, ou tant que rien n'est parti depuis le démarrage de l'app
+    // — auquel cas le relais peut avoir été basculé à la main pendant l'arrêt.
+    if (duty.changed || diverged || volatile.lastWrite.switchOn === null) {
       switchOn = duty.commanded;
     }
   }
@@ -363,12 +393,21 @@ export function stepVTherm(
     // Décision définitive et non une ignorance : on vient de commander la fermeture.
     demand = { kind: 'inactive' };
   } else if (roomTemp === null) {
-    // Le mode sécurité vient de commander une ouverture minimale : c'est une demande DÉLIBÉRÉE,
-    // pas une ignorance. Sans ça l'agrégateur laisserait la chaudière éteinte et la vanne
-    // s'ouvrirait sur un circuit froid — tout le travail du mode sécurité pour rien.
-    demand = safety.active
-      ? { kind: 'active', percent: valveTarget ?? 0 }
-      : { kind: 'unknown' };
+    if (safety.active && inputs.emitterMode === 'valve') {
+      // Le mode sécurité vient de commander une ouverture minimale : c'est une demande DÉLIBÉRÉE,
+      // pas une ignorance. Sans ça l'agrégateur laisserait la chaudière éteinte et la vanne
+      // s'ouvrirait sur un circuit froid — tout le travail du mode sécurité pour rien.
+      demand = { kind: 'active', percent: valveTarget ?? 0 };
+    } else if (safety.active && emitterHeating !== null) {
+      // Mode consigne : la sécurité a donné une consigne de secours, c'est l'émetteur qui dit s'il
+      // chauffe. On ne l'invente pas plus ici que dans le cas nominal.
+      demand = emitterHeating ? { kind: 'active', percent: 0 } : { kind: 'inactive' };
+    } else if (inputs.emitterMode === 'switch') {
+      // Le relais vient d'être coupé : ce n'est pas une ignorance, c'est une décision.
+      demand = { kind: 'inactive' };
+    } else {
+      demand = { kind: 'unknown' };
+    }
   } else if (inputs.emitterMode === 'valve') {
     // MÊME prédicat que `computeOpeningDegree` : sans ça, on finirait par compter une vanne
     // commandée ouverte comme inactive, ou l'inverse. `openingThreshold` est sur l'échelle de
@@ -569,7 +608,12 @@ export function stepVTherm(
   if (roomTemp !== null) {
     capabilities.measure_temperature = roomTemp;
   }
-  if (!roomSensorMute || heatSuppressed) {
+  // Deux cas de plus où il y a bel et bien quelque chose à montrer, capteur muet ou non : le mode
+  // sécurité, qui CALCULE une ouverture ou une consigne et les envoie réellement au matériel, et
+  // le relais coupé faute de mesure — une commande, pas un gel. Les taire affichait la dernière
+  // valeur vivante : 74 % à l'écran pour 10 % commandés, un facteur 7,4 gravé dans les Insights,
+  // et un utilisateur qui ne peut pas voir ce que l'app fait.
+  if (!roomSensorMute || heatSuppressed || safety.active || switchDemand !== null) {
     capabilities.vtherm_power_percent = roundTo(onPercent * 100, 1);
     if (valveTarget !== null) {
       capabilities.vtherm_valve_open = valveTarget;
@@ -595,11 +639,17 @@ export function stepVTherm(
   // qui n'expose pas son état de chauffe serait un bandeau que l'utilisateur apprendrait à ignorer.
   // Rien à signaler sur un appareil éteint.
 
-  let warning: string | null = null;
+  // Une CLÉ, jamais une phrase : `lib/` ne connaît aucune langue, `runtime/` traduit.
+  //
+  // Trois cas et non deux. L'ancien texte annonçait « aucune commande envoyée » y compris quand le
+  // mode sécurité venait d'en envoyer une — l'avertissement disait alors exactement le contraire
+  // de ce que faisait l'app, ce qui est pire que pas d'avertissement du tout.
+  // `roomSensorBound` et non la lecture : une liaison orpheline est un capteur muet, pas un
+  // thermostat sans thermomètre, et les deux ne se corrigent pas de la même façon.
+  let warning: VThermWarning | null = null;
   if (sensorQuiet) {
-    warning = inputs.roomTemp === null
-      ? 'Aucun capteur de température de pièce exploitable : régulation suspendue.'
-      : 'Mesure de température de pièce périmée : régulation suspendue, aucune commande envoyée.';
+    if (!inputs.roomSensorBound) warning = 'no_sensor';
+    else warning = safety.active ? 'sensor_stale_safety' : 'sensor_stale';
   }
 
   // === 17. État suivant ====================================================
@@ -618,6 +668,10 @@ export function stepVTherm(
       // Mémorisée seulement quand la mesure est vivante : c'est ce que le mode sécurité
       // interrogera si le capteur se tait, et une valeur de secours l'écraserait.
       lastOnPercent: roomTemp === null ? persistent.lastOnPercent : onPercent,
+      // Origine du compte à rebours du mode sécurité : l'instant de la dernière mesure VIVANTE.
+      // Comme `lastOnPercent`, elle ne bouge pas tant que le capteur se tait — sans quoi la borne
+      // de durée maximale ne serait jamais atteinte.
+      lastGoodReadingAtMs: roomTemp === null ? persistent.lastGoodReadingAtMs : nowMs,
     },
     volatile: {
       slope: slopeState,

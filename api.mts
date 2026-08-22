@@ -347,7 +347,7 @@ export default {
    */
   async getSourceCandidates({ homey, query }: Request): Promise<CandidateSummary[]> {
     const source = asSourceKey(query['source']);
-    if (source === null) throw new Error(`Source inconnue : ${String(query['source'])}`);
+    if (source === null) throw new Error(homey.__('settings.sources.unknown_source'));
 
     const driver = vthermDriver(homey);
     if (driver === null) throw new Error(homey.__('pair.error.no_api'));
@@ -361,17 +361,38 @@ export default {
    * `rebindSource` porte toute la logique : elle refuse de vider `room` et `emitter` avec le
    * message traduit `pair.error.incomplete`, recharge l'appareil quand l'émetteur change, et
    * redemande un pas de régulation. Rien de tout cela n'est répété ici.
+   *
+   * L'identifiant demandé est en revanche VALIDÉ ici, et pas seulement affiché par la page.
+   * `rebindSource` ne vérifie ni l'existence, ni la classe, ni les capabilities de l'appareil :
+   * le filtre vivait uniquement dans la liste, donc côté client. Un appel direct pouvait donc
+   * désigner une lampe comme émetteur — elle serait pilotée en découpage temporel — ou, pire, un
+   * thermostat de cette app comme émetteur d'un autre, ce qui referme exactement la boucle de
+   * régulation que `isOwnDevice` existe pour empêcher.
    */
   async setThermostatSource({ homey, body }: Request): Promise<SourceView> {
     const source = asSourceKey(body['source']);
-    if (source === null) throw new Error(`Source inconnue : ${String(body['source'])}`);
+    if (source === null) throw new Error(homey.__('settings.sources.unknown_source'));
 
     const thermostatId = optionalString(body['deviceId']) ?? '';
     const device = vthermDevices(homey).find((candidate) => thermostatKey(candidate) === thermostatId);
     if (device === undefined) throw new Error(homey.__('settings.sources.unknown_thermostat'));
 
     const raw = optionalString(body['sourceDeviceId']);
-    await device.rebindSource(source, raw !== undefined && raw !== '' ? raw : null);
+    const sourceDeviceId = raw !== undefined && raw !== '' ? raw : null;
+
+    if (sourceDeviceId !== null) {
+      const driver = vthermDriver(homey);
+      if (driver === null) throw new Error(homey.__('pair.error.no_api'));
+
+      // La MÊME fonction que la page, jamais une réécriture « presque » identique : deux filtres
+      // de sécurité qui dérivent l'un de l'autre, c'est un filtre de moins au premier oubli.
+      const candidates = await driver.listCandidates({ source });
+      if (!candidates.some((candidate) => candidate.id === sourceDeviceId)) {
+        throw new Error(homey.__('settings.sources.invalid_device'));
+      }
+    }
+
+    await device.rebindSource(source, sourceDeviceId);
 
     // La page se réaligne sur ce que l'appareil porte VRAIMENT, pas sur ce qu'elle a demandé.
     const hub = hubOf(homey);

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": ".runtimebuild/",
+    "noEmit": false
+  },
+  "include": ["lib/**/*.mts", "runtime/**/*.mts", "drivers/**/*.mts", "test-runtime/**/*.mts"],
+  "exclude": ["node_modules", ".homeybuild", ".testbuild", ".runtimebuild"]
+}

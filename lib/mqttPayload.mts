@@ -157,16 +157,63 @@ export interface BrokerConfig {
   baseTopic: string;
 }
 
-export type ConfigProblem = 'host_missing' | 'port_invalid' | 'base_topic_invalid';
+export type ConfigProblem =
+  | 'host_missing'
+  | 'port_invalid'
+  | 'base_topic_invalid'
+  /** L'adresse porte une `userinfo` (`user:motdepasse@…`). Refusée, voir plus bas. */
+  | 'host_has_credentials';
+
+/** Ce qui remplace la `userinfo` dans toute adresse journalisée ou affichée. */
+const REDACTED_USERINFO = '***';
+
+/** Découpe une adresse en `{schéma, autorité, reste}` sans rien valider : usage interne. */
+function splitAuthority(url: string): { scheme: string; authority: string; rest: string } {
+  const scheme = /^[a-z]+:\/\//i.exec(url)?.[0] ?? '';
+  const afterScheme = url.slice(scheme.length);
+  // L'autorité s'arrête au premier `/` : un mot de passe ne se cache pas dans un chemin, et
+  // découper au-delà transformerait un `@` de chemin en fausse détection d'identifiants.
+  const pathStart = afterScheme.indexOf('/');
+  return pathStart === -1
+    ? { scheme, authority: afterScheme, rest: '' }
+    : { scheme, authority: afterScheme.slice(0, pathStart), rest: afterScheme.slice(pathStart) };
+}
+
+/**
+ * Remplace la `userinfo` d'une adresse de broker par `***`.
+ *
+ * `locales/*.json` invite à saisir une adresse complète, schéma et port compris : rien n'empêche
+ * d'y écrire `mqtt://user:motdepasse@192.168.1.50`. Cette adresse est journalisée à chaque
+ * connexion, et `GET /diagnostics` resert le journal entier. Le mot de passe du broker n'a rien à
+ * y faire.
+ *
+ * Le `@` retenu est le DERNIER de l'autorité : un mot de passe peut légitimement en contenir un.
+ */
+export function redactBrokerUrl(url: string): string {
+  const { scheme, authority, rest } = splitAuthority(url);
+  const at = authority.lastIndexOf('@');
+  if (at === -1) return url;
+  return `${scheme}${REDACTED_USERINFO}@${authority.slice(at + 1)}${rest}`;
+}
+
+/** Vrai quand l'adresse saisie porte une `userinfo`, avec ou sans mot de passe. */
+export function hostHasCredentials(host: string): boolean {
+  return splitAuthority(host.trim()).authority.includes('@');
+}
 
 /**
  * Valide la saisie de la page de réglages avant toute tentative réseau.
  *
  * Un port hors plage ou un `base_topic` à joker doit se voir comme une erreur de saisie, pas se
  * déguiser en « broker injoignable » après dix secondes d'attente.
+ *
+ * Une adresse porteuse d'identifiants est refusée plutôt qu'expurgée : l'app a deux champs faits
+ * pour ça, et eux seuls tiennent le mot de passe hors des réponses HTTP et du journal. L'accepter
+ * ici reviendrait à laisser un secret voyager dans un champ qui, lui, est relu par la page.
  */
 export function validateBrokerConfig(config: BrokerConfig): ConfigProblem | null {
   if (config.host.trim() === '') return 'host_missing';
+  if (hostHasCredentials(config.host)) return 'host_has_credentials';
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) return 'port_invalid';
   if (buildBridgeDevicesTopic(config.baseTopic) === null) return 'base_topic_invalid';
   return null;

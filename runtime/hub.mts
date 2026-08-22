@@ -146,6 +146,22 @@ export interface WriteRequest extends WriteOptions {
   nowMs: number;
 }
 
+/**
+ * L'écriture n'est pas partie parce que la liaison n'a pas (ou plus) d'appareil résolu.
+ *
+ * Distincte d'une erreur d'écriture, et surtout distincte d'une déduplication : c'est l'état
+ * NORMAL des premières secondes de l'app, pendant que `hub.start()` monte en tâche de fond. Un
+ * appelant qui peut réessayer au tick suivant l'absorbe sans bruit ; un appelant qui tient un état
+ * optimiste — l'agrégateur de chaudière — doit revenir en arrière, sans quoi il croira avoir
+ * commandé un relais que personne n'a touché.
+ */
+export class UnresolvedBindingError extends Error {
+  constructor(readonly deviceId: string, readonly capabilityId: string) {
+    super(`Liaison ${deviceId}/${capabilityId} non résolue : rien n'a été écrit.`);
+    this.name = 'UnresolvedBindingError';
+  }
+}
+
 export interface SourceBinding {
   /**
    * SYNCHRONE et ne lève JAMAIS. `null` quand le device a disparu, n'a pas de valeur, ou que sa
@@ -154,9 +170,13 @@ export interface SourceBinding {
   read(nowMs: number, freshnessMs: number): Reading<CapValue> | null;
   /**
    * Écrit si — et seulement si — la politique de `lib/writePolicy.mts` le permet.
-   * Retourne `true` quand un appel est réellement parti, `false` quand il a été dédupliqué.
-   * Lève quand l'appel est parti mais a échoué (émetteur indisponible) : c'est une information
-   * que l'appelant doit voir, pas un `false` de plus.
+   *
+   * `false` veut dire UNE seule chose : dédupliqué, donc l'appareil porte déjà la valeur voulue.
+   * Tout le reste lève — l'appel parti et échoué (émetteur indisponible) comme la liaison pas
+   * encore résolue (`UnresolvedBindingError`). Confondre les deux a déjà coûté une journée de
+   * chauffage : au démarrage, la liaison du relais de chaudière n'était pas résolue, l'écriture
+   * était avalée, l'agrégateur notait `commanded: true, affirmed: true`, et plus aucun tick ne
+   * recommandait quoi que ce soit.
    */
   write(value: CapValue, opts: WriteRequest): Promise<boolean>;
   destroy(): void;
@@ -244,10 +264,14 @@ class Binding implements SourceBinding {
   }
 
   async write(value: CapValue, opts: WriteRequest): Promise<boolean> {
-    if (this.destroyed) return false;
+    // Liaison relâchée volontairement : l'appelant ne devrait plus écrire. Rien à réparer, rien à
+    // signaler d'autre que « pas écrit ».
+    if (this.destroyed) throw new UnresolvedBindingError(this.deviceId, this.capabilityId);
 
     const device = this.device;
-    if (device === null) return false;
+    // PAS un `false` : « pas encore résolue » n'est pas « déjà à la bonne valeur ». Le tri est
+    // fait par l'appelant, qui seul sait si un échec est rattrapable au tick suivant.
+    if (device === null) throw new UnresolvedBindingError(this.deviceId, this.capabilityId);
 
     const decision = shouldWrite(this.lastWrite, value, opts, opts.nowMs);
     if (!decision.write) return false;
