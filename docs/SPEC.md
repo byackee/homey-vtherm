@@ -480,6 +480,22 @@ sur l'allumage, jamais sur la coupure.
 Chaque commutation est journalisée. Le couple `{dernière commande, instant de la dernière commutation}`
 est persisté : sans lui, un redémarrage de l'app remettrait le garde-fou à zéro.
 
+**[ÉCART] — réaffirmation sur divergence.** L'ordre n'étant émis que sur CHANGEMENT, et `boiler_keepalive`
+valant zéro par défaut, un ordre avalé en route n'était jamais réémis : trame Zigbee perdue, prise revenue
+sur son `power_on_behavior` après une micro-coupure, quota d'API atteint pendant une rafale, bascule à la
+main — et le modèle disait ALLUMÉE pendant que la maison restait froide, sans erreur ni trace, jusqu'au
+prochain vrai changement de demande. L'état réel du relais est donc relu à chaque pas et remis en accord
+avec ce qui a été commandé. Une correction n'est pas une commutation : elle ne repousse pas le garde-fou
+et ne déclenche aucune carte Flow.
+
+L'asymétrie vaut ici aussi, avec sa condition exacte. Corriger vers l'allumage attend le garde-fou.
+Corriger vers l'arrêt ne l'attend pas, mais seulement quand **rien** ne demande de chaleur : couper un
+relais resté allumé pendant l'attente qui précède un allumage fabriquerait le court-cycle que la
+correction prétend éviter. Les retentatives sont espacées de 30 s — un relais en panne peut réannoncer
+son état en boucle, et chaque annonce vaudrait un appel d'API. La lecture ignore l'ÂGE : un relais qui ne
+bascule pas ne réémet rien pendant des heures, et c'est précisément ce régime que la correction doit
+voir ; seule l'indisponibilité de l'appareil la disqualifie.
+
 L'avertissement de VT s'applique : piloter une chaudière réelle peut créer une surpression si tous les
 robinets se ferment. La description de l'app et le réglage doivent le rappeler.
 
