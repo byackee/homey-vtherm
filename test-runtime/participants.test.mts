@@ -228,3 +228,42 @@ test('`destroy()` relâche l\'émetteur et toutes les liaisons de sources', () =
   assert.equal(emitter.destroyed, true);
   assert.equal(room.destroyed, true, 'sans quoi un capteur ré-appairé garderait un abonné fantôme');
 });
+
+// --- L'ouverture qui n'est jamais rejouée -------------------------------------
+//
+// PANNE EMPÊCHÉE : pièce froide, chaudière éteinte, sans sortie. Il y a DEUX mémoires d'écriture.
+// Celle de l'émetteur n'enregistre que ce qui est réellement parti, pour qu'une même valeur puisse
+// être retentée. Celle du noyau enregistre ce qu'il a DÉCIDÉ, et c'est elle qui garde la porte —
+// sans `maxIntervalMs`, une valeur inchangée n'y repasse jamais. L'émetteur n'avait donc plus
+// jamais l'occasion de réessayer, et `lastWrite` étant volatile, seul un redémarrage y mettait fin.
+
+test('une ouverture non envoyée est REJOUÉE au pas suivant', async () => {
+  const { emitter, room, participant } = world('valve');
+  room.setReading(14, 0); // pièce franchement froide : la puissance sature
+
+  emitter.valveUnconfirmed = true;   // la dorsale a hoqueté : l'ouverture n'est pas partie
+  await participant.tick(0);
+  const afterFirst = emitter.valves.length;
+  assert.ok(afterFirst > 0, 'une ouverture a bien été tentée');
+  assert.equal(participant.demand.kind, 'unknown', 'la chaudière n\'est pas sollicitée sur du doute');
+
+  // La dorsale revient. La cible n'a pas bougé d'un pouce — puissance saturée — donc c'est
+  // exactement le cas que la déduplication du noyau bloquait.
+  emitter.valveUnconfirmed = false;
+  await participant.tick(300_000);
+
+  assert.ok(emitter.valves.length > afterFirst, 'l\'ouverture est repartie');
+  assert.equal(participant.demand.kind, 'active', 'et la chaudière est de nouveau sollicitée');
+});
+
+test('une ouverture bien envoyée n\'est PAS rejouée : la déduplication reste entière', async () => {
+  // La contrepartie. Rejouer une écriture qui a réussi userait le quota d'API pour rien.
+  const { emitter, room, participant } = world('valve');
+  room.setReading(14, 0);
+
+  await participant.tick(0);
+  const afterFirst = emitter.valves.length;
+
+  await participant.tick(300_000);
+  assert.equal(emitter.valves.length, afterFirst, 'aucune réécriture d\'une valeur déjà en place');
+});

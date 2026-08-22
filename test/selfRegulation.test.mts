@@ -244,3 +244,22 @@ test("l'entrée n'est pas mutée non plus quand la régulation est suspendue", (
   const result = computeOffset(input({ outdoorTemp: null }), INTEGRAL_ONLY, state);
   assert.notStrictEqual(result.nextState, state);
 });
+
+test('une traversée passant par une erreur EXACTEMENT nulle décharge quand même', () => {
+  // Les consignes sont alignées sur 0,5 °C et les mesures arrivent au dixième : l'erreur nulle est
+  // banale. Écraser le signe avec ce zéro effaçait de quel côté la pièce se trouvait, et la
+  // traversée ne déchargeait alors sur AUCUN des deux pas.
+  const params = REGULATION_PRESETS.medium;
+  const charged: RegulationState = { accumulatedError: 20, lastErrorSign: 1 };
+
+  // Pas 1 : la pièce atteint exactement la consigne. Le signe non nul doit être CONSERVÉ.
+  const zero = computeOffset(input({ roomTemp: 20, setpoint: 20 }), params, charged);
+  assert.equal(zero.nextState.lastErrorSign, 1, 'le dernier signe non nul est gardé');
+
+  // Pas 2 : elle passe de l'autre côté. L'inversion est vue, l'intégrale se décharge.
+  const crossed = computeOffset(input({ roomTemp: 20.5, setpoint: 20 }), params, zero.nextState);
+  assert.ok(
+    Math.abs(crossed.nextState.accumulatedError) < Math.abs(zero.nextState.accumulatedError),
+    `la décharge a bien eu lieu : ${zero.nextState.accumulatedError} -> ${crossed.nextState.accumulatedError}`,
+  );
+});

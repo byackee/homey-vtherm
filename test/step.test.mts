@@ -1010,3 +1010,151 @@ test('mode sécurité : au-delà de 24 h de silence, il abandonne et la chaudiè
   assert.equal(beyond.outputs.demand.kind, 'unknown', 'et `unknown` laisse la chaudière éteinte');
   assert.equal(beyond.outputs.warning, 'sensor_stale', 'l\'avertissement cesse de promettre une chauffe');
 });
+
+// --- Le mode sécurité et les décisions qui abaissent la consigne -------------
+//
+// PANNE EMPÊCHÉE : une chaudière qui tourne contre une décision explicite de l'utilisateur.
+// Le mode sécurité ne consultait que `roomTemp === null`. Les deux cas qui abaissent la consigne
+// SANS couper la chauffe — hors-gel de vacances, action fenêtre `frost`/`eco` — lui échappaient
+// donc entièrement : il remontait la pièce à sa consigne de secours, chaudière comprise, jusqu'à
+// vingt-quatre heures, pendant que la tuile affichait `central` ou `window`.
+
+const WINDOW_OPEN = { phase: 'open' as const, phaseSinceMs: 0, openSinceMs: 0, autoDisarmed: false };
+
+/** Capteur mort, mais une puissance mémorisée assez haute pour armer la sécurité. */
+function armedButMute(overrides: Partial<VThermState['persistent']> = {}): VThermState {
+  return freshState({ lastOnPercent: 0.74, lastGoodReadingAtMs: 0, ...overrides });
+}
+
+test('sécurité : le hors-gel de vacances n\'est PAS renversé par un capteur mort', () => {
+  const { outputs } = stepVTherm(
+    armedButMute(), inputs({ roomTemp: null, centralMode: 'frost' }), CONFIG, 60_000,
+  );
+
+  // `unknown` et non `inactive` : sortie gelée faute de mesure. Ce qui compte est que
+  // l'agrégateur ne compte QUE `active` — la chaudière reste donc éteinte pour cette pièce.
+  assert.notEqual(outputs.demand.kind, 'active', 'la chaudière ne part pas');
+  assert.notEqual(outputs.valvePercent, 10, 'aucune ouverture de secours');
+  assert.equal(outputs.warning, 'sensor_stale', 'et l\'avertissement ne promet pas un minimum');
+});
+
+test('sécurité : le hors-gel de vacances n\'est pas renversé non plus par consigne', () => {
+  const { outputs } = stepVTherm(
+    armedButMute(),
+    inputs({ roomTemp: null, centralMode: 'frost', emitterMode: 'setpoint', emitterHeating: reading(false) }),
+    CONFIG, 60_000,
+  );
+
+  assert.notEqual(outputs.setpointToEmitter, 19, 'la consigne de secours ne remonte pas la pièce');
+  assert.notEqual(outputs.demand.kind, 'active');
+});
+
+test('sécurité : une fenêtre ouverte n\'est pas renversée par un capteur mort', () => {
+  const { outputs } = stepVTherm(
+    armedButMute({ window: WINDOW_OPEN }), inputs({ roomTemp: null }),
+    config({ window: { ...CONFIG.window, action: 'frost' } }), 60_000,
+  );
+
+  assert.notEqual(outputs.demand.kind, 'active');
+  assert.equal(outputs.warning, 'sensor_stale');
+});
+
+test('sécurité : elle agit toujours quand RIEN n\'a abaissé la consigne', () => {
+  // La contrepartie indispensable : brider la sécurité ne doit pas la désarmer dans son cas nominal.
+  const { outputs } = stepVTherm(armedButMute(), inputs({ roomTemp: null }), CONFIG, 60_000);
+
+  assert.equal(outputs.demand.kind, 'active', 'la pièce reçoit son minimum');
+  assert.equal(outputs.warning, 'sensor_stale_safety');
+});
+
+test('sécurité : `heat_only` régule normalement, donc elle agit encore', () => {
+  // `heat_only` n'abaisse rien — seule l'étiquette change. La brider là serait une régression.
+  const { outputs } = stepVTherm(
+    armedButMute(), inputs({ roomTemp: null, centralMode: 'heat_only' }), CONFIG, 60_000,
+  );
+
+  assert.equal(outputs.demand.kind, 'active');
+  assert.equal(outputs.warning, 'sensor_stale_safety');
+});
+
+// --- La mémoire de puissance, que le mode sécurité interroge -----------------
+
+test('un pas à consigne abaissée n\'efface PAS la mémoire de puissance', () => {
+  // C'est le chemin de la maison froide : une fenêtre ouverte dix minutes remettait la mémoire à
+  // zéro, et le mode sécurité restait désarmé pour toutes les pannes de capteur suivantes.
+  const cases: ReadonlyArray<readonly [string, VThermState, VThermInputs, VThermConfig]> = [
+    ['fenêtre ouverte (turn_off)', armedButMute({ window: WINDOW_OPEN }), inputs(), CONFIG],
+    ['fenêtre ouverte (frost)', armedButMute({ window: WINDOW_OPEN }), inputs(),
+      config({ window: { ...CONFIG.window, action: 'frost' } })],
+    ['hors-gel de vacances', armedButMute(), inputs({ centralMode: 'frost' }), CONFIG],
+    ['thermostat éteint un seul pas', armedButMute(), inputs({ onoff: false }), CONFIG],
+  ];
+
+  for (const [label, state, input, cfg] of cases) {
+    const { nextState } = stepVTherm(state, input, cfg, 60_000);
+    assert.equal(nextState.persistent.lastOnPercent, 0.74, label);
+  }
+});
+
+test('un pas de régulation normal met bien la mémoire à jour', () => {
+  // La contrepartie : la mémoire doit rester vivante, sinon elle vieillit indéfiniment.
+  const { nextState } = stepVTherm(armedButMute(), inputs(), CONFIG, 60_000);
+  near(nextState.persistent.lastOnPercent, 0.74);
+
+  const warmer = stepVTherm(armedButMute(), inputs({ roomTemp: reading(18.5) }), CONFIG, 60_000);
+  near(warmer.nextState.persistent.lastOnPercent, 0.44);
+});
+
+test('le scénario de janvier, de bout en bout', () => {
+  // Pièce en chauffe, fenêtre ouverte, pile de capteur qui meurt pendant l'aération, fenêtre
+  // refermée. La sécurité doit prendre le relais — c'est exactement ce pour quoi elle existe.
+  let state = armedButMute();
+  ({ nextState: state } = stepVTherm(state, inputs(), CONFIG, 0));
+  near(state.persistent.lastOnPercent, 0.74);
+
+  // La fenêtre s'ouvre et est confirmée.
+  state = { ...state, persistent: { ...state.persistent, window: WINDOW_OPEN } };
+  ({ nextState: state } = stepVTherm(state, inputs(), CONFIG, 60_000));
+
+  // Le capteur meurt pendant l'aération, puis la fenêtre se referme.
+  ({ nextState: state } = stepVTherm(state, inputs({ roomTemp: null }), CONFIG, 120_000));
+  state = { ...state, persistent: { ...state.persistent, window: createVThermState(0, DEFAULTS).persistent.window } };
+
+  const { outputs } = stepVTherm(state, inputs({ roomTemp: null }), CONFIG, 300_000);
+  assert.equal(outputs.demand.kind, 'active', 'la pièce n\'est pas laissée sans rien');
+  assert.equal(outputs.warning, 'sensor_stale_safety');
+});
+
+// --- La pente doit atteindre le TPI ------------------------------------------
+
+test('la pente est bien transmise au TPI, et coupe la chauffe en dépassement', () => {
+  // TROU DE COUVERTURE : toutes les fixtures d'intégration réglaient les deux seuils à 0, ce qui
+  // court-circuite tout le bloc. Passer `slopePerHour: null` au calcul laissait la suite verte —
+  // la SPEC §4 en fait pourtant une entrée OBLIGATOIRE, pas un raffinement.
+  //
+  // Le terme extérieur est volontairement dominant : sans lui, le dépassement seul ramènerait déjà
+  // la puissance à zéro par saturation, et le test ne prouverait rien des seuils.
+  const withThresholds = config({
+    tpi: { coefInt: 0.6, coefExt: 0.1, thresholdHigh: 0.2, thresholdLow: 0.1 },
+  });
+
+  // Cinq mesures montantes : quatre pour rendre la pente publiable, la dernière en dépassement.
+  let state = freshState();
+  let last = stepVTherm(state, inputs({ roomTemp: reading(19.0, 0) }), withThresholds, 0);
+  [19.1, 19.2, 19.3, 19.4].forEach((t, i) => {
+    const at = (i + 1) * 60_000;
+    state = last.nextState;
+    last = stepVTherm(state, inputs({ roomTemp: reading(t, at) }), withThresholds, at);
+  });
+
+  assert.ok(last.outputs.slopePerHour !== null && last.outputs.slopePerHour > 0, 'la pièce monte');
+  assert.equal(
+    last.outputs.onPercent, 0,
+    'pente montante + dépassement au-delà du seuil haut : la chauffe est coupée',
+  );
+
+  // Sans les seuils, la même situation chauffe à fond — c'est ce que la pente évite.
+  const noThresholds = config({ tpi: { coefInt: 0.6, coefExt: 0.1, thresholdHigh: 0, thresholdLow: 0 } });
+  const uncut = stepVTherm(state, inputs({ roomTemp: reading(19.4, 240_000) }), noThresholds, 240_000);
+  assert.ok(uncut.outputs.onPercent > 0.9, 'la preuve que le seuil est bien ce qui a coupé');
+});

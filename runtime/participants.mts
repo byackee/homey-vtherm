@@ -320,8 +320,9 @@ export class VThermParticipant implements Tickable {
 
     await this.applyOutputs(outputs, roomTemp, nowMs);
     // APRÈS les écritures, jamais avant : c'est seulement une fois la commande tentée qu'on sait
-    // si l'émetteur a reçu quelque chose. Voir `confirmedDemand`.
+    // si l'émetteur a reçu quelque chose. Voir `confirmedDemand` et `forgetUnconfirmedValveWrite`.
     this.demandValue = this.confirmedDemand(outputs.demand);
+    this.forgetUnconfirmedValveWrite();
     await this.persistIfNeeded(nowMs);
   }
 
@@ -447,6 +448,37 @@ export class VThermParticipant implements Tickable {
   private confirmedDemand(demand: Demand): Demand {
     if (this.emitter.mode !== 'valve' || !this.emitter.valveUnconfirmed) return demand;
     return { kind: 'unknown' };
+  }
+
+  /**
+   * Efface du noyau la trace d'une ouverture que l'émetteur n'a PAS pu envoyer.
+   *
+   * Il y a DEUX mémoires d'écriture, et elles ne mesurent pas la même chose. Celle de l'émetteur
+   * n'enregistre que ce qui est réellement parti — `if (sent) this.remember(...)` — précisément
+   * pour qu'une même valeur puisse être retentée. Celle du noyau enregistre ce qu'il a DÉCIDÉ de
+   * commander, et c'est elle qui garde la porte : `shouldWrite` déduplique contre elle, sans
+   * `maxIntervalMs`. Une valeur inchangée ne repasse donc jamais, et l'émetteur n'a plus jamais
+   * l'occasion de réessayer.
+   *
+   * Le scénario complet : la dorsale Zigbee2MQTT hoquette, l'ouverture n'est pas envoyée, la
+   * demande de chaleur tombe à `unknown` et la chaudière s'éteint. La pièce refroidit, donc le TPI
+   * sature à 100 %, donc l'ouverture visée ne bouge plus — et le seuil de variation de 3 % qui
+   * garde le noyau ne se rouvre jamais. Vanne à sa dernière position, chaudière éteinte, aucune
+   * sortie : `lastWrite` est volatile, seul un redémarrage de l'app y mettait fin.
+   *
+   * Oublier la trace rend la main à l'émetteur au pas suivant. C'est le noyau qui doit céder :
+   * lui seul croit avoir écrit.
+   */
+  private forgetUnconfirmedValveWrite(): void {
+    if (this.emitter.mode !== 'valve' || !this.emitter.valveUnconfirmed) return;
+
+    const { lastWrite } = this.state.volatile;
+    if (lastWrite.valvePercent === null) return;
+
+    this.state = {
+      ...this.state,
+      volatile: { ...this.state.volatile, lastWrite: { ...lastWrite, valvePercent: null } },
+    };
   }
 
   private async publish(capabilityId: string, value: CapValue): Promise<void> {

@@ -295,3 +295,30 @@ test('un désarmement en cours survit au redémarrage', () => {
 
   assert.equal(migratePersistentState(raw, NOW, DEFAULTS).window.autoDisarmed, true);
 });
+
+// --- La mémoire de puissance, à la relecture ----------------------------------
+//
+// TROU DE COUVERTURE : `readFraction` n'était vérifié par rien. Le muter en `return 0` comme en
+// `return 1` laissait les 523 tests verts. Or il porte `lastOnPercent`, la seule entrée sur
+// laquelle le mode sécurité décide de s'armer : à zéro il ne s'arme jamais après un redémarrage,
+// à un il s'arme à la moindre hésitation du capteur, pleine puissance.
+
+test('lastOnPercent : relu tel quel, borné, et jamais NaN', () => {
+  const restored = (lastOnPercent: unknown): number =>
+    migratePersistentState(validRaw({ lastOnPercent }), NOW, DEFAULTS).lastOnPercent;
+
+  assert.equal(restored(0.74), 0.74, 'une valeur légitime traverse intacte');
+  assert.equal(restored(0), 0);
+  assert.equal(restored(1), 1);
+
+  // Hors bornes : ramené dans [0, 1] plutôt que rejeté — la valeur reste informative.
+  assert.equal(restored(1.5), 1);
+  assert.equal(restored(-1), 0);
+
+  // Illisible : zéro, c'est-à-dire « pas de mémoire ». Jamais un NaN, qui traverserait toutes les
+  // comparaisons du mode sécurité sans jamais être vrai.
+  assert.equal(restored(undefined), 0);
+  assert.equal(restored(NaN), 0);
+  assert.equal(restored('0.74'), 0);
+  assert.equal(restored(null), 0);
+});

@@ -191,6 +191,18 @@ export function stepVTherm(
   const frostTemp = config.presetTemps.frost;
   let effectiveSetpoint = presetResult.setpoint;
   let heatSuppressed = false;
+  /*
+   * Vrai dès qu'une DÉCISION a abaissé la consigne — arrêt, mode central, action fenêtre.
+   *
+   * Distinct de `heatSuppressed`, qui ne couvre que les cas où la chauffe est franchement coupée.
+   * `frost` et `eco` ne coupent pas : ils abaissent la consigne et laissent la régulation tourner.
+   * Le mode sécurité, lui, ne consulte que `roomTemp === null` — il ne regardait donc pas du tout
+   * ces deux cas-là, et remontait une pièce à sa consigne de secours par-dessus un hors-gel de
+   * vacances ou une fenêtre ouverte, chaudière comprise, pendant que la tuile affichait `central`
+   * ou `window`. La table de `stateLabel.mts` encode pourtant la bonne priorité : le chemin
+   * d'action ne la respectait pas.
+   */
+  let setpointLowered = false;
 
   if (!inputs.onoff) {
     // SPEC muette sur ce point — comportement décidé ici : consigne hors-gel ET vanne fermée.
@@ -198,31 +210,37 @@ export function stepVTherm(
     // radiateur ouvert sur un thermostat affiché « éteint ».
     effectiveSetpoint = frostTemp;
     heatSuppressed = true;
+    setpointLowered = true;
   } else if (centralOverride) {
     // Le mode central prime sur la fenêtre : c'est une décision de logement, elle ne se laisse pas
     // renverser par un capteur de pièce (SPEC §2.3, priorité `central` > `window`).
     if (centralMode === 'stopped') {
       effectiveSetpoint = frostTemp;
       heatSuppressed = true;
+      setpointLowered = true;
     } else if (centralMode === 'frost') {
       effectiveSetpoint = frostTemp;
+      setpointLowered = true;
     }
     // `heat_only` : consigne nominale, régulation nominale, seule l'étiquette change.
   } else if (windowResult.active) {
     switch (windowResult.action) {
       case 'frost':
         effectiveSetpoint = frostTemp;
+        setpointLowered = true;
         break;
       case 'eco':
         // Température ÉCO du preset, pas sa variante « absence » : l'action fenêtre court-circuite
         // la résolution des presets (SPEC §6.3).
         effectiveSetpoint = config.presetTemps.eco;
+        setpointLowered = true;
         break;
       default:
         // `turn_off` et `fan_only` : pas de chauffe. `fan_only` n'a pas de sens sans mode clim,
         // il est traité comme `turn_off` jusqu'à l'arrivée de `ac_mode` (SPEC §12).
         effectiveSetpoint = frostTemp;
         heatSuppressed = true;
+        setpointLowered = true;
         break;
     }
   }
@@ -244,6 +262,15 @@ export function stepVTherm(
     lastGoodReadingAtMs: persistent.lastGoodReadingAtMs,
     nowMs,
   }, config.safety);
+
+  /*
+   * Le mode sécurité PEUT-IL agir ? Il est évalué dans tous les cas — son compte à rebours et son
+   * avertissement en dépendent — mais il ne doit rien commander quand la consigne vient d'être
+   * abaissée délibérément. Remonter une pièce à 19 °C parce que son capteur s'est tu, alors que la
+   * maison est en hors-gel de vacances ou que la fenêtre est ouverte, c'est faire tourner une
+   * chaudière contre une décision explicite de l'utilisateur — jusqu'à vingt-quatre heures.
+   */
+  const safetyMayAct = safety.active && !setpointLowered;
 
   // === 8. Régulation =======================================================
 
@@ -277,7 +304,7 @@ export function stepVTherm(
     // Sauf si le mode sécurité s'applique : geler la sortie coupe la demande de chaleur, donc la
     // chaudière, et une pièce qui chauffait franchement se retrouve sans rien. On force alors un
     // repli minimal plutôt que de s'arrêter — exprimé dans l'unité de l'émetteur.
-    if (safety.active && inputs.emitterMode === 'valve') {
+    if (safetyMayAct && inputs.emitterMode === 'valve') {
       onPercent = safety.onPercent;
       valveTarget = computeOpeningDegree(onPercent, {
         minOpeningDegree: config.minOpeningDegree,
@@ -286,7 +313,7 @@ export function stepVTherm(
         openingThreshold: config.openingThreshold,
       });
       regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint);
-    } else if (safety.active) {
+    } else if (safetyMayAct) {
       // Mode consigne : une puissance n'a nulle part où aller, c'est une CONSIGNE de secours qu'on
       // impose. Sans elle, l'émetteur reste sur la dernière valeur écrite avant la panne — qui
       // peut être une consigne décalée vers le bas par l'auto-régulation, ou l'éco de la nuit.
@@ -393,12 +420,12 @@ export function stepVTherm(
     // Décision définitive et non une ignorance : on vient de commander la fermeture.
     demand = { kind: 'inactive' };
   } else if (roomTemp === null) {
-    if (safety.active && inputs.emitterMode === 'valve') {
+    if (safetyMayAct && inputs.emitterMode === 'valve') {
       // Le mode sécurité vient de commander une ouverture minimale : c'est une demande DÉLIBÉRÉE,
       // pas une ignorance. Sans ça l'agrégateur laisserait la chaudière éteinte et la vanne
       // s'ouvrirait sur un circuit froid — tout le travail du mode sécurité pour rien.
       demand = { kind: 'active', percent: valveTarget ?? 0 };
-    } else if (safety.active && emitterHeating !== null) {
+    } else if (safetyMayAct && emitterHeating !== null) {
       // Mode consigne : la sécurité a donné une consigne de secours, c'est l'émetteur qui dit s'il
       // chauffe. On ne l'invente pas plus ici que dans le cas nominal.
       demand = emitterHeating ? { kind: 'active', percent: 0 } : { kind: 'inactive' };
@@ -492,7 +519,7 @@ export function stepVTherm(
     centralOverride,
     windowActive: windowResult.active,
     roomSensorMute,
-    safetyActive: safety.active,
+    safetyActive: safetyMayAct,
     overpowered: false,
     away: presetResult.away,
     activity: presetResult.activity,
@@ -613,7 +640,7 @@ export function stepVTherm(
   // le relais coupé faute de mesure — une commande, pas un gel. Les taire affichait la dernière
   // valeur vivante : 74 % à l'écran pour 10 % commandés, un facteur 7,4 gravé dans les Insights,
   // et un utilisateur qui ne peut pas voir ce que l'app fait.
-  if (!roomSensorMute || heatSuppressed || safety.active || switchDemand !== null) {
+  if (!roomSensorMute || setpointLowered || safety.active || switchDemand !== null) {
     capabilities.vtherm_power_percent = roundTo(onPercent * 100, 1);
     if (valveTarget !== null) {
       capabilities.vtherm_valve_open = valveTarget;
@@ -649,7 +676,7 @@ export function stepVTherm(
   let warning: VThermWarning | null = null;
   if (sensorQuiet) {
     if (!inputs.roomSensorBound) warning = 'no_sensor';
-    else warning = safety.active ? 'sensor_stale_safety' : 'sensor_stale';
+    else warning = safetyMayAct ? 'sensor_stale_safety' : 'sensor_stale';
   }
 
   // === 17. État suivant ====================================================
@@ -665,9 +692,17 @@ export function stepVTherm(
       regulation: regulationState,
       dutyCycle,
       lastRunAtMs: nowMs,
-      // Mémorisée seulement quand la mesure est vivante : c'est ce que le mode sécurité
-      // interrogera si le capteur se tait, et une valeur de secours l'écraserait.
-      lastOnPercent: roomTemp === null ? persistent.lastOnPercent : onPercent,
+      /*
+       * Mémorisée seulement quand la mesure est vivante ET que la régulation a réellement eu lieu.
+       *
+       * La garde d'origine n'écartait que la valeur de secours du mode sécurité. Elle laissait
+       * passer le ZÉRO d'un pas supprimé : fenêtre ouverte, hors-gel de vacances, thermostat
+       * éteint une seconde par un Flow — la puissance n'y est jamais calculée, ou elle est calculée
+       * contre une consigne de 7 °C. Une fenêtre ouverte dix minutes effaçait donc la mémoire, et
+       * le mode sécurité restait désarmé pour toutes les pannes de capteur suivantes : la pièce qui
+       * chauffait à 74 % quatre minutes plus tôt se retrouvait sans rien, en janvier.
+       */
+      lastOnPercent: roomTemp === null || setpointLowered ? persistent.lastOnPercent : onPercent,
       // Origine du compte à rebours du mode sécurité : l'instant de la dernière mesure VIVANTE.
       // Comme `lastOnPercent`, elle ne bouge pas tant que le capteur se tait — sans quoi la borne
       // de durée maximale ne serait jamais atteinte.
