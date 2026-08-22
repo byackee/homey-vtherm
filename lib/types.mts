@@ -314,6 +314,12 @@ export interface BoilerState {
    * relecture force une réaffirmation au premier pas.
    */
   affirmed: boolean;
+  /**
+   * Dernière correction d'un relais trouvé divergent. `null` quand il n'y en a jamais eu, et
+   * remis à `null` par toute vraie commutation : le compteur borne les RETENTATIVES, il ne doit
+   * pas retenir la main d'une correction qui suit un ordre tout neuf.
+   */
+  lastDivergenceFixMs: number | null;
 }
 
 export interface BoilerResult {
@@ -326,6 +332,23 @@ export interface BoilerResult {
    * au démarrage de l'app. L'appelant doit l'écrire, mais ne doit PAS déclencher de carte Flow.
    */
   affirmation: boolean;
+  /**
+   * Vrai quand l'écriture corrige un relais qu'on a trouvé dans un autre état que celui commandé.
+   *
+   * Comme la réaffirmation de démarrage : l'appelant doit FORCER l'écriture — la valeur est
+   * identique à la dernière envoyée, donc la déduplication la supprimerait — et ne doit déclencher
+   * aucune carte Flow, puisque du point de vue de l'app rien n'a changé d'état.
+   */
+  divergence: boolean;
+  /**
+   * Vrai quand la demande est satisfaite, le délai d'activation écoulé, et que seul le garde-fou
+   * anti-pulsation empêche l'allumage.
+   *
+   * Sans ce signal, l'attente est parfaitement muette : l'utilisateur qui change sa consigne deux
+   * fois en une minute voit une chaudière qui « ne change pas de statut », et rien nulle part ne
+   * dit pourquoi. C'est un état d'attente normal, pas une erreur — mais il doit être traçable.
+   */
+  ignitionBlocked: boolean;
   nextState: BoilerState;
 }
 

@@ -166,3 +166,123 @@ test('à l\'arrêt de l\'app la chaudière est coupée, et l\'extinction est per
     'au redémarrage on repart d\'éteinte : sinon la réaffirmation rallume quinze secondes plus tard',
   );
 });
+
+// --- Le relais qui dérive tout seul -----------------------------------------
+//
+// PANNE EMPÊCHÉE : le modèle dit ALLUMÉE, la maison reste froide. Un ordre avalé en route ne
+// lève pas — l'app le croit parti — et `stepBoiler` ne réémet que sur CHANGEMENT. Sans lecture en
+// retour, l'écart n'était jamais rattrapé.
+
+test('un relais retombé à OFF tout seul est rallumé, sans carte Flow', async () => {
+  const { host, relay, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  assert.equal(relayState(relay), true);
+  const flowsAfterIgnition = host.flowKinds().length;
+
+  // Micro-coupure : la prise revient sur son `power_on_behavior`, et le dit par le websocket.
+  relay.setReading(false, 61_000);
+  await central.applyBoiler([ACTIVE], 61_000);
+
+  assert.equal(relay.writes.length, 2, 'le relais a été remis en accord');
+  assert.equal(relayState(relay), true, 'la chaudière est RALLUMÉE');
+  assert.equal(
+    host.flowKinds().length, flowsAfterIgnition,
+    'une correction n\'est pas une commutation : « la chaudière démarre » ne doit pas repartir',
+  );
+});
+
+test('la correction FORCE l\'écriture : sans ça la déduplication l\'avalerait', async () => {
+  // La valeur corrigée est identique à la dernière écrite. `shouldWrite` la supprimerait comme
+  // « unchanged » — et la correction n'aurait servi à rien.
+  const { relay, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  const request = relay.lastWrite;
+  assert.ok(request !== undefined);
+
+  relay.setReading(false, 61_000);
+  await central.applyBoiler([ACTIVE], 61_000);
+
+  assert.equal(relay.writes.length, 2);
+  assert.equal(relay.writes[1]?.value, true);
+});
+
+test('un relais devenu indisponible n\'est pas corrigé', async () => {
+  // `stale` ne dit pas « éteint », il dit « on ne sait pas ». Corriger sur une lecture périmée,
+  // c'est commuter une chaudière sur de l'ignorance — exactement ce que le reste de l'app refuse.
+  const { relay, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  relay.setReading(false, 61_000, true);
+  await central.applyBoiler([ACTIVE], 61_000);
+
+  assert.equal(relay.writes.length, 1, 'aucun ordre supplémentaire');
+});
+
+test('un relais resté ALLUMÉ après la coupure est recoupé immédiatement', async () => {
+  const { relay, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  await central.applyBoiler([INACTIVE], 10_000);
+  assert.equal(relayState(relay), false);
+
+  // Le relais n'a pas obéi : il chauffe un circuit dont toutes les vannes sont fermées.
+  relay.setReading(true, 11_000);
+  await central.applyBoiler([INACTIVE], 11_000);
+
+  assert.equal(relay.writes.length, 3, 'recoupé sans attendre le garde-fou');
+  assert.equal(relayState(relay), false);
+});
+
+// --- Échéance annoncée pendant l'attente ------------------------------------
+
+test('l\'échéance annoncée pendant une attente du garde-fou est son expiration EXACTE', async () => {
+  // Avant, `dueAtMs()` rendait un instant déjà passé : le cycle complet du logement se jugeait dû
+  // à chaque battement pendant toute la minute, pour un allumage qu'on savait refusé — et la
+  // reprise avait lieu au battement suivant plutôt qu'à l'instant où le garde-fou expire.
+  const { central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  await central.applyBoiler([INACTIVE], 5_000); // coupure immédiate, garde-fou armé à 5 s
+  await central.applyBoiler([ACTIVE], 6_000);   // allumage refusé
+
+  assert.equal(central.dueAtMs(), 5_000 + 60_000);
+});
+
+test('l\'attente du garde-fou est tracée une fois, à l\'entrée et à la sortie', async () => {
+  // C'est la seule explication disponible du symptôme « je change ma consigne et la chaudière ne
+  // change pas de statut ». Tracée à chaque pas, elle noierait le tampon de diagnostic.
+  const { host, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  await central.applyBoiler([INACTIVE], 5_000);
+
+  await central.applyBoiler([ACTIVE], 6_000);
+  await central.applyBoiler([ACTIVE], 16_000);
+  await central.applyBoiler([ACTIVE], 26_000);
+
+  const blocked = host.logs.filter((line) => line.includes('diffère l\'allumage'));
+  assert.equal(blocked.length, 1, 'une seule ligne pour toute l\'attente');
+  assert.match(blocked[0] ?? '', /59 s/, 'le temps restant est annoncé');
+
+  // L'attente qui débouche sur un allumage n'est pas annoncée deux fois : la commutation suit.
+  await central.applyBoiler([ACTIVE], 65_000);
+  assert.equal(host.logs.filter((line) => line.includes('abandonnée')).length, 0);
+  assert.equal(host.logs.filter((line) => line.includes('ALLUMÉE')).length, 2);
+});
+
+test('une attente d\'allumage abandonnée est dite, sinon le journal ne se conclut jamais', async () => {
+  const { host, central } = world();
+
+  await central.applyBoiler([ACTIVE], 0);
+  await central.applyBoiler([INACTIVE], 5_000);
+  await central.applyBoiler([ACTIVE], 6_000);   // différé par le garde-fou
+
+  // La pièce a atteint sa consigne avant l'expiration : plus personne ne demande.
+  await central.applyBoiler([INACTIVE], 20_000);
+
+  assert.equal(
+    host.logs.filter((line) => line.includes('Attente d\'allumage abandonnée')).length, 1,
+  );
+});

@@ -8,5 +8,10 @@
     "en": "Every value on the thermostat tile now has its own icon. Each group of device settings explains, in the page itself, what it is for. The central device is now called Boiler.",
     "fr": "Chaque valeur de la tuile du thermostat a désormais son icône. Chaque groupe de réglages explique à quoi il sert, directement dans la page. L'appareil central s'appelle maintenant Chaudière.",
     "nl": "Elke waarde op de thermostaattegel heeft nu een eigen pictogram. Elke groep apparaatinstellingen legt in de pagina zelf uit waar die voor dient. Het centrale apparaat heet nu CV-ketel."
+  },
+  "1.0.2": {
+    "en": "The boiler relay is now checked against what it was told. If it drifts — a lost command, a power blip, a manual switch — it is put back in line instead of staying wrong until the next change in demand.",
+    "fr": "Le relais de chaudière est désormais comparé à ce qu'on lui a commandé. S'il dérive — ordre perdu, micro-coupure, bascule à la main — il est remis en accord, au lieu de rester faux jusqu'au prochain changement de demande.",
+    "nl": "Het ketelrelais wordt nu vergeleken met wat het opgedragen kreeg. Wijkt het af — een verloren commando, een stroomdip, handmatig geschakeld — dan wordt het teruggezet in plaats van fout te blijven tot de warmtevraag verandert."
   }
 }

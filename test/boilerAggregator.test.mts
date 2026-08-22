@@ -184,7 +184,7 @@ test('réaffirmation après redémarrage : un état restauré est réécrit une 
   // la maison resterait froide avec une app persuadée d'avoir allumé.
   const restored: BoilerState = {
     commanded: true, lastChangeMs: 0, pendingSinceMs: null, lastKeepAliveMs: null,
-    affirmed: false,
+    affirmed: false, lastDivergenceFixMs: null,
   };
 
   const first = stepBoiler(restored, 1, PARAMS, 1_000);
@@ -206,9 +206,183 @@ test('la réaffirmation n\'est pas soumise au garde-fou anti-pulsation', () => {
   // elle ne change pas d'état, elle remet le relais en accord avec l'état déjà décidé.
   const restored: BoilerState = {
     commanded: true, lastChangeMs: 0, pendingSinceMs: null, lastKeepAliveMs: null,
-    affirmed: false,
+    affirmed: false, lastDivergenceFixMs: null,
   };
   const result = stepBoiler(restored, 1, PARAMS, 1);
   assert.equal(result.command, true);
   assert.equal(result.affirmation, true);
+});
+
+// --- Réaffirmation sur divergence du relais ----------------------------------
+//
+// PANNE EMPÊCHÉE : le modèle dit ALLUMÉE, la maison reste froide. `stepBoiler` ne produit un
+// ordre que sur CHANGEMENT et `keepAliveSec` vaut zéro par défaut : un ordre avalé en route —
+// trame Zigbee perdue, prise revenue sur son `power_on_behavior`, quota d'API atteint pendant une
+// rafale de changements de consigne, bascule à la main — n'était jamais réémis.
+
+test('relais trouvé ÉTEINT alors qu\'il est commandé allumé : réaffirmé', () => {
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0)); // allumage
+  assert.equal(state.commanded, true);
+
+  // Le garde-fou est écoulé : la correction peut partir.
+  const result = stepBoiler(state, 1, PARAMS, DWELL_MS, false);
+  assert.equal(result.command, true);
+  assert.equal(result.divergence, true);
+  assert.equal(result.affirmation, false, 'la réaffirmation de démarrage est un autre cas');
+  assert.equal(result.keepAlive, false);
+  // Une correction n'est pas une commutation : elle ne repousse pas le garde-fou.
+  assert.equal(result.nextState.lastChangeMs, 0);
+  assert.equal(result.nextState.commanded, true);
+});
+
+test('relais trouvé ALLUMÉ alors qu\'il est commandé éteint : coupé SANS attendre', () => {
+  // L'asymétrie du garde-fou est reconduite ici, et pour la même raison qu'à la commutation :
+  // une chaudière qui tourne alors que rien ne la demande chauffe un circuit fermé.
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));   // allumée
+  ({ nextState: state } = stepBoiler(state, 0, PARAMS, 1_000)); // éteinte à 1 s
+  assert.equal(state.commanded, false);
+  assert.equal(state.lastChangeMs, 1_000);
+
+  const result = stepBoiler(state, 0, PARAMS, 1_001, true);
+  assert.equal(result.command, false);
+  assert.equal(result.divergence, true);
+  assert.equal(result.nextState.lastChangeMs, 1_000, 'la correction ne compte pas comme commutation');
+});
+
+test('la correction vers l\'ALLUMAGE attend le garde-fou anti-pulsation', () => {
+  // Un relais qui diverge juste après une commutation ne doit pas être rallumé aussitôt : ce
+  // serait fabriquer le court-cycle que le garde-fou existe pour empêcher.
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));
+
+  const tooSoon = stepBoiler(state, 1, PARAMS, DWELL_MS - 1, false);
+  assert.equal(tooSoon.command, null);
+  assert.equal(tooSoon.divergence, false);
+
+  const allowed = stepBoiler(state, 1, PARAMS, DWELL_MS, false);
+  assert.equal(allowed.command, true);
+  assert.equal(allowed.divergence, true);
+});
+
+test('un relais en accord avec l\'état commandé n\'est pas réécrit', () => {
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));
+
+  const result = stepBoiler(state, 1, PARAMS, DWELL_MS, true);
+  assert.equal(result.command, null, 'aucune écriture inutile : un contacteur s\'use');
+  assert.equal(result.divergence, false);
+});
+
+test('relais illisible : exactement le comportement d\'avant la lecture en retour', () => {
+  // `null` n'est pas « éteint ». On ne corrige que ce qu'on a VU.
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));
+
+  const result = stepBoiler(state, 1, PARAMS, DWELL_MS, null);
+  assert.equal(result.command, null);
+  assert.equal(result.divergence, false);
+});
+
+test('un relais resté ALLUMÉ pendant une attente d\'allumage n\'est PAS coupé', () => {
+  // La correction ne doit pas fabriquer le court-cycle qu'elle prétend éviter. Ici la demande est
+  // là et l'app s'apprête à allumer : couper le relais reviendrait à éteindre une chaudière qu'on
+  // rallume trente secondes plus tard.
+  const params: BoilerParams = { ...PARAMS, activationDelaySec: 30 };
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, params, 0));    // affirme l'arrêt
+  ({ nextState: state } = stepBoiler(state, 1, params, 1_000)); // toujours en attente
+
+  const waiting = stepBoiler(state, 1, params, 2_000, true);
+  assert.equal(waiting.command, null, 'on laisse le relais tranquille');
+  assert.equal(waiting.divergence, false);
+  assert.equal(waiting.nextState.pendingSinceMs, 0, 'l\'attente d\'activation n\'est pas remise à zéro');
+
+  // Et l'allumage attendu remet le modèle d'accord avec le relais, sans commutation physique.
+  const ignition = stepBoiler(waiting.nextState, 1, params, 30_000, true);
+  assert.equal(ignition.command, true);
+  assert.equal(ignition.divergence, false, 'c\'est une vraie commutation, pas une correction');
+});
+
+test('un relais resté ALLUMÉ sans aucune demande est coupé, garde-fou ou pas', () => {
+  // Le cas qui justifie l'asymétrie : une chaudière qui tourne alors que toutes les vannes sont
+  // fermées chauffe un circuit fermé.
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));
+  ({ nextState: state } = stepBoiler(state, 0, PARAMS, 1_000));
+  assert.equal(state.commanded, false);
+
+  const result = stepBoiler(state, 0, PARAMS, 2_000, true);
+  assert.equal(result.command, false);
+  assert.equal(result.divergence, true);
+});
+
+// --- Traçabilité de l'attente ------------------------------------------------
+
+test('`ignitionBlocked` distingue une attente du garde-fou d\'une absence de demande', () => {
+  // C'est le symptôme rapporté : « je change ma consigne plusieurs fois de suite et la chaudière
+  // ne change pas de statut ». L'attente est légitime, mais elle était parfaitement muette.
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));      // ON
+  ({ nextState: state } = stepBoiler(state, 0, PARAMS, 5_000));  // OFF immédiat
+
+  const refused = stepBoiler(state, 1, PARAMS, 10_000);
+  assert.equal(refused.command, null);
+  assert.equal(refused.ignitionBlocked, true);
+  assert.equal(refused.nextState.commanded, false);
+
+  // À l'expiration, l'allumage part et le signal retombe.
+  const allowed = stepBoiler(refused.nextState, 1, PARAMS, 5_000 + DWELL_MS);
+  assert.equal(allowed.command, true);
+  assert.equal(allowed.ignitionBlocked, false);
+});
+
+test('`ignitionBlocked` reste faux quand c\'est le délai d\'activation qui retient', () => {
+  // Deux attentes distinctes : confondre les deux ferait tracer « garde-fou anti-pulsation » là où
+  // l'utilisateur a lui-même réglé un délai d'activation.
+  const params: BoilerParams = { ...PARAMS, activationDelaySec: 30 };
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, params, 0));
+
+  const pending = stepBoiler(state, 1, params, 10_000);
+  assert.equal(pending.command, null);
+  assert.equal(pending.ignitionBlocked, false);
+});
+
+test('un relais qui réannonce sa divergence en boucle n\'est pas corrigé en rafale', () => {
+  // Le quota d'API Athom se déclenche en production après quelques dizaines d'appels rapprochés,
+  // et il emporterait toutes les autres écritures de l'app avec lui. Une correction qui n'a pas
+  // pris n'est pas rattrapée en la répétant plus vite.
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));
+
+  const first = stepBoiler(state, 1, PARAMS, DWELL_MS, false);
+  assert.equal(first.divergence, true);
+
+  const tooSoon = stepBoiler(first.nextState, 1, PARAMS, DWELL_MS + 1_000, false);
+  assert.equal(tooSoon.command, null, 'une seconde correction une seconde plus tard ne part pas');
+
+  const retry = stepBoiler(first.nextState, 1, PARAMS, DWELL_MS + 30_000, false);
+  assert.equal(retry.command, true, 'mais elle est retentée, sinon un relais lent resterait faux');
+  assert.equal(retry.divergence, true);
+});
+
+test('une vraie commutation rend sa chance à la correction', () => {
+  // Le compteur borne les RETENTATIVES d'un même ordre. Après une commutation, l'ordre est neuf :
+  // le retenir ferait perdre la première correction de celui-ci.
+  let state = createBoilerState();
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, 0));
+  ({ nextState: state } = stepBoiler(state, 1, PARAMS, DWELL_MS, false)); // correction à 60 s
+  assert.equal(state.lastDivergenceFixMs, DWELL_MS);
+
+  // Coupure : immédiate, jamais différée.
+  const off = stepBoiler(state, 0, PARAMS, DWELL_MS + 1_000);
+  assert.equal(off.command, false);
+  assert.equal(off.nextState.lastDivergenceFixMs, null);
+
+  // Le relais n'obéit pas : on le recoupe sans attendre les 30 s de l'espacement.
+  const fix = stepBoiler(off.nextState, 0, PARAMS, DWELL_MS + 2_000, true);
+  assert.equal(fix.command, false);
+  assert.equal(fix.divergence, true);
 });

@@ -15,12 +15,12 @@ import type {
   CentralMode, Demand, Preset, Reading, SyncMode, VThermConfig, VThermEvent,
   VThermInputs, VThermOutputs, VThermState, VThermStateDefaults, VThermWarning,
 } from '../lib/types.mjs';
-import type { BoilerParams, BoilerState } from '../lib/types.mjs';
+import type { BoilerParams, BoilerResult, BoilerState } from '../lib/types.mjs';
 import {
   SETPOINT_MAX, SETPOINT_MIN, STALE_MEASUREMENT_SEC,
   TIMED_PRESET_MAX_MINUTES, TIMED_PRESET_MIN_MINUTES,
 } from '../lib/constants.mjs';
-import { createBoilerState, stepBoiler } from '../lib/boilerAggregator.mjs';
+import { boilerDwellMs, createBoilerState, stepBoiler } from '../lib/boilerAggregator.mjs';
 import { restoreVThermState } from '../lib/state.mjs';
 import { stepVTherm } from '../lib/step.mjs';
 import type { CapValue, SourceBinding } from './hub.mjs';
@@ -639,6 +639,8 @@ export class CentralParticipant {
   private params: BoilerParams;
   private centralMode: CentralMode;
   private boilerState: BoilerState;
+  /** Le refus d'allumage a déjà été tracé : il est réévalué à chaque pas, pas le journal. */
+  private ignitionBlockedLogged = false;
 
   constructor(options: CentralParticipantOptions) {
     this.host = options.host;
@@ -678,7 +680,18 @@ export class CentralParticipant {
     const state = this.boilerState;
 
     if (state.pendingSinceMs !== null) {
-      return state.pendingSinceMs + this.params.activationDelaySec * 1000;
+      const activationAtMs = state.pendingSinceMs + this.params.activationDelaySec * 1000;
+      /*
+       * Le garde-fou anti-pulsation repousse l'allumage plus loin que le délai d'activation, et
+       * il faut le dire ici. Sans ce `max`, l'échéance annoncée pendant l'attente est dans le
+       * PASSÉ : le cycle complet du logement se juge dû à chaque battement pendant toute la
+       * minute, pour un allumage qu'on sait déjà refusé — et la reprise a lieu au battement
+       * suivant plutôt qu'à l'instant exact où le garde-fou expire.
+       */
+      const dwellUntilMs = state.lastChangeMs === null
+        ? Number.NEGATIVE_INFINITY
+        : state.lastChangeMs + boilerDwellMs(this.params);
+      return Math.max(activationAtMs, dwellUntilMs);
     }
     if (state.commanded && this.params.keepAliveSec > 0) {
       const baseline = state.lastKeepAliveMs ?? state.lastChangeMs;
@@ -698,7 +711,7 @@ export class CentralParticipant {
     const nbActive = demands.reduce((count, demand) => count + (demand.kind === 'active' ? 1 : 0), 0);
 
     const previous = this.boilerState;
-    const result = stepBoiler(previous, nbActive, this.params, nowMs);
+    const result = stepBoiler(previous, nbActive, this.params, nowMs, this.readRelay(nowMs));
     this.boilerState = result.nextState;
 
     const binding = this.boiler;
@@ -708,7 +721,7 @@ export class CentralParticipant {
         // les supprimerait, alors que forcer l'écriture est précisément leur raison d'être.
         await binding.write(result.command, {
           nowMs,
-          maxIntervalMs: result.keepAlive || result.affirmation ? 1 : undefined,
+          maxIntervalMs: result.keepAlive || result.affirmation || result.divergence ? 1 : undefined,
         });
       } catch (err) {
         // L'ordre n'est pas parti : revenir à l'état précédent pour que le tick suivant le
@@ -729,8 +742,21 @@ export class CentralParticipant {
     await this.publish('vtherm_nb_active', nbActive);
     await this.publish('vtherm_boiler_active', this.boilerState.commanded);
 
+    this.traceIgnitionBlock(result, nbActive, nowMs);
+
     if (result.command === null || result.keepAlive) return;
     if (this.boilerState !== result.nextState) return; // l'écriture a échoué, rien à annoncer.
+
+    if (result.divergence) {
+      // Le relais avait dérivé de l'état commandé : il vient d'y être ramené. Rien à persister —
+      // ni l'état commandé ni l'instant de la dernière commutation n'ont changé — et surtout
+      // aucune carte Flow : « la chaudière démarre » n'a de sens que sur une vraie commutation.
+      this.host.log(
+        `Relais de chaudière trouvé ${result.command ? 'ÉTEINT' : 'ALLUMÉ'} alors qu'il était `
+        + `commandé ${result.command ? 'ALLUMÉ' : 'ÉTEINT'} : remis en accord.`,
+      );
+      return;
+    }
 
     if (result.affirmation) {
       // Réaffirmation au démarrage : le relais vient d'être remis en accord avec l'état restauré.
@@ -785,6 +811,59 @@ export class CentralParticipant {
   destroy(): void {
     this.boiler?.destroy();
     this.boiler = null;
+  }
+
+  /**
+   * L'état RÉELLEMENT porté par le relais, ou `null` quand il n'est pas lisible.
+   *
+   * L'ÂGE est délibérément ignoré (`Infinity`). Un relais qui ne bascule pas ne réémet rien
+   * pendant des heures, et c'est précisément dans ce régime-là que la divergence doit se voir :
+   * un seuil de fraîcheur ordinaire aurait rendu la correction aveugle au cas qu'elle existe pour
+   * rattraper. `stale` ne reste donc vrai que sur un appareil INDISPONIBLE — dont on ne sait rien
+   * et sur lequel une écriture échouerait de toute façon.
+   */
+  private readRelay(nowMs: number): boolean | null {
+    const reading = this.boiler?.read(nowMs, Number.POSITIVE_INFINITY) ?? null;
+    if (reading === null || reading.stale) return null;
+
+    // Certains ponts publient 0/1 là où Homey attend un booléen. Tout le reste n'est pas
+    // interprétable, et une lecture non interprétable ne doit rien corriger.
+    if (typeof reading.value === 'boolean') return reading.value;
+    if (typeof reading.value === 'number') return reading.value !== 0;
+    return null;
+  }
+
+  /**
+   * Trace une attente du garde-fou anti-pulsation : son ENTRÉE, et sa fin quand rien n'en sort.
+   *
+   * C'est la seule explication disponible du symptôme « je change ma consigne et la chaudière ne
+   * change pas de statut » : l'attente est légitime, silencieuse, et dure une minute. Tracée à
+   * chaque pas elle noierait le tampon de diagnostic ; jamais tracée, elle est indiagnosticable.
+   *
+   * Une attente qui débouche sur un allumage n'est pas annoncée deux fois — la commutation est
+   * journalisée juste après. Seule l'attente ABANDONNÉE mérite sa ligne : la demande a disparu
+   * avant l'expiration, et sans elle le journal s'arrête sur « allumage différé de 47 s » qui ne
+   * se conclut jamais.
+   */
+  private traceIgnitionBlock(result: BoilerResult, nbActive: number, nowMs: number): void {
+    if (result.ignitionBlocked === this.ignitionBlockedLogged) return;
+    this.ignitionBlockedLogged = result.ignitionBlocked;
+
+    if (!result.ignitionBlocked) {
+      if (result.command !== true) {
+        this.host.log('Attente d\'allumage abandonnée : plus aucun émetteur en demande.');
+      }
+      return;
+    }
+
+    const lastChangeMs = this.boilerState.lastChangeMs;
+    const remainingSec = lastChangeMs === null
+      ? 0
+      : Math.max(0, Math.ceil((lastChangeMs + boilerDwellMs(this.params) - nowMs) / 1000));
+    this.host.log(
+      `${nbActive} émetteur(s) en demande, mais le garde-fou anti-pulsation diffère l'allumage `
+      + `de ${remainingSec} s : la chaudière vient de commuter.`,
+    );
   }
 
   private async persist(): Promise<void> {

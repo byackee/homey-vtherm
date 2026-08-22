@@ -3,23 +3,42 @@
  */
 
 import type { BoilerParams, BoilerResult, BoilerState } from './types.mjs';
-import { BOILER_MIN_DWELL_FLOOR_SEC } from './constants.mjs';
+import { BOILER_DIVERGENCE_RETRY_SEC, BOILER_MIN_DWELL_FLOOR_SEC } from './constants.mjs';
 
 export function createBoilerState(): BoilerState {
   return {
     commanded: false, lastChangeMs: null, pendingSinceMs: null, lastKeepAliveMs: null,
+    lastDivergenceFixMs: null,
     // Un état neuf n'a rien écrit : le premier pas affirmera l'arrêt, ce qui est toujours sûr.
     affirmed: false,
   };
 }
 
+/**
+ * Le garde-fou anti-pulsation en millisecondes, plancher compris.
+ *
+ * Exporté parce que l'ordonnancement en a besoin autant que la décision : le participant doit
+ * pouvoir annoncer l'instant EXACT où un allumage refusé redeviendra possible, et une seconde
+ * définition du plancher finirait par diverger de celle-ci.
+ */
+export function boilerDwellMs(params: BoilerParams): number {
+  return Math.max(params.minDwellSec, BOILER_MIN_DWELL_FLOOR_SEC) * 1000;
+}
+
+/**
+ * @param relayState état RÉELLEMENT lu sur le relais, ou `null` quand il n'est pas lisible.
+ *   Voir le bloc « Réaffirmation sur divergence ». `null` conserve exactement le comportement
+ *   d'avant la lecture en retour : on ne corrige que ce qu'on a vu.
+ */
 export function stepBoiler(
   state: BoilerState,
   nbActive: number,
   params: BoilerParams,
   nowMs: number,
+  relayState: boolean | null = null,
 ): BoilerResult {
   const demand = nbActive >= params.threshold;
+  const dwellMs = boilerDwellMs(params);
 
   // Compteur du délai d'activation : actif tant que la demande est vraie et qu'on n'est pas
   // encore commandé. Indépendant du garde-fou anti-pulsation ci-dessous.
@@ -37,6 +56,7 @@ export function stepBoiler(
   let commanded = state.commanded;
   let lastChangeMs = state.lastChangeMs;
   let command: boolean | null = null;
+  let ignitionBlocked = false;
 
   if (desired !== state.commanded) {
     /*
@@ -57,15 +77,17 @@ export function stepBoiler(
       lastChangeMs = nowMs;
       command = false;
     } else {
-      const dwellMs = Math.max(params.minDwellSec, BOILER_MIN_DWELL_FLOOR_SEC) * 1000;
       const allowed = lastChangeMs === null || nowMs - lastChangeMs >= dwellMs;
       if (allowed) {
         commanded = true;
         lastChangeMs = nowMs;
         command = true;
+      } else {
+        // Allumage refusé : il reste en attente et sera retenté dès que le délai sera écoulé —
+        // si la demande tient toujours à ce moment-là. Signalé à l'appelant pour qu'il puisse
+        // le tracer : une attente muette d'une minute se lit comme une panne.
+        ignitionBlocked = true;
       }
-      // Sinon : allumage refusé, il reste en attente et sera retenté aux appels suivants,
-      // dès que le délai sera écoulé — si la demande tient toujours à ce moment-là.
     }
   }
 
@@ -99,14 +121,63 @@ export function stepBoiler(
     command = commanded;
     affirmation = true;
   }
+
+  /*
+   * Réaffirmation sur DIVERGENCE — le relais n'est pas dans l'état qu'on lui a commandé.
+   *
+   * `stepBoiler` ne produit un ordre que sur CHANGEMENT, et `keepAliveSec` vaut zéro par défaut :
+   * un ordre perdu en route n'était donc jamais réémis. Une trame Zigbee avalée, une prise qui
+   * revient sur son `power_on_behavior` après une micro-coupure, un quota d'API atteint pendant
+   * une rafale de changements de consigne, une bascule à la main — et le modèle disait ALLUMÉE
+   * pendant que la maison restait froide, sans erreur ni trace, jusqu'au prochain vrai changement
+   * de demande. C'est exactement la panne que l'émetteur en mode interrupteur corrige déjà par
+   * divergence (voir `step.mts` §8bis) ; le relais de chaudière ne le faisait pas.
+   *
+   * Une correction n'est PAS une commutation : elle ne touche pas `lastChangeMs` et ne déclenche
+   * aucune carte Flow — du point de vue de l'app, l'état commandé n'a pas bougé.
+   *
+   * L'ASYMÉTRIE du garde-fou est reconduite ici, et pour la même raison. Corriger vers l'ALLUMAGE
+   * attend le garde-fou : si le relais a divergé juste après une commutation, le rallumer aussitôt
+   * fabriquerait précisément le court-cycle que le garde-fou existe pour empêcher. Corriger vers
+   * l'ARRÊT ne l'attend pas : une chaudière qui tourne alors que RIEN ne la demande chauffe un
+   * circuit dont toutes les vannes sont fermées.
+   *
+   * « Rien ne la demande » est la condition, et elle n'est pas la même que « pas encore commandée ».
+   * Entre le retour de la demande et l'allumage il y a une attente — délai d'activation, ou garde-fou
+   * — pendant laquelle l'app n'a pas encore commandé l'allumage mais s'apprête à le faire. Couper là
+   * un relais resté allumé, c'est éteindre une chaudière qu'on rallumera quarante secondes plus tard :
+   * le court-cycle qu'on prétendait éviter, fabriqué par la correction elle-même. Tant que la demande
+   * est là, on laisse le relais tranquille ; le prochain allumage remettra le modèle d'accord.
+   */
+  let divergence = false;
+  let lastDivergenceFixMs = commanded === state.commanded ? state.lastDivergenceFixMs : null;
+
+  if (command === null && relayState !== null && relayState !== commanded) {
+    // Espacement des RETENTATIVES : un relais en panne peut réannoncer son état en boucle, et
+    // chaque annonce vaudrait un appel d'API. Voir `BOILER_DIVERGENCE_RETRY_SEC`.
+    const retryDue = lastDivergenceFixMs === null
+      || nowMs - lastDivergenceFixMs >= BOILER_DIVERGENCE_RETRY_SEC * 1000;
+
+    if (retryDue && !commanded && !demand) {
+      command = false;
+      divergence = true;
+    } else if (retryDue && commanded && (lastChangeMs === null || nowMs - lastChangeMs >= dwellMs)) {
+      command = true;
+      divergence = true;
+    }
+  }
+  if (divergence) lastDivergenceFixMs = nowMs;
+
   if (command !== null) affirmed = true;
 
   return {
     command,
     keepAlive,
     affirmation,
+    divergence,
+    ignitionBlocked,
     nextState: {
-      commanded, lastChangeMs, pendingSinceMs, lastKeepAliveMs, affirmed,
+      commanded, lastChangeMs, pendingSinceMs, lastKeepAliveMs, affirmed, lastDivergenceFixMs,
     },
   };
 }

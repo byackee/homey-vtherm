@@ -157,6 +157,18 @@ export const DEFAULT_BOILER: BoilerParams = {
  */
 export const BOILER_MIN_DWELL_FLOOR_SEC = 60;
 
+/**
+ * Espacement minimal entre deux CORRECTIONS d'un relais divergent.
+ *
+ * La correction se déclenche sur ce que le relais rapporte, pas sur une horloge : un appareil qui
+ * répond normalement n'en produit qu'une. Mais un relais en panne peut réannoncer son état plusieurs
+ * fois par seconde, et chaque annonce vaudrait alors un appel d'API — le quota Athom se déclenche
+ * en production après quelques dizaines d'appels rapprochés, et il emporterait avec lui toutes les
+ * autres écritures de l'app. Une correction qui n'a pas pris n'est de toute façon pas rattrapée en
+ * la répétant plus vite.
+ */
+export const BOILER_DIVERGENCE_RETRY_SEC = 30;
+
 // --- Consigne --------------------------------------------------------------
 
 export const SETPOINT_MIN = 5;
