@@ -80,6 +80,8 @@ function parseWindowState(value: unknown): WindowState {
     phase: value.phase as WindowPhase,
     phaseSinceMs: finiteOrNull(value.phaseSinceMs),
     openSinceMs: finiteOrNull(value.openSinceMs),
+    // Absent d'un état écrit par une version antérieure : armé, ce qui est le comportement normal.
+    autoDisarmed: value.autoDisarmed === true,
   };
 }
 

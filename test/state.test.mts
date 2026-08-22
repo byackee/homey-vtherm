@@ -198,7 +198,7 @@ test('un état durable intact traverse la migration sans perte', () => {
   assert.equal(state.preset, 'eco');
   assert.equal(state.manualSetpoint, 20.5);
   assert.deepEqual(state.timedPreset, { preset: 'boost', untilMs: NOW + 60_000, previous: 'eco' });
-  assert.deepEqual(state.window, { phase: 'open', phaseSinceMs: NOW - 5_000, openSinceMs: NOW - 5_000 });
+  assert.deepEqual(state.window, { phase: 'open', phaseSinceMs: NOW - 5_000, openSinceMs: NOW - 5_000, autoDisarmed: false });
   assert.deepEqual(state.windowMemento, { onoff: true, preset: 'eco', setpoint: 17 });
   assert.deepEqual(state.regulation, { accumulatedError: 12.5, lastErrorSign: -1 });
   assert.equal(state.lastRunAtMs, NOW - 1_000);
@@ -276,4 +276,22 @@ test('un état neuf n\'invente pas d\'origine de mesure', () => {
   // `nowMs` ferait croire qu'une mesure vient d'arriver : la sécurité repartirait pour 24 h à
   // chaque mise à jour de l'app.
   assert.equal(createPersistentState(NOW, DEFAULTS).lastGoodReadingAtMs, null);
+});
+
+test('un état écrit par une version antérieure repart ARMÉ', () => {
+  // `autoDisarmed` n'existait pas : son absence doit valoir « détection armée », le comportement
+  // normal. Le désarmer par défaut aveuglerait la détection d'ouverture après une mise à jour.
+  const raw = validRaw();
+  const window = (raw as { window: Record<string, unknown> }).window;
+  delete window.autoDisarmed;
+
+  assert.equal(migratePersistentState(raw, NOW, DEFAULTS).window.autoDisarmed, false);
+});
+
+test('un désarmement en cours survit au redémarrage', () => {
+  // Sinon une mise à jour d'app relance la boucle que le désarmement existe pour casser.
+  const raw = validRaw();
+  (raw as { window: Record<string, unknown> }).window.autoDisarmed = true;
+
+  assert.equal(migratePersistentState(raw, NOW, DEFAULTS).window.autoDisarmed, true);
 });

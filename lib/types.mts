@@ -208,6 +208,15 @@ export interface WindowState {
   phaseSinceMs: number | null;
   /** Début de la détection effective, pour la durée maximale du mode auto. */
   openSinceMs: number | null;
+  /**
+   * Mode auto : la détection est DÉSARMÉE jusqu'à ce que la pente se rétablisse.
+   *
+   * Posé par la fermeture forcée sur durée maximale, levé au premier signal de fermeture. Sans
+   * lui, la fermeture forcée se rouvrait elle-même : couper le chauffage trente minutes garantit
+   * que la pièce descend encore, donc que le signal d'ouverture est toujours vrai à la levée. La
+   * pièce n'était rendue au chauffage que le temps du délai de confirmation, indéfiniment.
+   */
+  autoDisarmed: boolean;
 }
 
 export interface WindowResult {

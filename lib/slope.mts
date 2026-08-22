@@ -53,9 +53,24 @@ export function updateSlope(state: SlopeState, temp: number, nowMs: number, para
 
   const dtSec = (nowMs - state.lastMs) / 1000;
 
-  // Horodatage non croissant : ni division par zéro, ni avancement de l'état.
+  /*
+   * Horodatage non croissant : aucune dérivée n'est calculée — mais la RÉFÉRENCE est reprise.
+   *
+   * `lastMs` vient de l'horodatage du CAPTEUR, pas de l'horloge de l'app, et `toEpochMs` accepte
+   * toute date positive sans plafond. Une passerelle qui hoquette suffit donc à poser un `lastMs`
+   * dans le futur — et l'ancienne version rendait `{ ...state }` tel quel, sans le réparer : toute
+   * lecture ultérieure, correctement datée, retombait dans cette même branche. La pente restait
+   * figée pour la durée de vie du processus, en silence, alors qu'elle arbitre les seuils TPI et
+   * pilote entièrement la détection d'ouverture en mode auto.
+   *
+   * Reprendre la référence sur la lecture courante défait l'empoisonnement au pas suivant, sans
+   * rien inventer : ni pente, ni confiance — `sampleCount` et `slope` sont conservés tels quels.
+   */
   if (dtSec <= 0) {
-    return { slopePerHour: publishable(state, minSamples), nextState: { ...state } };
+    return {
+      slopePerHour: publishable(state, minSamples),
+      nextState: { ...state, lastMs: nowMs, lastTemp: temp },
+    };
   }
 
   let instantSlope: number;

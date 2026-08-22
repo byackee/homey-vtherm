@@ -404,13 +404,36 @@ Trois gardes indispensables, absentes de cette première rédaction :
 - **au moins 4 points** de mesure avant toute détection ;
 - toute pente supérieure à **120 °C/h** en valeur absolue est rejetée comme aberrante ;
 - si la dernière mesure date de plus de 30 minutes, un point fictif est injecté pour éviter qu'une
-  longue absence de données ne produise une pente délirante au retour du capteur.
+  longue absence de données ne produise une pente délirante au retour du capteur ;
+- un horodatage non croissant ne produit aucune dérivée, mais **reprend la référence**. L'horodatage
+  vient du capteur, pas de l'horloge de l'app, et n'a pas de plafond : une passerelle qui hoquette
+  suffisait à poser un `lastMs` dans le futur, et toute lecture correctement datée ensuite retombait
+  dans la même branche. La pente restait figée pour la durée de vie du processus, en silence — alors
+  qu'elle arbitre les seuils TPI (§4) et pilote entièrement la détection d'ouverture en mode auto.
 
 | Réglage | Défaut |
 |---|---|
 | `window_auto_open_threshold` | **3 °C/h** de chute |
 | `window_auto_close_threshold` | **0 °C/h** |
 | `window_auto_max_duration` | **30 min** — au-delà, restauration même si la chute continue |
+
+**[ÉCART] — la restauration DÉSARME la détection jusqu'au rétablissement de la pente.** Restaurer sans
+désarmer ne restaure rien : couper le chauffage une demi-heure garantit que la pièce descend encore, donc
+que le signal d'ouverture est toujours vrai à la levée. La détection se rouvrait au délai de confirmation
+suivant — trente secondes de chauffe par demi-heure — et la pièce n'atteignait jamais l'équilibre qui
+aurait permis d'en sortir. Le désarmement est levé au premier signal de fermeture, c'est-à-dire dès que
+la pièce cesse de se refroidir, et il est persisté : une mise à jour d'app ne doit pas relancer la boucle.
+
+### 6.2bis Le capteur qui se tait
+
+**[ÉCART] — en mode capteur, une lecture ABSENTE vaut fin de détection.** Le signal de fermeture est
+`sensorOpen !== true`, jamais `=== false`. Un contact peut cesser de répondre — appareil ré-appairé sous
+un nouvel identifiant, sorti du cache de l'API, valeur non interprétable — et vaut alors `null`. Avec
+`=== false`, ni l'ouverture ni la fermeture n'étaient vraies, et la phase `open` n'avait plus aucune
+sortie : la fermeture forcée sur durée maximale ne vaut qu'en mode auto. Chauffage coupé, vanne fermée,
+aucun avertissement, et l'état persisté survivait au redémarrage. Le seuil de fraîcheur de sept jours de
+ce capteur portait déjà l'intention — « un "ouvert" périmé gèlerait le logement » — sans que la machine à
+états l'honore. On ne confirme une fenêtre ouverte que sur un capteur qui l'affirme.
 
 ### 6.3 Action fenêtre
 `window_action` : `turn_off` (défaut) \| `frost` \| `eco` \| `fan_only`.

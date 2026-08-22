@@ -155,11 +155,35 @@ test('trou juste en dessous de 30 minutes : dérivée normale', () => {
 
 // --- Robustesse ------------------------------------------------------------------
 
-test('dtSec <= 0 : pas de division par zéro, état inchangé', () => {
+test('dtSec <= 0 : aucune pente inventée, mais la référence est REPRISE', () => {
+  // La pente publiée ne bouge pas, et la confiance accumulée non plus.
   const state = feed(4);
   const result = updateSlope(state, 25, 3 * QUARTER_HOUR_MS, PARAMS);
   assert.equal(result.slopePerHour, -0.96);
-  assert.deepStrictEqual(result.nextState, state);
+  assert.equal(result.nextState.slope, state.slope);
+  assert.equal(result.nextState.sampleCount, state.sampleCount);
+
+  // Mais `lastMs` suit la lecture courante. Sans ça, un horodatage venu du capteur et posé dans
+  // le futur gelait la pente pour la durée de vie du processus : toute lecture correctement datée
+  // ensuite retombait dans cette même branche, indéfiniment.
+  assert.equal(result.nextState.lastMs, 3 * QUARTER_HOUR_MS);
+  assert.equal(result.nextState.lastTemp, 25);
+});
+
+test('un horodatage venu du futur ne gèle pas la pente : le pas suivant repart', () => {
+  const state = feed(4);
+  const future = 4 * QUARTER_HOUR_MS + 24 * 3_600_000; // la passerelle a hoqueté d'un jour
+  const poisoned = updateSlope(state, 19.25, future, PARAMS);
+  assert.equal(poisoned.nextState.lastMs, future, 'la lecture datée du futur est prise telle quelle');
+
+  // Lecture suivante, correctement datée : elle répare la référence…
+  const repaired = updateSlope(poisoned.nextState, 19.5, 5 * QUARTER_HOUR_MS, PARAMS);
+  assert.equal(repaired.nextState.lastMs, 5 * QUARTER_HOUR_MS);
+
+  // …et celle d'après produit à nouveau une vraie dérivée.
+  const alive = updateSlope(repaired.nextState, 20, 6 * QUARTER_HOUR_MS, PARAMS);
+  assert.notEqual(alive.nextState.lastMs, future);
+  assert.ok(alive.slopePerHour !== null && alive.slopePerHour > 0, 'la pente est repartie');
 });
 
 test('état non muté : l\'état passé en entrée n\'est jamais modifié', () => {
