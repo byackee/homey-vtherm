@@ -22,6 +22,7 @@ import { computeOpeningDegree } from './openingDegree.mjs';
 import { computeOffset, resolveRegulationParams } from './selfRegulation.mjs';
 import { updateSlope } from './slope.mjs';
 import { stepWindow } from './windowDetector.mjs';
+import { evaluateSafety } from './safety.mjs';
 import { createMotionState, resolveSetpoint, updateMotion } from './presetResolver.mjs';
 import { resolveStateLabel } from './stateLabel.mjs';
 import { shouldWrite, type LastWrite, type WriteOptions } from './writePolicy.mjs';
@@ -225,6 +226,18 @@ export function stepVTherm(
     }
   }
 
+  // === 7bis. Mode sécurité =================================================
+  //
+  // Évalué avant la régulation : il décide quoi faire quand il n'y a précisément rien à réguler.
+
+  const safety = evaluateSafety({
+    sensorStale: inputs.roomTemp !== null && roomTemp === null,
+    sensorBound: inputs.roomTemp !== null,
+    emitterMode: inputs.emitterMode,
+    lastOnPercent: persistent.lastOnPercent,
+    onoff: inputs.onoff,
+  }, config.safety);
+
   // === 8. Régulation =======================================================
 
   let onPercent = 0;
@@ -245,6 +258,20 @@ export function stepVTherm(
     // resterait constant, la vanne s'ouvrirait un peu plus à chaque cycle et personne ne le verrait
     // avant d'entrer dans la pièce. `regulationState` reste tel quel : à la reprise, l'intégrale
     // repart de là où la mesure s'est tue, pas de zéro.
+    //
+    // Sauf si le mode sécurité s'applique : geler la sortie coupe la demande de chaleur, donc la
+    // chaudière, et une pièce qui chauffait franchement se retrouve sans rien. On force alors une
+    // puissance minimale plutôt que de s'arrêter.
+    if (safety.active) {
+      onPercent = safety.onPercent;
+      valveTarget = computeOpeningDegree(onPercent, {
+        minOpeningDegree: config.minOpeningDegree,
+        maxOpeningDegree: config.maxOpeningDegree,
+        maxClosingDegree: config.maxClosingDegree,
+        openingThreshold: config.openingThreshold,
+      });
+      regulatedSetpoint = toEmitterSetpoint(effectiveSetpoint);
+    }
   } else {
     // `on_percent` est calculé dans les DEUX modes : SPEC §2.3 définit `vtherm_power_percent`
     // comme la sortie TPI, indépendamment de la façon dont on parle à l'émetteur.
@@ -283,7 +310,12 @@ export function stepVTherm(
     // Décision définitive et non une ignorance : on vient de commander la fermeture.
     demand = { kind: 'inactive' };
   } else if (roomTemp === null) {
-    demand = { kind: 'unknown' };
+    // Le mode sécurité vient de commander une ouverture minimale : c'est une demande DÉLIBÉRÉE,
+    // pas une ignorance. Sans ça l'agrégateur laisserait la chaudière éteinte et la vanne
+    // s'ouvrirait sur un circuit froid — tout le travail du mode sécurité pour rien.
+    demand = safety.active
+      ? { kind: 'active', percent: valveTarget ?? 0 }
+      : { kind: 'unknown' };
   } else if (inputs.emitterMode === 'valve') {
     // MÊME prédicat que `computeOpeningDegree` : sans ça, on finirait par compter une vanne
     // commandée ouverte comme inactive, ou l'inverse. `openingThreshold` est sur l'échelle de
@@ -357,6 +389,7 @@ export function stepVTherm(
     centralOverride,
     windowActive: windowResult.active,
     roomSensorMute,
+    safetyActive: safety.active,
     overpowered: false,
     away: presetResult.away,
     activity: presetResult.activity,
@@ -511,6 +544,9 @@ export function stepVTherm(
       windowMemento,
       regulation: regulationState,
       lastRunAtMs: nowMs,
+      // Mémorisée seulement quand la mesure est vivante : c'est ce que le mode sécurité
+      // interrogera si le capteur se tait, et une valeur de secours l'écraserait.
+      lastOnPercent: roomTemp === null ? persistent.lastOnPercent : onPercent,
     },
     volatile: {
       slope: slopeState,

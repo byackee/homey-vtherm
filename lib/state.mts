@@ -115,6 +115,7 @@ export function createPersistentState(
     windowMemento: null,
     regulation: createRegulationState(),
     lastRunAtMs: nowMs,
+    lastOnPercent: 0,
   };
 }
 
@@ -176,6 +177,7 @@ export function migratePersistentState(
     windowMemento: parseWindowMemento(raw.windowMemento),
     regulation,
     lastRunAtMs,
+    lastOnPercent: readFraction(raw.lastOnPercent),
   };
 }
 
@@ -189,4 +191,16 @@ export function restoreVThermState(
     persistent: migratePersistentState(raw, nowMs, defaults),
     volatile: createVolatileState(),
   };
+}
+
+/**
+ * Une fraction 0..1 relue du `store`.
+ *
+ * Comme partout dans cette migration : devant `undefined`, `NaN`, un type inattendu ou une valeur
+ * hors bornes, on repart de zéro. Un `NaN` glissé ici traverserait le calcul de puissance et
+ * finirait dans `setCapabilityValue`, que Homey rejette en silence.
+ */
+function readFraction(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0;
+  return Math.min(1, Math.max(0, raw));
 }

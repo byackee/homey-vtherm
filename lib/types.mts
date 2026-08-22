@@ -1,3 +1,4 @@
+import type { SafetyParams } from './safety.mjs';
 /**
  * Contrat du cœur algorithmique.
  *
@@ -353,6 +354,15 @@ export interface WindowMemento {
  * puis `NaN` au premier calcul, puis une capability morte pour toute la durée de vie de l'app.
  */
 export interface VThermPersistentState {
+  /**
+   * Dernière puissance calculée sur une mesure vivante.
+   *
+   * Le mode sécurité en a besoin pour juger si l'arrêt est dangereux : une pièce qui ne chauffait
+   * presque pas ne risque pas de geler. Persistée, sinon un redémarrage pendant une panne de
+   * capteur ferait perdre le seul élément qui permet de décider.
+   */
+  lastOnPercent: number;
+
   readonly version: 1;
   preset: Preset;
   manualSetpoint: number;
@@ -417,6 +427,9 @@ export interface VThermStateDefaults {
  * de `safety` et `power` en v1.1 soit l'édition d'UNE ligne de la table (SPEC §12).
  */
 export interface StateContext {
+  /** Le mode sécurité a pris le relais d'un capteur muet (voir lib/safety.mts). */
+  safetyActive: boolean;
+
   onoff: boolean;
   /** Mode central non-`auto` ET respecté par ce device (`use_central_mode`). */
   centralOverride: boolean;
@@ -435,6 +448,9 @@ export interface StateContext {
 
 /** Réglages du device, constants sur la durée d'un pas. */
 export interface VThermConfig {
+  /** Mode sécurité : quoi faire quand le capteur de pièce se tait (voir lib/safety.mts). */
+  safety: SafetyParams;
+
   tpi: TpiParams;
   slope: SlopeParams;
   window: WindowParams;

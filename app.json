@@ -2036,6 +2036,73 @@
               }
             }
           ]
+        },
+        {
+          "type": "group",
+          "label": {
+            "en": "Safety",
+            "fr": "Sécurité",
+            "nl": "Veiligheid"
+          },
+          "children": [
+            {
+              "id": "safety_enabled",
+              "type": "checkbox",
+              "value": true,
+              "label": {
+                "en": "Keep heating when the sensor goes quiet",
+                "fr": "Continuer à chauffer si le capteur se tait",
+                "nl": "Blijf verwarmen als de sensor stilvalt"
+              },
+              "hint": {
+                "en": "When the room sensor stops reporting, regulation has nothing to work from and the boiler would stop. Rather than leave the room unheated, a minimum power is applied until the sensor comes back. Only applies when the valve opening is driven directly.",
+                "fr": "Quand le capteur de pièce cesse de répondre, la régulation n'a plus rien sur quoi travailler et la chaudière s'arrêterait. Plutôt que de laisser la pièce sans chauffage, une puissance minimale est appliquée jusqu'au retour du capteur. Ne s'applique qu'au pilotage direct de la vanne.",
+                "nl": "Als de kamersensor stopt met melden, zou de ketel stoppen. In plaats daarvan wordt een minimaal vermogen toegepast tot de sensor terugkomt."
+              }
+            },
+            {
+              "id": "safety_min_on_percent",
+              "type": "number",
+              "value": 50,
+              "min": 0,
+              "max": 100,
+              "step": 5,
+              "units": {
+                "en": "%"
+              },
+              "label": {
+                "en": "Only below this last power",
+                "fr": "Seulement au-dessus de cette dernière puissance",
+                "nl": "Alleen boven dit laatste vermogen"
+              },
+              "hint": {
+                "en": "If the room was heating less than this when the sensor went quiet, nothing is done: it was not at risk, and heating it blindly would run the boiler for a long time with nothing left to say stop.",
+                "fr": "Si la pièce chauffait moins que ça au moment où le capteur s'est tu, on ne fait rien : elle n'était pas en danger, et la chauffer à l'aveugle ferait tourner la chaudière longtemps, sans plus rien pour dire d'arrêter.",
+                "nl": "Als de kamer minder verwarmde dan dit, gebeurt er niets."
+              }
+            },
+            {
+              "id": "safety_default_on_percent",
+              "type": "number",
+              "value": 10,
+              "min": 0,
+              "max": 100,
+              "step": 5,
+              "units": {
+                "en": "%"
+              },
+              "label": {
+                "en": "Fallback power",
+                "fr": "Puissance de repli",
+                "nl": "Terugvalvermogen"
+              },
+              "hint": {
+                "en": "Enough to avoid freezing, not enough to heat.",
+                "fr": "De quoi éviter le gel, pas de quoi chauffer.",
+                "nl": "Genoeg om bevriezing te voorkomen, niet om te verwarmen."
+              }
+            }
+          ]
         }
       ]
     }

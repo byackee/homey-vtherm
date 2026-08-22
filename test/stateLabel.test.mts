@@ -10,6 +10,7 @@ function ctx(overrides: Partial<StateContext> = {}): StateContext {
     centralOverride: false,
     windowActive: false,
     roomSensorMute: false,
+    safetyActive: false,
     overpowered: false,
     away: false,
     activity: false,
@@ -109,4 +110,18 @@ test('ajouter safety en v1.1 est bien l\'édition d\'une seule ligne', () => {
   assert.equal(resolve(ctx({ roomSensorMute: true })), 'safety');
   assert.equal(resolve(ctx({ roomSensorMute: true, windowActive: true })), 'window');
   assert.equal(resolve(ctx({ roomSensorMute: true, away: true })), 'safety');
+});
+
+test('la sécurité prime sur l\'absence, l\'activité et la chauffe', () => {
+  assert.equal(resolveStateLabel(ctx({ safetyActive: true, away: true })), 'safety');
+  assert.equal(resolveStateLabel(ctx({ safetyActive: true, heating: true })), 'safety');
+
+  // Mais un appareil éteint reste éteint, et le mode central garde la main.
+  assert.equal(resolveStateLabel(ctx({ safetyActive: true, onoff: false })), 'off');
+  assert.equal(resolveStateLabel(ctx({ safetyActive: true, centralOverride: true })), 'central');
+
+  // Et la fenêtre aussi, délibérément : un contact d'ouverture reste fiable quand le thermomètre
+  // se tait. Une pièce qu'on aère ne risque pas de geler du fait de notre inaction — elle est
+  // ouverte. Chauffer « par sécurité » une pièce ouverte serait absurde.
+  assert.equal(resolveStateLabel(ctx({ safetyActive: true, windowActive: true })), 'window');
 });

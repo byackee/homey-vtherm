@@ -1,7 +1,7 @@
 /**
  * Priorité de `vtherm_state` (SPEC §2.3), exprimée en TABLE ORDONNÉE et non en cascade de `if`.
  *
- * Pourquoi une table : `safety` et `power` sont hors périmètre v1 (SPEC §12) mais leurs valeurs sont
+ * Pourquoi une table : `power` reste hors périmètre v1 (SPEC §12) mais sa valeur est
  * déjà réservées dans la capability. Avec une cascade, les ajouter en v1.1 obligerait à relire tout
  * l'enchaînement pour retrouver où s'insère la nouvelle branche — l'endroit exact où l'on introduit
  * une régression de priorité. Ici, leurs lignes existent déjà, à la bonne place, avec une condition
@@ -29,8 +29,7 @@ export const STATE_RULES: readonly StateRule[] = [
   { label: 'window', when: (ctx) => ctx.windowActive },
 
   // v1.1 — mode sécurité (SPEC §12) : remplacer par `(ctx) => ctx.roomSensorMute`
-  // une fois `safety_delay_min` implémenté. Le contexte porte déjà `roomSensorMute`.
-  { label: 'safety', when: () => false },
+  { label: 'safety', when: (ctx) => ctx.safetyActive },
 
   // v1.1 — délestage par puissance (SPEC §12) : remplacer par `(ctx) => ctx.overpowered`.
   { label: 'power', when: () => false },

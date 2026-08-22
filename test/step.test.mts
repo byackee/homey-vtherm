@@ -4,6 +4,7 @@ import { stepVTherm } from '../lib/step.mjs';
 import { createVThermState, migratePersistentState, createVolatileState } from '../lib/state.mjs';
 import {
   DEFAULT_AWAY_TEMPS, DEFAULT_EXPERT_REGULATION, DEFAULT_PRESET_TEMPS, DEFAULT_SLOPE,
+  DEFAULT_SAFETY,
 } from '../lib/constants.mjs';
 import type {
   Reading, VThermConfig, VThermInputs, VThermState, VThermStateDefaults,
@@ -48,6 +49,7 @@ const CONFIG: VThermConfig = {
   autoRegulationPeriodMin: 5,
   cycleMin: 5,
   useCentralMode: true,
+  safety: DEFAULT_SAFETY,
 };
 
 function config(overrides: Partial<VThermConfig> = {}): VThermConfig {
@@ -255,18 +257,85 @@ test('capteur de pièce absent : aucune demande, aucune écriture, avertissement
   assert.equal(nextState.volatile.lastWrite.setpoint, null);
 });
 
-test('capteur de pièce périmé : même traitement qu\'absent, et la dernière écriture reste intacte', () => {
+test('capteur périmé alors que la pièce chauffait : le mode sécurité prend le relais', () => {
+  // Avant le mode sécurité, ce cas gelait la sortie : la demande devenait inconnue, donc la
+  // chaudière s'éteignait, et une pièce qui chauffait à 74 % se retrouvait sans rien. Une pile
+  // morte une nuit de janvier suffisait.
   let state = freshState();
   state = stepVTherm(state, inputs(), CONFIG, 0).nextState;
   assert.equal(state.volatile.lastWrite.valvePercent, 74);
+  assert.equal(state.persistent.lastOnPercent, 0.74, 'la dernière puissance vivante est mémorisée');
 
   const result = stepVTherm(state, inputs({ roomTemp: reading(18, 0, true) }), CONFIG, 300_000);
 
+  assert.equal(result.outputs.stateLabel, 'safety');
+  assert.equal(result.outputs.onPercent, 0.1, 'puissance de repli, pas la dernière connue');
+  assert.equal(result.outputs.valvePercent, 10);
+  assert.equal(result.outputs.demand.kind, 'active', 'la chaudière doit rester sollicitée');
+  assert.ok(result.outputs.warning !== null, 'et l\'utilisateur doit le savoir');
+  assert.equal(result.nextState.persistent.lastOnPercent, 0.74,
+    'la puissance de secours n\'écrase pas la dernière valeur vivante');
+});
+
+test('capteur périmé alors que la pièce ne chauffait presque pas : on ne fait rien', () => {
+  // Elle n'était pas en danger. Déclencher ferait tourner la chaudière longtemps, sans plus rien
+  // pour dire d'arrêter.
+  let state = freshState();
+  // Pièce déjà à la consigne : le TPI rend une puissance faible.
+  state = stepVTherm(state, inputs({ roomTemp: reading(19.5) }), CONFIG, 0).nextState;
+  assert.ok(state.persistent.lastOnPercent < CONFIG.safety.minOnPercent);
+
+  const result = stepVTherm(state, inputs({ roomTemp: reading(19.5, 0, true) }), CONFIG, 300_000);
+
   assert.deepEqual(result.outputs.demand, { kind: 'unknown' });
+  assert.equal(result.outputs.valvePercent, null, 'sortie gelée, aucune écriture');
+  assert.notEqual(result.outputs.stateLabel, 'safety');
+});
+
+test('aucun capteur désigné : jamais de sécurité', () => {
+  // C'est un défaut de configuration, pas une panne. Chauffer une pièce dont on ignore tout
+  // serait pire que de ne rien faire, et l'avertissement le signale déjà.
+  let state = freshState();
+  state = stepVTherm(state, inputs(), CONFIG, 0).nextState;
+
+  const result = stepVTherm(state, inputs({ roomTemp: null }), CONFIG, 300_000);
+
+  assert.notEqual(result.outputs.stateLabel, 'safety');
+  assert.deepEqual(result.outputs.demand, { kind: 'unknown' });
+});
+
+test('mode consigne : pas de sécurité, l\'émetteur régule tout seul', () => {
+  // Privé de nos écritures, un émetteur en mode consigne tient sa dernière consigne sur son
+  // propre thermomètre. Forcer une puissance reviendrait à se substituer à un régulateur qui
+  // fonctionne. C'est le choix de VT, pour la même raison.
+  let state = freshState();
+  state = stepVTherm(state, inputs({ emitterMode: 'setpoint' }), CONFIG, 0).nextState;
+
+  const result = stepVTherm(
+    state, inputs({ emitterMode: 'setpoint', roomTemp: reading(18, 0, true) }), CONFIG, 300_000);
+
+  assert.notEqual(result.outputs.stateLabel, 'safety');
+});
+
+test('mode sécurité désactivé : la sortie reste gelée', () => {
+  let state = freshState();
+  state = stepVTherm(state, inputs(), CONFIG, 0).nextState;
+
+  const result = stepVTherm(state, inputs({ roomTemp: reading(18, 0, true) }),
+    config({ safety: { ...CONFIG.safety, enabled: false } }), 300_000);
+
+  assert.notEqual(result.outputs.stateLabel, 'safety');
   assert.equal(result.outputs.valvePercent, null);
-  assert.equal(result.outputs.setpointToEmitter, null);
-  assert.ok(result.outputs.warning !== null);
-  assert.equal(result.nextState.volatile.lastWrite.valvePercent, 74, 'la mémoire d\'écriture ne bouge pas');
+});
+
+test('retour du capteur : la régulation normale reprend', () => {
+  let state = freshState();
+  state = stepVTherm(state, inputs(), CONFIG, 0).nextState;
+  state = stepVTherm(state, inputs({ roomTemp: reading(18, 0, true) }), CONFIG, 300_000).nextState;
+
+  const back = stepVTherm(state, inputs(), CONFIG, 600_000);
+  assert.equal(back.outputs.stateLabel, 'heating');
+  near(back.outputs.onPercent, 0.74);
 });
 
 test('capteur de pièce muet : l\'intégrale est GELÉE, pas remise à zéro ni alimentée', () => {
@@ -769,7 +838,10 @@ test('capteur de pièce muet : sensor_quiet part une seule fois, puis sensor_rec
   const quiet = stepVTherm(first.nextState, inputs({ roomTemp: reading(18, 0, true) }), CONFIG, 60_000);
   assert.ok(quiet.outputs.events.some((e) => e.kind === 'sensor_quiet'),
     'le capteur qui se tait doit être annonçable par un Flow');
-  assert.equal(quiet.outputs.demand.kind, 'unknown', 'et surtout : plus aucune demande de chaleur');
+  // La pièce chauffait franchement : le mode sécurité prend le relais plutôt que de la laisser
+  // sans rien. L'événement part quand même — signaler ET secourir, pas l'un ou l'autre.
+  assert.equal(quiet.outputs.stateLabel, 'safety');
+  assert.equal(quiet.outputs.demand.kind, 'active');
   assert.ok(quiet.outputs.warning !== null, 'avec un avertissement sur l\'appareil');
 
   // Pas suivant, toujours muet : l'événement ne se répète pas.

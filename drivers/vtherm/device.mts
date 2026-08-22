@@ -15,8 +15,7 @@ import {
   DEFAULT_EXPERT_REGULATION, DEFAULT_MAX_CLOSING_DEGREE, DEFAULT_MAX_OPENING_DEGREE,
   DEFAULT_MIN_OPENING_DEGREE, DEFAULT_MOTION_DELAY_SEC, DEFAULT_MOTION_OFF_DELAY_SEC,
   DEFAULT_OPENING_THRESHOLD, DEFAULT_PRESET_TEMPS, DEFAULT_REGULATION_THRESHOLD, DEFAULT_SLOPE,
-  DEFAULT_TPI, DEFAULT_WINDOW, DEFAULT_AWAY_TEMPS,
-} from '../../lib/constants.mjs';
+  DEFAULT_TPI, DEFAULT_WINDOW, DEFAULT_AWAY_TEMPS, DEFAULT_SAFETY } from '../../lib/constants.mjs';
 import type { Preset, VThermConfig } from '../../lib/types.mjs';
 import type { CapValue } from '../../runtime/hub.mjs';
 import { HomeyEmitterAdapter } from '../../runtime/emitter.mjs';
@@ -602,6 +601,12 @@ export default class VThermDevice extends Homey.Device {
       autoRegulationDtemp: num(s, 'regulation_dtemp', DEFAULT_AUTO_REGULATION_DTEMP),
       autoRegulationPeriodMin: num(s, 'regulation_period_min', DEFAULT_AUTO_REGULATION_PERIOD_MIN),
       cycleMin: num(s, 'cycle_min', DEFAULT_CYCLE_MIN),
+      safety: {
+        enabled: bool(s, 'safety_enabled', DEFAULT_SAFETY.enabled),
+        // Saisis en %, attendus en fraction sur l'échelle de `on_percent`.
+        minOnPercent: num(s, 'safety_min_on_percent', DEFAULT_SAFETY.minOnPercent * 100) / 100,
+        defaultOnPercent: num(s, 'safety_default_on_percent', DEFAULT_SAFETY.defaultOnPercent * 100) / 100,
+      },
       useCentralMode: bool(s, 'use_central_mode', true),
     };
   }

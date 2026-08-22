@@ -167,3 +167,19 @@ export const STALE_MEASUREMENT_SEC = 3600;
  * réappliquer reviendrait à corriger le présent avec l'écart d'un logement qui n'existe plus.
  */
 export const REGULATION_RESET_AFTER_SEC = 3600;
+
+// --- Mode sécurité (porté de VT) -------------------------------------------
+
+/**
+ * Défauts repris de Versatile Thermostat.
+ *
+ * `minOnPercent` à 0,5 : en dessous, la pièce ne chauffait pas assez pour qu'un arrêt soit
+ * dangereux, et déclencher ferait tourner une chaudière pour rien — longtemps, puisque plus rien
+ * ne dira d'arrêter. `defaultOnPercent` à 0,1 : de quoi éviter le gel, pas de quoi chauffer.
+ * Le délai de 60 minutes de VT correspond ici au seuil de péremption de la mesure de pièce.
+ */
+export const DEFAULT_SAFETY = {
+  enabled: true,
+  minOnPercent: 0.5,
+  defaultOnPercent: 0.1,
+} as const;

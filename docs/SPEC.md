@@ -508,9 +508,11 @@ indiquer de supprimer les appareils avant de désinstaller.
 
 ## 12. Hors périmètre v1 (à cadrer pour la v1.1)
 
-Décidés hors v1 mais l'architecture ne doit pas les rendre coûteux :
-**mode sécurité** (capteur muet, `safety_delay_min` 60 min, `safety_min_on_percent` 0,5,
-`safety_default_on_percent` 0,1), **délestage par puissance**, **auto start/stop prédictif**,
+Le **mode sécurité** a finalement été implémenté (voir `lib/safety.mts`) : le laisser de côté
+revenait à accepter qu'une pile morte laisse une pièce sans chauffage une nuit d'hiver, ce qui n'est
+pas une fonctionnalité manquante mais un filet absent.
+
+Restent hors v1, sans que l'architecture les rende coûteux : **délestage par puissance**, **auto start/stop prédictif**,
 **détection d'anomalie de chauffe**, **réparation d'état incorrect**, **Auto-TPI** (apprentissage
 des coefficients), **verrouillage par PIN**, **types `over_switch` et `over_valve`**,
 **mode climatisation** (`ac_mode`), **compteurs d'énergie**.
