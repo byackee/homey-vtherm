@@ -1,10 +1,21 @@
 /**
  * `runtime/valveBackend.mts` — le contrat de la dorsale MQTT, vu par l'émetteur.
  *
- * Quatre propriétés de la TRVZB n'existent PAS comme capability Homey (SPEC §1.1, relevé sur
- * l'appareil réel) : `valve_opening_degree`, `valve_closing_degree`, `external_temperature_input`
- * et `temperature_sensor_select`. Les atteindre demande de publier soi-même sur
- * `<base_topic>/<friendly_name>/set`, ce que fait `runtime/mqttBackend.mts`.
+ * Cinq propriétés de la TRVZB n'existent PAS comme capability Homey (SPEC §1.1, relevé sur
+ * l'appareil réel) : `valve_opening_degree`, `valve_closing_degree`, `external_temperature_input`,
+ * `temperature_sensor_select` et `local_temperature_calibration`.
+ *
+ * Il existe DEUX façons de les atteindre, pas une seule — le croire coûte cher, une PR a été
+ * ouverte puis fermée sur cette erreur (gruijter/com.gruijter.zigbee2mqtt#89) :
+ *  - la carte Flow `custom_payload_set` de l'app Zigbee2MQTT, qui publie un JSON brut sur
+ *    `<base_topic>/<friendly_name>/set` sans passer par sa capability map ;
+ *  - publier soi-même sur ce même topic, ce que fait `runtime/mqttBackend.mts`.
+ *
+ * On prend la seconde. La carte n'est documentée nulle part chez l'auteur, elle écrit seulement —
+ * aucune de ces cinq valeurs n'est lisible côté Homey, ni en tuile ni en Insights — et une app ne
+ * déclenche pas la carte d'une autre app depuis le SDK. Un renommage chez l'auteur nous ferait
+ * perdre le pilotage de vanne en silence, sans erreur au démarrage. Le broker et le contrat Z2M,
+ * eux, sont publics et stables.
  *
  * Ce fichier ne porte QUE l'interface, pour deux raisons :
  *  - l'émetteur doit fonctionner entièrement sans dorsale — sans elle il régule par consigne

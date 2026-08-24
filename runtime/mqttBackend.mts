@@ -8,7 +8,8 @@
  * `valve_closing_degree`, `external_temperature_input`, `temperature_sensor_select`. Vérifié dans
  * son code et sur l'appareil réel (SPEC §1.1). Sa carte Flow `custom_payload_set` publie pourtant
  * littéralement un JSON sur `<base_topic>/<friendly_name>/set` ; on fait la même chose, mais en
- * parlant nous-mêmes au broker.
+ * parlant nous-mêmes au broker — cette carte n'est documentée nulle part et une app ne déclenche
+ * pas la carte d'une autre app depuis le SDK. Voir `runtime/valveBackend.mts` pour l'arbitrage.
  *
  * Trois règles tenues par ce fichier :
  *
