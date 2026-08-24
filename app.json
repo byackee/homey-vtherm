@@ -19,7 +19,8 @@
     "nl": "Maak van elke temperatuursensor en verwarming een thermostaat die echt regelt"
   },
   "category": [
-    "climate"
+    "climate",
+    "tools"
   ],
   "permissions": [
     "homey:manager:api"
