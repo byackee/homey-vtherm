@@ -95,7 +95,7 @@ export default class VThermApp extends Homey.App {
   private readonly cycle: Tickable = {
     tickId: 'app-cycle',
     dueAtMs: () => this.cycleDueAtMs(),
-    tick: (nowMs: number) => this.runCycle(nowMs),
+    tick: (nowMs: number, reasons?: readonly string[]) => this.runCycle(nowMs, reasons),
   };
 
   get hub(): HomeyApiHub {
@@ -235,7 +235,44 @@ export default class VThermApp extends Homey.App {
     return due;
   }
 
-  private async runCycle(nowMs: number): Promise<void> {
+  /**
+   * Ne fait tiquer que les thermostats CONCERNÉS quand le tick est demandé.
+   *
+   * `requestTick` est branché sur le `onChange` de chaque liaison de source : une seule sonde qui
+   * remonte une mesure faisait recalculer tout le logement. Avec un thermostat par pièce, la charge
+   * croissait comme le carré du nombre de pièces jusqu'à saturer la fenêtre de coalescence.
+   *
+   * Le resserrement est DÉLIBÉRÉMENT conservateur : il n'a lieu que si TOUTES les raisons désignent
+   * un thermostat connu. Une raison globale — `hub-connected`, `register:…` — continue de réveiller
+   * tout le monde, ce qui est bien ce qu'elle veut dire. Et les thermostats dus tiquent de toute
+   * façon : c'est leur échéance, pas un événement, qui les y amène.
+   *
+   * L'instantané de l'étape 3 reste cohérent : `participant.demand` porte la demande du dernier pas
+   * abouti, et un thermostat ni dû ni concerné n'a reçu aucune entrée nouvelle — sa demande est donc
+   * inchangée, pas périmée.
+   */
+  private targetsFor(nowMs: number, reasons: readonly string[]): VThermParticipant[] {
+    const all = [...this.vtherms.values()];
+    if (reasons.length === 0) return all;
+
+    const named = new Set<VThermParticipant>();
+    for (const reason of reasons) {
+      const separator = reason.indexOf(':');
+      // Une raison sans préfixe, ou dont le préfixe ne nomme aucun thermostat connu, est globale :
+      // on ne resserre pas. C'est le cas de `hub-connected`, `register:…` et `register-central`.
+      if (separator < 0) return all;
+      const participant = this.vtherms.get(reason.slice(0, separator));
+      if (participant === undefined) return all;
+      named.add(participant);
+    }
+
+    for (const participant of all) {
+      if (participant.dueAtMs() <= nowMs) named.add(participant);
+    }
+    return all.filter((participant) => named.has(participant));
+  }
+
+  private async runCycle(nowMs: number, reasons: readonly string[] = []): Promise<void> {
     const hub = this.hubImpl;
     if (hub === null) return;
 
@@ -247,7 +284,7 @@ export default class VThermApp extends Homey.App {
     await hub.refresh(nowMs);
 
     // 2. Isolation par appareil : un émetteur muet ne doit pas emporter la régulation des autres.
-    const vtherms = [...this.vtherms.values()];
+    const vtherms = this.targetsFor(nowMs, reasons);
     const results = await Promise.allSettled(
       vtherms.map((participant) => this.withTimeout(participant.tick(nowMs), participant.tickId)),
     );
@@ -262,7 +299,10 @@ export default class VThermApp extends Homey.App {
     const central = this.central;
     if (central === null) return; // 4. sautée : aucun appareil central, c'est le défaut.
 
-    const demands: Demand[] = vtherms
+    // TOUS les thermostats, pas seulement ceux qui viennent de tiquer. `demand` porte la demande du
+    // dernier pas abouti : n'agréger que les tiqués retirerait de la chaudière une pièce qui a
+    // encore froid mais dont rien n'a bougé, et la chaudière s'éteindrait sous elle.
+    const demands: Demand[] = [...this.vtherms.values()]
       .filter((participant) => participant.controlsBoiler)
       .map((participant) => participant.demand);
 

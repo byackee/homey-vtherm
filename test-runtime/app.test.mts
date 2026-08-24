@@ -16,7 +16,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { VThermParticipant } from '../runtime/participants.mjs';
+import { CentralParticipant, VThermParticipant } from '../runtime/participants.mjs';
 import { CONFIG, DEFAULTS } from './fixtures.mjs';
 import { FakeBinding } from './fakes/binding.mjs';
 import { FakeDeviceHost } from './fakes/deviceHost.mjs';
@@ -215,6 +215,69 @@ test('un participant désenregistré ne reçoit plus de pas', async () => {
   await cycle(homey);
 
   assert.equal(emitter.switches.length, apresPremier, 'plus rien ne part vers cet émetteur');
+
+  await app.onUninit();
+});
+
+// --- Tick ciblé : la charge baisse, l'agrégat chaudière reste entier ------------
+
+test('tick demandé par UNE pièce : la chaudière compte encore celles qui n\'ont pas recalculé', async () => {
+  // `requestTick` est branché sur le `onChange` de chaque liaison de source : faire recalculer tout
+  // le logement à chaque mesure d'un seul capteur faisait croître la charge comme le carré du
+  // nombre de pièces. Mais le resserrement ne doit RIEN retirer à l'agrégat chaudière — une pièce
+  // qui a encore froid et dont rien n'a bougé doit rester comptée, sinon la chaudière s'éteint
+  // sous elle. C'est ce que ce test garde.
+  const { homey, app, room, participant } = await boot('switch');
+
+  const relay = new FakeBinding();
+  const central = new CentralParticipant({
+    host: new FakeDeviceHost('chaudiere'),
+    boiler: relay,
+    params: {
+      threshold: 1, activationDelaySec: 0, minDwellSec: 0, keepAliveSec: 0,
+    },
+    mode: 'auto',
+    requestTick: () => undefined,
+    nowMs: 0,
+  });
+  app.registerCentral(central);
+
+  const emitter2 = new FakeEmitter('emetteur-cuisine');
+  emitter2.mode = 'switch';
+  const room2 = new FakeBinding();
+  const second = new VThermParticipant({
+    host: new FakeDeviceHost('cuisine'),
+    emitter: emitter2,
+    sources: {
+      room: room2, outdoor: null, windowContact: null, motion: null, presence: null,
+    },
+    config: CONFIG,
+    syncMode: 'off',
+    controlsBoiler: true,
+    centralMode: () => app.centralMode(),
+    requestTick: (reason) => app.requestTick(reason),
+    defaults: DEFAULTS,
+    nowMs: 0,
+  });
+  app.registerVTherm(second);
+
+  // Seule la CUISINE a froid. Le salon est au chaud et ne demandera rien.
+  room.setReading(30, Date.now());
+  room2.setReading(12, Date.now());
+  await cycle(homey);
+  assert.equal(second.demand.kind, 'active', 'la cuisine demande de la chaleur');
+  assert.equal(relay.lastWrite?.value, true, 'la chaudière est allumée pour elle');
+
+  // Le SALON annonce du neuf — pas la cuisine. Il nomme son thermostat, comme le fait `device.mts`.
+  room.setReading(29, Date.now());
+  app.requestTick(`${participant.tickId}:room`);
+  await cycle(homey);
+
+  assert.equal(
+    relay.lastWrite?.value, true,
+    'la cuisine n\'a pas recalculé, mais elle a toujours froid : agréger seulement les thermostats '
+    + 'tiqués éteindrait la chaudière sous une pièce qui la réclame encore',
+  );
 
   await app.onUninit();
 });

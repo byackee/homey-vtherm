@@ -693,6 +693,8 @@ export class CentralParticipant {
   private boilerState: BoilerState;
   /** Le refus d'allumage a déjà été tracé : il est réévalué à chaque pas, pas le journal. */
   private ignitionBlockedLogged = false;
+  /** Dernières valeurs réellement publiées. Voir `publish` : le central republiait à chaque cycle. */
+  private readonly publishedCaps = new Map<string, CapValue>();
 
   constructor(options: CentralParticipantOptions) {
     this.host = options.host;
@@ -962,9 +964,19 @@ export class CentralParticipant {
   }
 
   private async publish(capabilityId: string, value: CapValue): Promise<void> {
+    // Même déduplication que celle du thermostat, et pour la même raison — elle manquait ici.
+    // `applyBoiler` publie `vtherm_nb_active` et `vtherm_boiler_active` à CHAQUE cycle, et un tick
+    // demandé par une source fait tourner le cycle entier : sur un logement fourni, cela faisait
+    // plus d'un millier d'écritures par heure sur deux capabilities alimentées en Insights, alors
+    // que leur valeur ne change que rarement.
+    if (this.publishedCaps.get(capabilityId) === value) return;
+
     try {
       await this.host.setCapabilityValue(capabilityId, value);
+      this.publishedCaps.set(capabilityId, value);
     } catch (err) {
+      // Non mémorisé : la prochaine tentative doit réessayer, sinon une capability qui a échoué
+      // une fois resterait figée pour toute la durée de vie de l'app.
       this.host.error(`Publication de ${capabilityId} :`, err);
     }
   }

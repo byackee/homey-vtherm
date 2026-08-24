@@ -127,6 +127,10 @@
       <label class="homey-form-label" for="password" data-i18n="settings.password"></label>
       <input class="homey-form-input" id="password" type="password" autocomplete="new-password" />
       <p class="hint" id="passwordHint"></p>
+      <label class="hint" id="clearPasswordRow" style="display:none">
+        <input type="checkbox" id="clearPassword" />
+        <span data-i18n="settings.password_clear"></span>
+      </label>
     </div>
 
     <div class="homey-form-group">
@@ -454,6 +458,10 @@
         $('passwordHint').textContent = hasPassword
           ? Homey.__('settings.password_stored')
           : Homey.__('settings.password_hint');
+        // Sans ce moyen d'effacer, un mot de passe enregistré ne partait qu'avec l'app : la page
+        // annonçait « un mot de passe est enregistré » sans rien offrir pour s'en défaire.
+        $('clearPasswordRow').style.display = hasPassword ? '' : 'none';
+        if (!hasPassword) $('clearPassword').checked = false;
       }
 
       function fill(status) {
@@ -523,6 +531,7 @@
         // Un champ vide conserve le mot de passe enregistré : la page ne peut pas le relire pour
         // le réécrire, l'effacer par inadvertance couperait la dorsale sans le dire.
         if (fields.password !== '') writes.push(['broker.password', fields.password]);
+        else if ($('clearPassword').checked) writes.push(['broker.password', '']);
 
         let pending = writes.length;
         let failed = null;
@@ -535,6 +544,10 @@
             if (fields.password !== '') {
               hasPassword = true;
               $('password').value = '';
+              renderPasswordHint();
+            } else if ($('clearPassword').checked) {
+              hasPassword = false;
+              $('clearPassword').checked = false;
               renderPasswordHint();
             }
             setMessage(Homey.__('settings.saved'), 'ok');

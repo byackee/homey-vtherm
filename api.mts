@@ -128,7 +128,7 @@ function optionalString(value: unknown): string | undefined {
  * as », parce que la page ne peut pas le relire pour le renvoyer. Sans ça, tester une connexion
  * sans retaper son mot de passe échouerait toujours.
  */
-function configFromBody(homey: HomeyInstance, body: Record<string, unknown>): BrokerConfig {
+export function configFromBody(homey: HomeyInstance, body: Record<string, unknown>): BrokerConfig {
   const stored = storedConfig(homey);
 
   const host = optionalString(body['host'])?.trim();
@@ -141,11 +141,23 @@ function configFromBody(homey: HomeyInstance, body: Record<string, unknown>): Br
     ? rawPort
     : Number.parseInt(String(rawPort ?? ''), 10);
 
+  const effectiveHost = host !== undefined && host !== '' ? host : stored.host;
+
+  // Le mot de passe enregistré ne SUIT PAS un changement d'hôte.
+  //
+  // Le champ n'est jamais prérempli — la page ne peut pas relire le mot de passe — donc il est vide
+  // à chaque ouverture. Sans cette garde, repointer l'adresse vers un autre broker et cliquer
+  // « Tester » envoyait le mot de passe du PREMIER dans un CONNECT vers le SECOND, sans que rien ne
+  // l'indique à l'écran. Le secret partait vers une machine que l'utilisateur n'avait pas désignée.
+  const hostChanged = effectiveHost !== stored.host;
+
   return {
-    host: host !== undefined && host !== '' ? host : stored.host,
+    host: effectiveHost,
     port: Number.isInteger(port) ? port : stored.port,
     username: username ?? stored.username,
-    password: password !== undefined && password !== '' ? password : stored.password,
+    password: password !== undefined && password !== ''
+      ? password
+      : (hostChanged ? undefined : stored.password),
     baseTopic: baseTopic !== undefined && baseTopic !== '' ? baseTopic : stored.baseTopic,
   };
 }

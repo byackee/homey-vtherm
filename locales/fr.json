@@ -84,6 +84,7 @@
     "password": "Mot de passe",
     "password_hint": "Laissez vide si votre broker accepte les connexions anonymes.",
     "password_stored": "Un mot de passe est enregistré. Laissez vide pour le conserver, ou saisissez-en un nouveau pour le remplacer.",
+    "password_clear": "Supprimer le mot de passe enregistré.",
     "base_topic": "Topic de base",
     "base_topic_hint": "Le topic de base de votre installation Zigbee2MQTT. Par défaut : zigbee2mqtt.",
     "save": "Enregistrer",

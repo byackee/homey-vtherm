@@ -84,6 +84,7 @@
     "password": "Password",
     "password_hint": "Leave empty if your broker accepts anonymous connections.",
     "password_stored": "A password is stored. Leave this empty to keep it, or type a new one to replace it.",
+    "password_clear": "Delete the stored password.",
     "base_topic": "Base topic",
     "base_topic_hint": "The base topic of your Zigbee2MQTT installation. Default: zigbee2mqtt.",
     "save": "Save",

@@ -84,6 +84,7 @@
     "password": "Wachtwoord",
     "password_hint": "Laat leeg als uw broker anonieme verbindingen accepteert.",
     "password_stored": "Er is een wachtwoord opgeslagen. Laat dit leeg om het te behouden, of typ een nieuw wachtwoord om het te vervangen.",
+    "password_clear": "Verwijder het opgeslagen wachtwoord.",
     "base_topic": "Basistopic",
     "base_topic_hint": "Het basistopic van uw Zigbee2MQTT-installatie. Standaard: zigbee2mqtt.",
     "save": "Opslaan",

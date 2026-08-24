@@ -30,7 +30,12 @@ type Logger = (...args: unknown[]) => void;
 export interface Tickable {
   readonly tickId: string;
   dueAtMs(): number;
-  tick(nowMs: number): Promise<void>;
+  /**
+   * `reasons` porte les motifs du tick DEMANDÉ, tels que passés à `requestTick`. Vide sur le
+   * battement de base. L'implémentation peut s'en servir pour ne recalculer que ce qui a bougé —
+   * sans cela, un seul capteur qui remonte une mesure fait recalculer tout le logement.
+   */
+  tick(nowMs: number, reasons?: readonly string[]): Promise<void>;
 }
 
 export interface SchedulerOptions {
@@ -215,7 +220,7 @@ export class Scheduler {
     const forced = reasons.length > 0;
     if (forced) this.log(`Tick (${trigger}) : ${reasons.join(', ')}.`);
 
-    this.running = this.execute(forced, nowMs).finally(() => {
+    this.running = this.execute(forced, nowMs, reasons).finally(() => {
       this.running = null;
       // Une demande arrivée pendant le tick n'est pas perdue : elle repart sur le battement suivant.
       if (this.pendingReasons.length > 0) this.armDeferred();
@@ -224,12 +229,12 @@ export class Scheduler {
     await this.running;
   }
 
-  private async execute(forced: boolean, nowMs: number): Promise<void> {
+  private async execute(forced: boolean, nowMs: number, reasons: readonly string[] = []): Promise<void> {
     const due = [...this.tickables.values()].filter((t) => forced || this.isDue(t, nowMs));
     if (due.length === 0) return;
 
     // Isolation : un participant qui tombe n'emporte pas les autres, et surtout pas le timer.
-    const results = await Promise.allSettled(due.map((t) => t.tick(nowMs)));
+    const results = await Promise.allSettled(due.map((t) => t.tick(nowMs, reasons)));
 
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
