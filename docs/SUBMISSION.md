@@ -21,39 +21,49 @@ travailler, et il tranche dans les deux sens :
 
 ## Texte à envoyer au reviewer (anglais)
 
-> Adaptive Thermostat does not connect to any physical device, and is not a branded app. It ships
-> no hardware integration at all: both of its drivers create **virtual** devices — one thermostat
-> per room, and one central controller.
+Ton : coopératif, pas défensif. Le refus était raisonnable — une app nommée « Thermostat »,
+catégorisée `climate`, qui demande la permission la plus large ressemble exactement au motif que le
+reviewer est chargé d'arrêter. On commence donc par le reconnaître.
+
+> Thank you for the review, and for flagging this — I understand the concern. An app called
+> "Adaptive Thermostat", filed under Climate and asking for the API permission, looks very much
+> like the pattern the rule is meant to catch, and I should have explained the architecture up
+> front rather than leaving you to infer it.
 >
-> Its entire purpose is to add a regulation layer on top of devices that belong to *other* apps: it
+> The app does not connect to any physical device, and it is not a branded app. There is no
+> hardware integration in it at all: both drivers create **virtual** devices — one thermostat per
+> room, and one central controller.
+>
+> What it actually does is add a regulation layer on top of devices that belong to *other* apps. It
 > reads `measure_temperature` from a sensor owned by one app, and writes `target_temperature` — or
-> a valve opening — to a heater owned by another. This is the same shape as Device Groups, which
-> your documentation lists as an app that may use this permission.
+> a valve opening — to a heater owned by another. In that sense it is much closer to Device Groups
+> than to a brand integration: it ships no protocol, no pairing with hardware, and no vendor
+> dependency.
 >
-> There is no Apps SDK path to read or write a capability of a device an app does not own. Flow
-> cards can only take device arguments filtered to the app's own drivers, and capability listeners
-> only apply to the app's own devices. The Web API is the only mechanism, which is why the
-> permission is not an optimisation here but the condition of the app existing at all.
+> As far as I can tell there is no Apps SDK route to read or write a capability of a device an app
+> does not own — Flow card device arguments are scoped to the app's own drivers, and capability
+> listeners only apply to its own devices. If there is an approach I have missed, I would genuinely
+> rather use it, and I am happy to rework the app around it.
 >
-> The surface used is deliberately minimal and easy to verify. A single module of the whole project
-> imports `homey-api` — `runtime/hub.mts` — and it touches exactly two namespaces:
+> In the meantime I have tried to make the permission as easy as possible to audit. One module in
+> the whole project imports `homey-api` — `runtime/hub.mts` — and it uses two namespaces:
 >
 > - `api.devices`: `connect`, `disconnect`, `isConnected`, `getDevice`, `getDevices`, and on the
 >   returned device objects `makeCapabilityInstance` and `setCapabilityValue`;
-> - `api.zones`: `connect`, `disconnect`, `getZones` — used only to show the room name next to a
->   device while pairing.
+> - `api.zones`: `connect`, `disconnect`, `getZones`, only to show the room name next to a device
+>   while pairing.
 >
-> Nothing else is touched: no flows, no users, no apps, no system, no notifications, no insights,
-> no geolocation. The only write is `setCapabilityValue`, and only on capabilities of devices the
-> user explicitly selected during pairing. A server-side check re-validates the requested device
-> against the same candidate list the pairing view uses, so a crafted call cannot bind an arbitrary
-> device.
+> Nothing else is used: no flows, users, apps, system, notifications, insights or geolocation. The
+> only write is `setCapabilityValue`, and only on devices the user picked during pairing — a
+> server-side check re-validates the requested device against the same candidate list the pairing
+> view uses, so a crafted call cannot bind something else.
 >
-> Following your rule of thumb that this permission belongs to apps categorised under Tools, the
-> manifest now declares `"category": ["climate", "tools"]`.
+> I have also added Tools alongside Climate in the manifest (`"category": ["climate", "tools"]`),
+> which seems closer to how this permission is meant to be scoped. `platforms` is `["local"]`,
+> since the permission is not available on Homey Cloud, and the app's six API endpoints are all
+> declared with `"role": "owner"`.
 >
-> `platforms` is `["local"]`, since the permission is not available on Homey Cloud, and all six API
-> endpoints of the app are declared with `"role": "owner"`.
+> Happy to narrow anything further, or to walk through any part of the code that would help.
 
 ## Réserve honnête sur un point que le reviewer peut trouver
 
