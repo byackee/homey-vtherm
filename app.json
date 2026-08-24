@@ -978,7 +978,7 @@
               "hint": {
                 "en": "Shutdown is never delayed. That is deliberate: a boiler running against closed valves builds pressure.",
                 "fr": "L'extinction n'est jamais retardée. C'est délibéré : une chaudière qui tourne vannes fermées monte en pression.",
-                "nl": "Uitschakelen wordt nooit vertraagd. Dat is bewust."
+                "nl": "Uitschakelen wordt nooit vertraagd. Dat is bewust: een ketel die tegen gesloten kranen draait, bouwt druk op."
               }
             },
             {
@@ -1180,7 +1180,7 @@
               },
               "hint": {
                 "en": "The floor. Enough to protect pipes and furniture, not to be comfortable.",
-                "fr": "Le plancher. De quoi protéger les canalisations et le mobilier, pas d'être bien.",
+                "fr": "Le plancher. De quoi protéger les canalisations et le mobilier, pas de quoi être bien.",
                 "nl": "De ondergrens. Genoeg om leidingen te beschermen, niet om comfortabel te zijn."
               }
             },
@@ -1432,7 +1432,7 @@
               "hint": {
                 "en": "Cuts heating when the room is this far above target AND still warming. Zero disables both thresholds — they work as a pair.",
                 "fr": "Coupe la chauffe quand la pièce dépasse la consigne de cet écart ET continue de monter. Zéro désactive les deux seuils — ils vont par paire.",
-                "nl": "Stopt verwarming bij deze overschrijding terwijl het nog opwarmt. Nul schakelt beide drempels uit."
+                "nl": "Stopt verwarming bij deze overschrijding terwijl de kamer nog opwarmt. Nul schakelt beide drempels uit."
               },
               "units": {
                 "en": "°C"
@@ -1456,7 +1456,7 @@
               "hint": {
                 "en": "Same idea while the room is cooling. Both thresholds work as a pair: leave them at zero unless you have observed real overshoot.",
                 "fr": "Même idée pendant que la pièce refroidit. Les deux seuils vont par paire : laissez-les à zéro tant que vous n'avez pas constaté un vrai dépassement.",
-                "nl": "Zelfde idee tijdens afkoelen. Beide drempels werken als paar."
+                "nl": "Zelfde idee tijdens afkoelen. Beide drempels werken als paar: laat ze op nul staan tenzij u echte overschrijding hebt waargenomen."
               }
             }
           ]
@@ -1481,7 +1481,7 @@
               "hint": {
                 "en": "A radiator valve measures the radiator, not the room — it reads warm and closes too early. Self-regulation offsets the setpoint sent to it so the room reaches your target. It needs an outdoor temperature sensor: without one, no offset is applied at all.",
                 "fr": "Une vanne mesure le radiateur, pas la pièce — elle lit chaud et ferme trop tôt. L'auto-régulation décale la consigne qu'on lui envoie pour que la pièce atteigne votre cible. Elle exige un capteur de température extérieure : sans lui, aucun offset n'est appliqué.",
-                "nl": "Een radiatorkraan meet de radiator, niet de kamer. Zelfregulering verschuift het setpoint. Vereist een buitentemperatuursensor."
+                "nl": "Een radiatorkraan meet de radiator, niet de kamer — hij meet te warm en sluit te vroeg. Zelfregulering verschuift het setpoint dat ernaartoe gaat, zodat de kamer uw doel haalt. Vereist een buitentemperatuursensor: zonder die sensor wordt er helemaal geen offset toegepast."
               }
             },
             {
@@ -1546,7 +1546,7 @@
               "hint": {
                 "en": "Corrects the setpoint sent to the emitter so the room reaches your target. Needs an outdoor temperature sensor: without one, no offset is applied at all.",
                 "fr": "Corrige la consigne envoyée à l'émetteur pour que la pièce atteigne votre cible. Nécessite un capteur de température extérieure : sans lui, aucun offset n'est appliqué.",
-                "nl": "Corrigeert het setpoint zodat de kamer uw doel haalt. Vereist een buitentemperatuursensor."
+                "nl": "Corrigeert het setpoint dat naar de verwarming gaat, zodat de kamer uw doel haalt. Vereist een buitentemperatuursensor: zonder die sensor wordt er helemaal geen offset toegepast."
               }
             },
             {
@@ -1564,7 +1564,7 @@
               "hint": {
                 "en": "These valves run on batteries. Below this change, the setpoint is not rewritten.",
                 "fr": "Ces vannes sont sur piles. En dessous de cette variation, la consigne n'est pas réécrite.",
-                "nl": "Deze kranen werken op batterijen. Onder deze wijziging wordt niets herschreven."
+                "nl": "Deze kranen werken op batterijen. Bij een kleinere wijziging dan deze wordt niets herschreven."
               },
               "units": {
                 "en": "°C"
@@ -1576,7 +1576,7 @@
               "label": {
                 "en": "Minimum interval between writes",
                 "fr": "Intervalle minimal entre écritures",
-                "nl": "Minimale interval"
+                "nl": "Minimaal interval"
               },
               "value": 5,
               "min": 1,
@@ -1588,7 +1588,7 @@
               "hint": {
                 "en": "These valves run on batteries and each write costs one. Below this interval the setpoint is not rewritten, even if the correction changed.",
                 "fr": "Ces vannes sont sur piles et chaque écriture en coûte une. En dessous de cet intervalle, la consigne n'est pas réécrite, même si la correction a changé.",
-                "nl": "Deze kranen werken op batterijen. Onder dit interval wordt niets herschreven."
+                "nl": "Deze kranen werken op batterijen en elke schrijfactie kost er een. Onder dit interval wordt het setpoint niet herschreven, ook niet als de correctie is veranderd."
               }
             }
           ]
@@ -1787,7 +1787,7 @@
               "hint": {
                 "en": "The two modes are mutually exclusive. Temperature-drop detection needs no sensor but reacts more slowly.",
                 "fr": "Les deux modes sont exclusifs. La détection par chute de température ne demande aucun capteur mais réagit plus lentement.",
-                "nl": "De twee modi sluiten elkaar uit."
+                "nl": "De twee modi sluiten elkaar uit. Detectie via temperatuurdaling vereist geen sensor maar reageert trager."
               }
             },
             {
@@ -1877,8 +1877,8 @@
               },
               "hint": {
                 "en": "Waited after the window closes, before heating again. A separate setting from the one above, on purpose.",
-                "fr": "Attendu après la fermeture, avant de rechauffer. Réglage distinct du précédent, à dessein.",
-                "nl": "Gewacht na het sluiten, voordat opnieuw wordt verwarmd."
+                "fr": "Attendu après la fermeture, avant de réchauffer. Réglage distinct du précédent, à dessein.",
+                "nl": "Wachttijd na het sluiten, voordat er opnieuw wordt verwarmd. Bewust een aparte instelling, los van die hierboven."
               }
             },
             {
@@ -1920,7 +1920,7 @@
               "hint": {
                 "en": "The slope at which detection ends. Zero means: as soon as the room stops cooling.",
                 "fr": "La pente à laquelle la détection prend fin. Zéro signifie : dès que la pièce cesse de refroidir.",
-                "nl": "De helling waarbij detectie eindigt."
+                "nl": "De helling waarbij detectie eindigt. Nul betekent: zodra de kamer stopt met afkoelen."
               }
             },
             {
@@ -1966,7 +1966,7 @@
               "hint": {
                 "en": "Presence is about the home: nobody there, every preset falls back to its away temperature. Motion is about this room only, and drives the Activity preset — which is offered only once all four settings below are filled in.",
                 "fr": "La présence concerne le logement : personne, et chaque preset se rabat sur sa température d'absence. Le mouvement ne concerne que cette pièce, et pilote le preset Activité — qui n'est proposé qu'une fois les quatre réglages ci-dessous renseignés.",
-                "nl": "Aanwezigheid gaat over het huis, beweging alleen over deze kamer en stuurt het Activiteit-preset."
+                "nl": "Aanwezigheid gaat over het huis: is er niemand, dan valt elk preset terug op zijn afwezigheidstemperatuur. Beweging gaat alleen over deze kamer en stuurt het Activiteit-preset — dat pas verschijnt zodra de vier instellingen hieronder zijn ingevuld."
               }
             },
             {
@@ -1996,7 +1996,7 @@
               "label": {
                 "en": "No-motion confirmation delay",
                 "fr": "Délai de confirmation d'absence",
-                "nl": "Vertraging geen beweging"
+                "nl": "Bevestigingsvertraging zonder beweging"
               },
               "value": 300,
               "min": 0,
@@ -2057,7 +2057,7 @@
               "hint": {
                 "en": "Applied while movement is confirmed, under the Activity preset.",
                 "fr": "Appliqué tant que le mouvement est confirmé, sous le preset Activité.",
-                "nl": "Toegepast zolang beweging bevestigd is."
+                "nl": "Toegepast zolang beweging bevestigd is, onder het Activiteit-preset."
               }
             },
             {
@@ -2131,7 +2131,7 @@
               "hint": {
                 "en": "The Boiler device carries one switch for the whole home — everything off, heating only, or frost protection — and the relay that starts your boiler. The two settings below decide whether this thermostat obeys that switch, and whether its demand counts towards starting the boiler. Both are on by default. Turn the first off for a room you want to keep controlling by hand; turn the second off for a heater that has nothing to do with the boiler, such as an electric radiator.",
                 "fr": "L'appareil Chaudière porte un interrupteur unique pour tout le logement — tout arrêté, chauffage seul, ou hors-gel — et le relais qui démarre votre chaudière. Les deux réglages ci-dessous décident si ce thermostat obéit à cet interrupteur, et si sa demande compte pour démarrer la chaudière. Les deux sont actifs par défaut. Désactivez le premier pour une pièce que vous voulez continuer à piloter à la main ; désactivez le second pour un émetteur qui n'a rien à voir avec la chaudière, un radiateur électrique par exemple.",
-                "nl": "Het apparaat CV-ketel heeft één schakelaar voor het hele huis en het relais dat uw ketel start. De twee instellingen hieronder bepalen of deze thermostaat die schakelaar volgt, en of zijn vraag meetelt om de ketel te starten."
+                "nl": "Het apparaat CV-ketel heeft één schakelaar voor het hele huis en het relais dat uw ketel start. De twee instellingen hieronder bepalen of deze thermostaat die schakelaar volgt, en of zijn vraag meetelt om de ketel te starten. Beide staan standaard aan. Zet de eerste uit voor een kamer die u met de hand wilt blijven bedienen; zet de tweede uit voor een verwarming die niets met de ketel te maken heeft, zoals een elektrische radiator."
               }
             },
             {
@@ -2146,7 +2146,7 @@
               "hint": {
                 "en": "When on, the switch on the Boiler device applies to this thermostat: everything off, heating only, or frost protection. Turn it off for a room you want to keep controlling by hand, whatever the rest of the home is doing.",
                 "fr": "Quand c'est actif, l'interrupteur de l'appareil Chaudière s'applique à ce thermostat : tout arrêté, chauffage seul, ou hors-gel. Désactivez-le pour une pièce que vous voulez continuer à piloter à la main, quoi que fasse le reste du logement.",
-                "nl": "Indien aan, geldt de schakelaar van het apparaat CV-ketel ook voor deze thermostaat."
+                "nl": "Indien aan, geldt de schakelaar van het apparaat CV-ketel ook voor deze thermostaat: alles uit, alleen verwarmen of vorstbeveiliging. Zet dit uit voor een kamer die u met de hand wilt blijven bedienen, wat de rest van het huis ook doet."
               }
             },
             {
@@ -2227,7 +2227,7 @@
               "hint": {
                 "en": "A radiator valve measures the radiator, not the room. This pushes the real room temperature into it. Requires the Zigbee2MQTT backend in the app settings.",
                 "fr": "Une vanne mesure le radiateur, pas la pièce. Ceci lui injecte la vraie température ambiante. Nécessite la dorsale Zigbee2MQTT dans les réglages de l'app.",
-                "nl": "Een radiatorkraan meet de radiator, niet de kamer. Vereist de Zigbee2MQTT-backend."
+                "nl": "Een radiatorkraan meet de radiator, niet de kamer. Dit duwt de echte kamertemperatuur erin. Vereist de Zigbee2MQTT-backend in de app-instellingen."
               }
             },
             {
@@ -2311,7 +2311,7 @@
               "hint": {
                 "en": "Below this share of demand, the valve counts as closed and the room stops asking the boiler for heat.",
                 "fr": "En dessous de cette part de la demande, la vanne compte comme fermée et la pièce cesse de demander de la chaleur à la chaudière.",
-                "nl": "Onder dit aandeel telt de klep als gesloten."
+                "nl": "Onder dit aandeel telt de klep als gesloten en vraagt de kamer de ketel niet langer om warmte."
               }
             },
             {
@@ -2353,7 +2353,7 @@
               "hint": {
                 "en": "Emitters driven by a switch only. The calculated power becomes on time inside each cycle. A heater switched on for a few seconds warms nothing and wears the relay out, so below this on time the cycle stays off.",
                 "fr": "Émetteurs pilotés par interrupteur uniquement. La puissance calculée devient du temps de marche dans chaque cycle. Un radiateur allumé quelques secondes ne chauffe rien et use le relais : en dessous de cette durée, le cycle reste éteint.",
-                "nl": "Alleen voor verwarming die via een schakelaar wordt aangestuurd. Het berekende vermogen wordt inschakeltijd binnen elke cyclus. Een radiator die enkele seconden aan gaat verwarmt niets en verslijt het relais, dus onder deze duur blijft de cyclus uit."
+                "nl": "Alleen voor verwarming die via een schakelaar wordt aangestuurd. Het berekende vermogen wordt inschakeltijd binnen elke cyclus. Een radiator die enkele seconden aangaat verwarmt niets en verslijt het relais, dus onder deze duur blijft de cyclus uit."
               }
             },
             {
@@ -2374,7 +2374,7 @@
               "hint": {
                 "en": "The mirror image. Rather than make the contactor blink for a pause shorter than this, the emitter is left on for the whole cycle.",
                 "fr": "Le symétrique. Plutôt que de faire clignoter le contacteur pour une pause plus courte que cela, l'émetteur est laissé allumé tout le cycle.",
-                "nl": "Het spiegelbeeld. In plaats van de schakelaar te laten knipperen voor een kortere pauze blijft de verwarming de hele cyclus aan."
+                "nl": "Het spiegelbeeld. In plaats van de schakelaar te laten knipperen voor een pauze die korter is dan dit blijft de verwarming de hele cyclus aan."
               }
             }
           ]
@@ -2428,14 +2428,14 @@
                 "en": "%"
               },
               "label": {
-                "en": "Only below this last power",
+                "en": "Only above this last power",
                 "fr": "Seulement au-dessus de cette dernière puissance",
                 "nl": "Alleen boven dit laatste vermogen"
               },
               "hint": {
                 "en": "If the room was heating less than this when the sensor went quiet, nothing is done: it was not at risk, and heating it blindly would run the boiler for a long time with nothing left to say stop.",
                 "fr": "Si la pièce chauffait moins que ça au moment où le capteur s'est tu, on ne fait rien : elle n'était pas en danger, et la chauffer à l'aveugle ferait tourner la chaudière longtemps, sans plus rien pour dire d'arrêter.",
-                "nl": "Als de kamer minder verwarmde dan dit, gebeurt er niets."
+                "nl": "Als de kamer minder verwarmde dan dit toen de sensor stilviel, gebeurt er niets: de kamer liep geen risico, en blind verwarmen zou de ketel lang laten draaien zonder dat iets hem nog stopt."
               }
             },
             {
@@ -2576,7 +2576,7 @@
       "title": {
         "en": "Emitter battery",
         "fr": "Pile de l'émetteur",
-        "nl": "Batterij verwarming"
+        "nl": "Batterij van de verwarming"
       },
       "desc": {
         "en": "Battery level of the radiator valve or thermostat this device drives. This device has no battery of its own.",

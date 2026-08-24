@@ -83,7 +83,7 @@
         "hint": {
           "en": "Shutdown is never delayed. That is deliberate: a boiler running against closed valves builds pressure.",
           "fr": "L'extinction n'est jamais retardée. C'est délibéré : une chaudière qui tourne vannes fermées monte en pression.",
-          "nl": "Uitschakelen wordt nooit vertraagd. Dat is bewust."
+          "nl": "Uitschakelen wordt nooit vertraagd. Dat is bewust: een ketel die tegen gesloten kranen draait, bouwt druk op."
         }
       },
       {

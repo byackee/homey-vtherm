@@ -138,7 +138,7 @@
       function boot(homey) {
         if (H) return;                 // déjà démarré par l'autre convention
         H = homey || window.Homey;
-        if (!H) { showError('Objet Homey introuvable dans cette vue.'); return; }
+        if (!H) { showError('Homey object not found in this view.'); return; }
         try {
           translate();
           // Le mode est demandé EN PARALLÈLE, jamais en amont : il ne sert qu'au moment du clic, et
@@ -151,7 +151,7 @@
           start();
         } catch (e) {
           report('démarrage : ' + e.message);
-          showError('Démarrage de la vue impossible : ' + e.message);
+          showError('Cannot start this view: ' + e.message);
         }
         try { if (typeof H.ready === 'function') H.ready(); } catch (e) { /* facultatif */ }
       }
@@ -162,7 +162,7 @@
         var root = document.getElementById(PREFIX + 'list');
         root.innerHTML = '';
         if (!devices || !devices.length) {
-          showText(label('pair.empty', 'Aucun appareil adapté trouvé.'));
+          showText(label('pair.empty', 'No suitable device found.'));
           return;
         }
         hideState();

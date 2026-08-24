@@ -3,7 +3,7 @@
   "title": {
     "en": "Emitter battery",
     "fr": "Pile de l'émetteur",
-    "nl": "Batterij verwarming"
+    "nl": "Batterij van de verwarming"
   },
   "desc": {
     "en": "Battery level of the radiator valve or thermostat this device drives. This device has no battery of its own.",

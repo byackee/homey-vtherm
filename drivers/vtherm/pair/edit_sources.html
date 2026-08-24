@@ -172,7 +172,7 @@
     function boot(homey) {
         if (H) return;                 // déjà démarré par l'autre convention
         H = homey || window.Homey;
-        if (!H) { showError('Objet Homey introuvable dans cette vue.'); return; }
+        if (!H) { showError('Homey object not found in this view.'); return; }
         try {
           translate();
           // Le mode est demandé EN PARALLÈLE, jamais en amont : il ne sert qu'au moment du clic, et
@@ -185,7 +185,7 @@
           start();
         } catch (e) {
           report('démarrage : ' + e.message);
-          showError('Démarrage de la vue impossible : ' + e.message);
+          showError('Cannot start this view: ' + e.message);
         }
         try { if (typeof H.ready === 'function') H.ready(); } catch (e) { /* facultatif */ }
       }
@@ -197,7 +197,7 @@
       var ul = document.createElement('ul');
       var all = (devices || []).slice();
       if (!slot.required) {
-        all.unshift({ id: null, name: label('pair.optional.none', 'Aucun'), zoneName: null });
+        all.unshift({ id: null, name: label('pair.optional.none', 'None'), zoneName: null });
       }
       all.forEach(function (d) {
         var li = buildItem(d, function (node) {
@@ -207,7 +207,7 @@
           // Appliqué immédiatement : le driver re-lie la source et la régulation repart dessus
           // au tick suivant. Rien à valider, rien à créer — on modifie un appareil existant.
           emit(slot.event, d.id)
-            .then(function () { showText(label('pair.updated', 'Modification enregistrée.')); })
+            .then(function () { showText(label('pair.updated', 'Change saved.')); })
             .catch(function (err) { showError(err.message); });
         });
         var isCurrent = (d.id === CURRENT[slot.key]) || (d.id === null && !CURRENT[slot.key]);

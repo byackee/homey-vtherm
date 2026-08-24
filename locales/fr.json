@@ -62,7 +62,7 @@
       "orphan_option": "Appareil disparu ({{id}})",
       "unavailable": "La liste des appareils pour cette source n'a pas pu être chargée.",
       "unknown_thermostat": "Ce thermostat n'existe plus. Rechargez la page.",
-      "failed": "Vos thermostats n’ont pas pu être lus : {{detail}}",
+      "failed": "Vos thermostats n'ont pas pu être lus : {{detail}}",
       "no_room": "Sans pièce",
       "unknown_source": "Source inconnue. Rechargez la page et réessayez.",
       "invalid_device": "Cet appareil ne convient pas à cette source. Rechargez la page et choisissez-en un dans la liste."

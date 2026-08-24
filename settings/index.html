@@ -188,7 +188,7 @@
       const box = document.getElementById('sourcesMessage');
       if (!box) return;
       box.className = 'message error';
-      box.textContent = 'JavaScript : ' + ((event && event.message) || 'erreur inconnue');
+      box.textContent = 'JavaScript: ' + ((event && event.message) || 'unknown error');
     });
 
     function onHomeyReady(Homey) {

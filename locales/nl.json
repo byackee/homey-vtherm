@@ -146,7 +146,7 @@
   "flow": {
     "error": {
       "unknown_presence": "Onbekende aanwezigheidswaarde.",
-      "unknown_preset": "Onbekende preset."
+      "unknown_preset": "Onbekend preset."
     }
   }
 }
