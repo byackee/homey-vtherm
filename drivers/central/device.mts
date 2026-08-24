@@ -34,7 +34,6 @@ export default class CentralDevice extends Homey.Device {
     // Le mode survit au redémarrage par la capability, qui est inscriptible et donc déjà persistée
     // par Homey. Un second stockage en ferait une seconde vérité.
     const mode = this.currentMode();
-    await this.setCapabilityValue('vtherm_central_mode', mode);
     void this.refreshLinkedLabels();
     void this.refreshExplanations();
 
@@ -63,6 +62,15 @@ export default class CentralDevice extends Homey.Device {
 
     this.registerListeners();
     await this.setAvailable();
+
+    // APRÈS `setAvailable()` : « When a device is marked as unavailable, all capabilities and Flow
+    // actions will be prevented » (doc Athom, Devices › Availability). Un second appareil central
+    // est marqué indisponible plus haut, et cet état survit au redémarrage — la valeur n'était donc
+    // jamais matérialisée au démarrage suivant la suppression du doublon, et le sélecteur restait
+    // vide alors que l'app régulait bien en « auto ».
+    await this.setCapabilityValue('vtherm_central_mode', mode).catch((err: unknown) => {
+      this.error('Initialisation de vtherm_central_mode :', err);
+    });
   }
 
   // --- Contrat avec le participant -------------------------------------------

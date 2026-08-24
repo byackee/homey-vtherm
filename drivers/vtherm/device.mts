@@ -181,17 +181,23 @@ export default class VThermDevice extends Homey.Device {
 
     app.registerVTherm(this.participant);
     this.registered = true;
+    await this.setAvailable();
+
     // `onoff` est une entrée du noyau, pas une de ses sorties : rien ne la publie donc, et elle
     // resterait `null` après un pairing. Le réducteur traite `null` comme allumé — c'est le bon
     // défaut — mais la tuile afficherait un interrupteur dans un état indéfini, en désaccord avec
     // ce que l'app fait réellement. On aligne l'affichage sur le comportement, une seule fois.
+    //
+    // APRÈS `setAvailable()`, et ce n'est pas un détail de style : « When a device is marked as
+    // unavailable, all capabilities and Flow actions will be prevented » (doc Athom, Devices ›
+    // Availability). Un thermostat appairé sans émetteur est marqué indisponible plus haut, et cet
+    // état survit au redémarrage — l'écriture partait donc dans le vide au démarrage suivant,
+    // c'est-à-dire précisément quand l'utilisateur venait de lier son émetteur.
     if (typeof this.getCapabilityValue('onoff') !== 'boolean') {
       await this.setCapabilityValue('onoff', true).catch((err: unknown) => {
         this.error('Initialisation de onoff :', err);
       });
     }
-
-    await this.setAvailable();
 
     // Quand le hub arrive, refaire les résolutions qui ont été devinées faute de lui. Sans cela,
     // une source liée sur la mauvaise capability ne tire jamais et n'est jamais réparée : la pièce
