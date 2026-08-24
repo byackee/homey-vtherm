@@ -55,8 +55,8 @@ plaider.
 > `"role": "owner"`.
 >
 > The readme is rewritten and much shorter now, and points at the Community topic for the details.
-> Thanks also for the note on the driver icons — I've requested custom ones on the Homey Vector
-> page.
+> Thanks also for the note on the driver icons — I'll look into having proper ones
+> made.
 >
 > Happy to narrow anything further or walk through any part of the code.
 

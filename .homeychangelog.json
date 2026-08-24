@@ -23,5 +23,10 @@
     "en": "Support now points at the community forum instead of an email address.",
     "fr": "L'assistance renvoie désormais vers le forum communautaire plutôt que vers une adresse e-mail.",
     "nl": "Ondersteuning verwijst nu naar het communityforum in plaats van een e-mailadres."
+  },
+  "1.0.5": {
+    "en": "Fixes several failures that could stop a room heating without any warning — most importantly, the app now recovers on its own when it cannot reach Homey at startup, for example after a power cut.",
+    "fr": "Corrige plusieurs pannes qui pouvaient arrêter le chauffage d'une pièce sans le moindre avertissement — surtout, l'app se rétablit désormais seule quand elle ne peut pas joindre Homey au démarrage, par exemple après une coupure de courant.",
+    "nl": "Lost verschillende storingen op die een kamer zonder waarschuwing konden laten afkoelen — vooral herstelt de app zichzelf nu wanneer ze Homey bij het opstarten niet kan bereiken, bijvoorbeeld na een stroomuitval."
   }
 }
