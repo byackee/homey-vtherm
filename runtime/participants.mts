@@ -269,6 +269,18 @@ export class VThermParticipant implements Tickable {
     return this.demandValue;
   }
 
+  /**
+   * L'ouverture RÉELLEMENT détectée au dernier pas, quelle que soit la façon de la détecter.
+   * En mode `auto` il n'y a aucun contact : la détection vient de la pente, et la capability
+   * `alarm_contact` n'est alors ni publiée ni même déclarée. Lire la capability ferait répondre
+   * « fermée » à une condition placée derrière un déclencheur qui vient de partir.
+   * C'est exactement la valeur que `step` compare pour émettre `window_opened`/`window_closed`.
+   * `null` (aucun pas encore abouti) vaut « pas d'ouverture détectée », comme pour les événements.
+   */
+  get windowOpen(): boolean {
+    return this.state.volatile.lastPublished.windowOpen === true;
+  }
+
   get controlsBoiler(): boolean {
     return this.controlsBoilerFlag;
   }

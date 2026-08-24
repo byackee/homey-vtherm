@@ -86,6 +86,51 @@ test('capteur muet en mode vanne : la sortie est GELÉE, on ne commande rien', a
   assert.equal(emitter.lastSwitch, undefined, 'et surtout aucun relais touché');
 });
 
+// --- La fenêtre détectée sans capteur ------------------------------------------
+
+test('mode « chute de température » : la condition Flow suit la détection RÉELLE, pas la capability', async () => {
+  const host = new FakeDeviceHost('salon');
+  const emitter = new FakeEmitter('emetteur-salon');
+  emitter.mode = 'setpoint';
+  const room = new FakeBinding();
+
+  // Aucun contact fenêtre n'est désigné : en mode `auto`, la détection vient de la pente seule.
+  // C'est le cas que le réglage annonce — « Temperature-drop detection needs no sensor at all ».
+  const participant = new VThermParticipant({
+    host,
+    emitter,
+    sources: noSources(room),
+    config: { ...CONFIG, window: { ...CONFIG.window, mode: 'auto' } },
+    syncMode: 'off',
+    controlsBoiler: true,
+    centralMode: () => 'auto',
+    requestTick: () => undefined,
+    defaults: DEFAULTS,
+    nowMs: 0,
+  });
+
+  // Chute de 0,6 °C par 10 min, soit −3,6 °C/h : au-delà du seuil de 3 °C/h, mais il faut
+  // quatre points avant que la pente soit publiée et puisse déclencher quoi que ce soit.
+  for (const [index, temp] of [20, 19.4, 18.8, 18.2].entries()) {
+    const at = index * 600_000;
+    room.setReading(temp, at);
+    await participant.tick(at);
+  }
+  // Confirmation après le délai, sur la même mesure.
+  room.setReading(18.2, 1_800_000);
+  await participant.tick(1_830_000);
+
+  assert.equal(
+    participant.windowOpen, true,
+    'l\'ouverture est détectée, et c\'est elle qui a fait partir le déclencheur `window_opened`',
+  );
+  assert.equal(
+    host.getCapabilityValue('alarm_contact'), null,
+    'et `alarm_contact` n\'existe même pas : une condition qui la lirait répondrait « fermée » '
+    + 'juste derrière le déclencheur qui vient de partir',
+  );
+});
+
 // --- Le convecteur : relais dévié par quelqu'un d'autre -----------------------
 
 test('relais coupé par quelqu\'un d\'autre à puissance saturée : l\'app le RALLUME', async () => {

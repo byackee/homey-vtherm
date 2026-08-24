@@ -181,8 +181,7 @@
           // répondu, c'est la panne qu'on vient de corriger.
           emit('pair_mode', null)
             .then(function (mode) { MODE = (mode === 'repair') ? 'repair' : 'pair'; })
-            .catch(function () { MODE = 'pair'; })
-            .then(wireFinishButton);
+            .catch(function () { MODE = 'pair'; });
           start();
         } catch (e) {
           report('démarrage : ' + e.message);

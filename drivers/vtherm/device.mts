@@ -305,8 +305,13 @@ export default class VThermDevice extends Homey.Device {
     return typeof value === 'string' ? value : null;
   }
 
+  /**
+   * Même source que le déclencheur `window_opened`, pas la capability : `alarm_contact` n'existe
+   * que si un contact a été désigné au pairing, alors que le mode « Temperature drop » détecte
+   * l'ouverture sans aucun capteur. Lire la capability faisait répondre « fermée » dans ce mode.
+   */
   isWindowOpen(): boolean {
-    return this.getCapabilityValue('alarm_contact') === true;
+    return this.participant?.windowOpen === true;
   }
 
   isCallingForHeat(): boolean {
