@@ -460,6 +460,11 @@ export class HomeyApiHub {
     this.events.on(event, fn);
   }
 
+  /** Indispensable : un appareil supprimé qui resterait abonné fuirait à chaque suppression. */
+  off(event: 'connected' | 'disconnected', fn: () => void): void {
+    this.events.off(event, fn);
+  }
+
   async start(): Promise<void> {
     if (this.starting !== null) return this.starting;
 

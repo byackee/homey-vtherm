@@ -118,6 +118,15 @@ export default class VThermDevice extends Homey.Device {
   private presenceOverride: PresenceOverride = 'auto';
 
   private registered = false;
+
+  /**
+   * Sources liées sur une capability DEVINÉE, faute de hub au moment de l'appairage ou du
+   * démarrage. Voir `resolveAndBind` : ces liaisons ne tirent jamais si la capability devinée
+   * n'existe pas sur l'appareil, et rien ne les répare — `reattachAll` rejoue le même identifiant.
+   */
+  private readonly provisionalSources = new Set<Exclude<SourceKey, 'emitter'>>();
+  /** Retenu pour pouvoir se désabonner : un appareil supprimé ne doit pas laisser d'écouteur. */
+  private onHubConnected: (() => void) | null = null;
   /** Homey refuse deux écouteurs sur la même capability, et `onInit` se rejoue à la réparation. */
   private listenersRegistered = false;
 
@@ -184,10 +193,38 @@ export default class VThermDevice extends Homey.Device {
 
     await this.setAvailable();
 
+    // Quand le hub arrive, refaire les résolutions qui ont été devinées faute de lui. Sans cela,
+    // une source liée sur la mauvaise capability ne tire jamais et n'est jamais réparée : la pièce
+    // reste en sécurité jusqu'à une intervention manuelle.
+    this.onHubConnected = () => { void this.resolveProvisionalSources(); };
+    this.app.hub.on('connected', this.onHubConnected);
+
     // Les noms des appareils liés, pour les réglages. En tâche de fond : ils passent par le hub,
     // et l'initialisation ne doit pas attendre le réseau pour rendre l'appareil disponible.
     void this.refreshLinkedLabels();
     void this.refreshExplanations();
+  }
+
+  /**
+   * Refait les liaisons dont la capability avait été devinée.
+   *
+   * `getDeviceSummary` rend `null` aussi bien quand le hub n'est pas monté que quand l'appareil n'a
+   * réellement aucune des capabilities attendues. Les deux menaient au même repli — la capability
+   * PRÉFÉRÉE — et une sonde qui expose `measure_temperature.local` se retrouvait liée sur
+   * `measure_temperature`, qu'elle n'a pas. `makeCapabilityInstance` ne lève pas dans ce cas : la
+   * liaison ne tire simplement jamais.
+   */
+  private async resolveProvisionalSources(): Promise<void> {
+    if (this.provisionalSources.size === 0) return;
+
+    for (const key of [...this.provisionalSources]) {
+      const deviceId = this.sourceId(key);
+      if (deviceId === null) {
+        this.provisionalSources.delete(key);
+        continue;
+      }
+      await this.resolveAndBind(key, SOURCE_SLOTS[key], deviceId);
+    }
   }
 
   // --- Contrat avec le participant -------------------------------------------
@@ -499,6 +536,12 @@ export default class VThermDevice extends Homey.Device {
    * pièce vide chauffée sans personne pour la corriger.
    */
   private async teardown(): Promise<void> {
+    if (this.onHubConnected !== null) {
+      this.app.hub.off('connected', this.onHubConnected);
+      this.onHubConnected = null;
+    }
+    this.provisionalSources.clear();
+
     const participant = this.participant;
     this.participant = null;
 
@@ -566,12 +609,29 @@ export default class VThermDevice extends Homey.Device {
     if (resolved === undefined) return;
 
     if (capabilityId === null) {
+      // Le repli est PROVISOIRE tant que le hub n'a pas parlé. `getDeviceSummary` rend `null` aussi
+      // bien quand le hub n'est pas monté que quand l'appareil n'a réellement aucune capability
+      // attendue : sans cette distinction, une sonde en `measure_temperature.local` restait liée à
+      // vie sur `measure_temperature`, qu'elle n'a pas. On refait la résolution à l'arrivée du hub.
+      if (this.app.hub.connected) {
+        this.provisionalSources.delete(key);
+      } else {
+        this.provisionalSources.add(key);
+      }
       this.app.trace(
         `[vtherm] ${this.deviceId()} : source « ${key} » — aucune capability attendue sur `
-        + `l'appareil ${deviceId}, liaison tentée sur ${resolved}`,
+        + `l'appareil ${deviceId}, liaison tentée sur ${resolved}`
+        + (this.app.hub.connected ? '' : ' (hub absent, résolution à refaire)'),
       );
+    } else {
+      this.provisionalSources.delete(key);
     }
 
+    // La liaison précédente est détruite ICI et pas seulement dans `attachSource` : la
+    // re-résolution à l'arrivée du hub passe directement par cette méthode, et remplacer la
+    // référence sans détruire laisserait un abonnement websocket orphelin à vie. `destroy()` est
+    // idempotent, donc le double appel du chemin normal ne coûte rien.
+    this.sources[slot]?.destroy();
     this.sources[slot] = this.app.hub.bind(
       deviceId,
       resolved,
