@@ -1,0 +1,17 @@
+# Sources de développement : rien ici n'est lu à l'exécution, et `tsconfig.json` ne les
+# compile pas (il n'inclut que app/api/lib/runtime/drivers).
+/test/
+/test-runtime/
+/tsconfig.test.json
+/tsconfig.runtime-test.json
+
+# Documents de conception. 1,8 Mo, référencés nulle part dans le code, et un reviewer qui
+# ouvre le bundle y lirait un plan interne.
+/docs/
+
+# README.md est la note de développement du dépôt, en français et datée ; README.txt est le
+# seul texte destiné au store.
+/README.md
+
+# État opératoire de l'outillage, ignoré par git mais présent sur disque au moment du bundle.
+/.omc/
