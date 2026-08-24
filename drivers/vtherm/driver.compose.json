@@ -41,6 +41,13 @@
         "fr": "Fenêtre",
         "nl": "Raam"
       }
+    },
+    "alarm_motion": {
+      "title": {
+        "en": "Presence",
+        "fr": "Présence",
+        "nl": "Aanwezigheid"
+      }
     }
   },
   "platforms": [

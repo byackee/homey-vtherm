@@ -13,7 +13,6 @@
   "getable": true,
   "setable": true,
   "uiComponent": "picker",
-  "insights": true,
   "values": [
     {
       "id": "frost",

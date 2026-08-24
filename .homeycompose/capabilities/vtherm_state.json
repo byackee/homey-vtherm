@@ -13,7 +13,6 @@
   "getable": true,
   "setable": false,
   "uiComponent": "sensor",
-  "insights": true,
   "values": [
     {
       "id": "off",

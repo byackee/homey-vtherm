@@ -74,8 +74,15 @@ const RECONNECT_MAX_MS = 2 * 60_000;
 /** Délai d'établissement TCP+CONNACK. Au-delà, `mqtt` relance le cycle de reconnexion. */
 const CONNECT_TIMEOUT_MS = 10_000;
 
-/** Plafond par défaut du test de connexion depuis la page de réglages. */
-export const BROKER_TEST_TIMEOUT_MS = 10_000;
+/**
+ * Plafond par défaut du test de connexion depuis la page de réglages.
+ *
+ * DÉLIBÉRÉMENT sous les 10 s : un appel à l'API d'une app est coupé à 10 s par Homey. À 10 000 ms
+ * le diagnostic était prêt à l'instant précis où la frontière expirait, et l'utilisateur voyait une
+ * erreur HTTP générique au lieu du diagnostic — sur un broker injoignable, c'est-à-dire le seul cas
+ * où ce bouton sert. Les 2 s de marge paient la sérialisation et le trajet retour.
+ */
+export const BROKER_TEST_TIMEOUT_MS = 8_000;
 
 /** QoS 1 : une commande de vanne perdue laisse la pièce dans un état qu'on croit avoir corrigé. */
 const PUBLISH_QOS = 1;

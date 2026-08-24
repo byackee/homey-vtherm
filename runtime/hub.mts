@@ -18,18 +18,12 @@ import { matchesCapability } from '../lib/capabilityMatch.mjs';
 import { computeStale, resolveTimestamp, toEpochMs } from '../lib/freshness.mjs';
 import { shouldWrite } from '../lib/writePolicy.mjs';
 import type { CapValue, LastWrite, WriteOptions } from '../lib/writePolicy.mjs';
+import type { Reading } from '../lib/types.mjs';
 
 export type { CapValue } from '../lib/writePolicy.mjs';
-
-/**
- * TODO: importer depuis lib/step.mjs quand le lot 1bis aura atterri.
- * Forme figée par le lot 1bis : `{ value: T; atMs: number; stale: boolean }`.
- */
-export interface Reading<T> {
-  value: T;
-  atMs: number;
-  stale: boolean;
-}
+// `Reading` vivait ici en double, sous un TODO disant d'aller la chercher dans `lib/step.mjs`.
+// Elle a atterri dans `lib/types.mjs` : on la ré-exporte, l'export public de ce module ne change pas.
+export type { Reading } from '../lib/types.mjs';
 
 /** L'instance Homey passée à l'app. `@types/homey` n'exporte pas la classe directement. */
 type HomeyInstance = Homey.App['homey'];

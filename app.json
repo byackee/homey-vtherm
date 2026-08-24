@@ -1062,6 +1062,13 @@
             "fr": "Fenêtre",
             "nl": "Raam"
           }
+        },
+        "alarm_motion": {
+          "title": {
+            "en": "Presence",
+            "fr": "Présence",
+            "nl": "Aanwezigheid"
+          }
         }
       },
       "platforms": [
@@ -2520,7 +2527,6 @@
       "getable": true,
       "setable": true,
       "uiComponent": "picker",
-      "insights": true,
       "values": [
         {
           "id": "auto",
@@ -2640,7 +2646,6 @@
       "getable": true,
       "setable": true,
       "uiComponent": "picker",
-      "insights": true,
       "values": [
         {
           "id": "frost",
@@ -2756,7 +2761,6 @@
       "getable": true,
       "setable": false,
       "uiComponent": "sensor",
-      "insights": true,
       "values": [
         {
           "id": "off",
