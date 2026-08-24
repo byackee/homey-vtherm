@@ -15,11 +15,19 @@ export function computeOpeningDegree(onPercent: number, params: OpeningDegreePar
     openingThreshold, maxOpeningDegree, maxClosingDegree,
   } = params;
 
-  // Garde VT : une plage inversée ou vide n'est pas une erreur de saisie à refuser, elle est
-  // ramenée au seuil. Sans ça, la pente ci-dessous serait négative et la vanne se fermerait
-  // d'autant plus que la demande est forte.
+  // Garde : une plage inversée ou vide n'est pas une erreur de saisie à refuser. Sans elle, la
+  // pente ci-dessous serait négative et la vanne se fermerait d'autant plus que la demande est
+  // forte.
+  //
+  // On replie sur le seuil CONVERTI EN POURCENTAGE. Les deux grandeurs ne sont pas dans la même
+  // unité : `openingThreshold` est une fraction 0..1 sur l'échelle de `on_percent`, les trois
+  // degrés sont des pourcentages 0..100 (voir `OpeningDegreeParams`). Replier sur le seuil brut
+  // donnait une ouverture minimale d'une fraction de pour cent — avec un seuil à 0,1, le minimum
+  // valait 0,1 % au lieu de 10 % : le radiateur ne s'ouvrait pratiquement plus, en silence. Et
+  // rien n'interdit de régler le minimum au-dessus du maximum, aucun contrôle croisé n'existant
+  // côté réglages.
   const minOpeningDegree = params.minOpeningDegree >= maxOpeningDegree
-    ? openingThreshold
+    ? openingThreshold * 100
     : params.minOpeningDegree;
 
   if (onPercent >= openingThreshold && onPercent > 0) {

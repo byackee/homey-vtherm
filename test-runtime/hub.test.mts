@@ -93,8 +93,24 @@ const fakeApi = {
   destroy(): void { /* rien à relâcher. */ },
 };
 
+/** Compteur de tentatives, et nombre d'échecs à servir avant de rendre l'API. Zéro par défaut :
+ *  tous les essais existants voient exactement le comportement d'avant. */
+let createAttempts = 0;
+let failNextCreates = 0;
+
 mock.module('homey-api', {
-  namedExports: { HomeyAPI: { createAppAPI: async (): Promise<unknown> => fakeApi } },
+  namedExports: {
+    HomeyAPI: {
+      createAppAPI: async (): Promise<unknown> => {
+        createAttempts += 1;
+        if (failNextCreates > 0) {
+          failNextCreates -= 1;
+          throw new Error('cloud indisponible');
+        }
+        return fakeApi;
+      },
+    },
+  },
 });
 
 const { HomeyApiHub, UnresolvedBindingError } = await import('../runtime/hub.mjs');
@@ -181,4 +197,57 @@ test('l\'extinction part vraiment quand la valeur change', async () => {
   assert.equal(relay.on, false, 'la chaudière est ÉTEINTE');
 
   await hub.stop();
+});
+
+// --- Un échec de démarrage n'est pas une condamnation --------------------------
+
+test('démarrage échoué : le hub réessaie tout seul, au lieu de rester mort en silence', async () => {
+  // Sans reprise, `this.api` restait `null` À VIE : les écouteurs `connect`/`reconnect` ne sont
+  // câblés qu'APRÈS le succès de `createAppAPI()`, donc rien ne rattrapait. L'app continuait de
+  // battre, l'ordonnanceur de tiquer, aucune erreur ne se répétait — et plus une seule source
+  // n'était lue ni une seule vanne pilotée, pour tout le logement, jusqu'à un redémarrage manuel.
+  // Le déclencheur est ordinaire : `createAppAPI()` attend `homey.cloud.getHomeyId()`, donc une
+  // Homey qui redémarre avant sa box échoue ici.
+  mock.timers.enable({ apis: ['setTimeout'] });
+  const hub = newHub();
+  try {
+    const before = createAttempts;
+    failNextCreates = 1;
+
+    await assert.rejects(hub.start(), /cloud indisponible/, 'le premier essai remonte bien l\'échec');
+    assert.equal(createAttempts, before + 1, 'une seule tentative pour l\'instant');
+
+    mock.timers.tick(5_000);
+    // Laisser la chaîne de promesses du nouvel essai se dérouler.
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+
+    assert.equal(
+      createAttempts, before + 2,
+      'le hub a réessayé de lui-même : c\'est toute la différence entre une panne passagère et '
+      + 'un logement sans chauffage jusqu\'au prochain redémarrage',
+    );
+  } finally {
+    await hub.stop();
+    mock.timers.reset();
+    failNextCreates = 0;
+  }
+});
+
+test('`stop()` annule la reprise : rien ne redémarre après un arrêt', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  const hub = newHub();
+  try {
+    failNextCreates = 1;
+    await assert.rejects(hub.start(), /cloud indisponible/);
+    await hub.stop();
+
+    const after = createAttempts;
+    mock.timers.tick(60_000);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+
+    assert.equal(createAttempts, after, 'un hub arrêté ne se relance pas dans le dos de l\'app');
+  } finally {
+    mock.timers.reset();
+    failNextCreates = 0;
+  }
 });

@@ -45,6 +45,14 @@ const RESUBSCRIBE_MIN_MS = 5_000;
 const RESUBSCRIBE_MAX_MS = 5 * 60_000;
 
 /**
+ * Back-off de reprise du DÉMARRAGE du hub. Même forme que celui du ré-abonnement, pour la même
+ * raison : `createAppAPI()` attend `homey.cloud.getHomeyId()`, donc une Homey qui redémarre avant
+ * sa box échoue ici — un cas ordinaire, pas une avarie.
+ */
+const START_RETRY_MIN_MS = 5_000;
+const START_RETRY_MAX_MS = 5 * 60_000;
+
+/**
  * Intervalle minimal entre deux `getDevices()` réseau. L'ordonnanceur coalesce ses ticks, mais un
  * recalcul hors cycle (consigne, preset, fenêtre) peut en produire une rafale : sans ce plancher,
  * le filet de sécurité deviendrait lui-même la cause du dépassement de quota.
@@ -406,6 +414,8 @@ export class HomeyApiHub {
   private readonly events = new EventEmitter();
 
   private starting: Promise<void> | null = null;
+  private startRetryTimer: NodeJS.Timeout | null = null;
+  private startRetryDelayMs = START_RETRY_MIN_MS;
   private stopped = false;
 
   /**
@@ -454,11 +464,42 @@ export class HomeyApiHub {
     if (this.starting !== null) return this.starting;
 
     this.stopped = false;
-    this.starting = this.doStart().finally(() => {
-      this.starting = null;
-    });
+    this.starting = this.doStart()
+      .then(() => {
+        this.startRetryDelayMs = START_RETRY_MIN_MS;
+      })
+      .catch((err: unknown) => {
+        // Sans cette reprise, un échec ici est DÉFINITIF. `this.api` reste `null`, et les écouteurs
+        // `connect`/`reconnect` ne sont câblés qu'APRÈS le succès de `createAppAPI()` : rien ne
+        // rattrape. L'app continuerait de battre, l'ordonnanceur de tiquer, aucune erreur ne se
+        // répéterait — et plus une seule source ne serait lue ni une seule vanne pilotée, pour tout
+        // le logement, jusqu'à un redémarrage manuel. C'est le pire mode de panne pour du
+        // chauffage : silencieux, total, et déclenché par une simple coupure de courant.
+        this.scheduleStartRetry();
+        throw err;
+      })
+      .finally(() => {
+        this.starting = null;
+      });
 
     return this.starting;
+  }
+
+  /** Réessaie le démarrage, en espaçant. Ne relance jamais après `stop()`. */
+  private scheduleStartRetry(): void {
+    if (this.stopped || this.startRetryTimer !== null) return;
+
+    const delayMs = this.startRetryDelayMs;
+    this.startRetryDelayMs = Math.min(this.startRetryDelayMs * 2, START_RETRY_MAX_MS);
+
+    this.log(`Démarrage du hub impossible — nouvelle tentative dans ${Math.round(delayMs / 1000)} s.`);
+    this.startRetryTimer = setTimeout(() => {
+      this.startRetryTimer = null;
+      // L'échec est déjà journalisé et replanifié par `start()` : ici on ne fait qu'éviter un rejet
+      // non traité, qui tomberait dans un callback de timer et tuerait le processus de l'app.
+      void this.start().catch(() => undefined);
+    }, delayMs);
+    this.startRetryTimer.unref?.();
   }
 
   private async doStart(): Promise<void> {
@@ -720,6 +761,11 @@ export class HomeyApiHub {
   /** Appelé depuis `onUninit`. Détruit les liaisons puis ferme la connexion. */
   async stop(): Promise<void> {
     this.stopped = true;
+
+    if (this.startRetryTimer !== null) {
+      clearTimeout(this.startRetryTimer);
+      this.startRetryTimer = null;
+    }
 
     for (const binding of [...this.bindings]) {
       binding.destroy();

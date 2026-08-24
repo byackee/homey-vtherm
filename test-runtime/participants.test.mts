@@ -86,6 +86,32 @@ test('capteur muet en mode vanne : la sortie est GELÉE, on ne commande rien', a
   assert.equal(emitter.lastSwitch, undefined, 'et surtout aucun relais touché');
 });
 
+// --- Mode interrupteur : la commande n'est pas partie ---------------------------
+
+test('bascule perdue : la demande devient INCONNUE, la chaudière n\'est pas sollicitée', async () => {
+  const { emitter, room, participant } = world('switch');
+
+  // Pièce chaude : le relais reste éteint, la chaudière n'est pas sollicitée pour cette pièce.
+  room.setReading(30, 0);
+  await participant.tick(0);
+  assert.equal(emitter.lastSwitch, false, 'relais éteint');
+  assert.equal(participant.demand.kind, 'inactive');
+
+  // La prise est ré-appairée : nouvel identifiant Homey, la liaison ne résout plus rien. La pièce
+  // refroidit, le noyau veut donc VRAIMENT commuter — et la commande ne part pas.
+  emitter.switchWriteFails = true;
+  const later = 30 * 60_000;
+  room.setReading(12, later);
+  await participant.tick(later);
+
+  assert.equal(
+    participant.demand.kind, 'unknown',
+    'en mode interrupteur la demande vient de NOTRE découpage temporel, pas d\'une lecture de '
+    + 'l\'émetteur : sans ce doute elle restait `active`, la pièce ne chauffait pas, et la '
+    + 'chaudière tournait sur un circuit qui ne consomme rien',
+  );
+});
+
 // --- La fenêtre détectée sans capteur ------------------------------------------
 
 test('mode « chute de température » : la condition Flow suit la détection RÉELLE, pas la capability', async () => {

@@ -458,8 +458,16 @@ export class VThermParticipant implements Tickable {
    * et le contrat du type veut qu'il laisse la chaudière éteinte.
    */
   private confirmedDemand(demand: Demand): Demand {
-    if (this.emitter.mode !== 'valve' || !this.emitter.valveUnconfirmed) return demand;
-    return { kind: 'unknown' };
+    // Une chaudière ne s'allume jamais sur de l'inconnu : quand la commande de l'émetteur n'est pas
+    // partie, la demande de cette pièce ne vaut rien et ne doit pas compter dans l'agrégat.
+    //
+    // Le mode consigne n'a pas besoin de cette garde : sa demande se lit sur `emitterHeating`, qui
+    // rend `null` sur une liaison orpheline. Les deux autres commandent à l'aveugle — le mode vanne
+    // par la dorsale, le mode interrupteur par notre propre découpage temporel — et doivent donc
+    // dire quand rien n'est parti.
+    if (this.emitter.mode === 'valve' && this.emitter.valveUnconfirmed) return { kind: 'unknown' };
+    if (this.emitter.mode === 'switch' && this.emitter.switchUnconfirmed) return { kind: 'unknown' };
+    return demand;
   }
 
   /**

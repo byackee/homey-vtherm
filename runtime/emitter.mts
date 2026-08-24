@@ -57,6 +57,13 @@ export interface EmitterAdapter {
    * s'enclenche sur un circuit fermé.
    */
   get valveUnconfirmed(): boolean;
+  /**
+   * Pendant du précédent pour un émetteur à relais. `true` = la dernière commande n'est PAS partie.
+   * Indispensable parce qu'en mode interrupteur la demande vient de notre découpage temporel et non
+   * d'une lecture de l'émetteur : sans ce doute, une commande perdue laissait la demande à
+   * `active`, et la chaudière tournait sur un circuit qui ne consomme pas.
+   */
+  get switchUnconfirmed(): boolean;
   applySetpoint(v: number, nowMs: number): Promise<void>;
   applyValve(percent: number, nowMs: number): Promise<void>;
   applySwitch(on: boolean, nowMs: number): Promise<void>;
@@ -195,6 +202,8 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
   private destroyed = false;
   /** Voir `EmitterAdapter.valveUnconfirmed`. Faux tant qu'aucune ouverture n'a été tentée. */
   private valveWriteFailed = false;
+  /** Voir `EmitterAdapter.switchUnconfirmed`. Faux tant qu'aucune bascule n'a été tentée. */
+  private switchWriteFailed = false;
 
   constructor(options: EmitterAdapterOptions) {
     this.hub = options.hub;
@@ -243,6 +252,10 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
 
   get valveUnconfirmed(): boolean {
     return this.valveWriteFailed;
+  }
+
+  get switchUnconfirmed(): boolean {
+    return this.switchWriteFailed;
   }
 
   setBackend(backend: ValveBackend | null): void {
@@ -407,9 +420,17 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
    */
   async applySwitch(on: boolean, nowMs: number): Promise<void> {
     const binding = this.switchBinding;
-    if (binding === null) return;
+    if (binding === null) {
+      // Plus de liaison : rien n'a été commandé. Le dire, sinon la demande reste `active` et la
+      // chaudière chauffe un circuit qui ne consomme pas.
+      this.switchWriteFailed = true;
+      return;
+    }
 
     const wrote = await this.writeBinding(binding, on, { nowMs, maxIntervalMs: 1 }, 'switch');
+    // L'écriture est FORCÉE (`maxIntervalMs: 1`), donc `false` signifie toujours « pas parti » —
+    // jamais « dédupliqué ». Le doute est donc sans ambiguïté, contrairement au cas de la vanne.
+    this.switchWriteFailed = !wrote;
     if (wrote) this.remember('switch', on ? 1 : 0, nowMs);
   }
 

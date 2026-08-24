@@ -95,3 +95,40 @@ test('la fonction est pure : l\'état d\'entrée n\'est pas muté', () => {
   stepDutyCycle(s, 0.5, P, 0);
   assert.equal(s.cycleStartMs, null);
 });
+
+// --- Réglages légaux mais hostiles ------------------------------------------------
+
+test('activation minimale plus longue que le cycle : la pièce chauffe QUAND MÊME', () => {
+  // Les deux valeurs sont dans les bornes du manifeste : `cycle_min` accepte 1 (minute) et
+  // `min_activation_sec` accepte 900. Ensemble, et sans bornage, `resolveOnMs` rendait 0 pour TOUTE
+  // demande sous 100 % : le relais ne s'enclenchait jamais, sans avertissement, sans déclencheur de
+  // Flow et sans trace, pendant que la tuile affichait une demande.
+  const hostile: DutyCycleParams = { cycleMin: 1, minActivationSec: 900, minDeactivationSec: 0 };
+  const cycle = 60_000;
+
+  const half = stepDutyCycle(createDutyCycleState(), 0.5, hostile, 0);
+  assert.equal(
+    half.commanded, true,
+    'une demande de 50 % doit pouvoir chauffer : la borne est la MOITIÉ du cycle, pas le cycle',
+  );
+  assert.equal(half.wakeUpAtMs, cycle / 2);
+
+  // Sous la moitié, le renoncement reste légitime — c'est la fonction même du réglage.
+  const low = stepDutyCycle(createDutyCycleState(), 0.2, hostile, 0);
+  assert.equal(low.commanded, false, 'une demande trop faible ne fait toujours pas commuter');
+});
+
+test('coupure minimale plus longue que le cycle : le relais peut ENCORE s\'éteindre', () => {
+  // Le défaut est symétrique : sans bornage, une coupure minimale démesurée figeait le relais
+  // ALLUMÉ en permanence, par le même mécanisme et avec le même silence.
+  const hostile: DutyCycleParams = { cycleMin: 1, minActivationSec: 0, minDeactivationSec: 900 };
+  const cycle = 60_000;
+
+  const half = stepDutyCycle(createDutyCycleState(), 0.5, hostile, 0);
+  assert.equal(half.commanded, true);
+  const after = stepDutyCycle(half.nextState, 0.5, hostile, cycle / 2);
+  assert.equal(
+    after.commanded, false,
+    'une demande de 50 % doit pouvoir couper à la moitié du cycle',
+  );
+});

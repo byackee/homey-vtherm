@@ -36,6 +36,10 @@ export class FakeEmitter implements EmitterAdapter {
   mode: EmitterWriteMode = 'setpoint';
   available = true;
   valveUnconfirmed = false;
+  switchUnconfirmed = false;
+  /** Quand vrai, `applySwitch` ne commande RIEN : la liaison est orpheline, comme après un
+   *  ré-appairage de la prise. C'est le cas que `switchUnconfirmed` existe pour signaler. */
+  switchWriteFails = false;
 
   constructor(readonly deviceId = 'fake-emitter') {}
 
@@ -83,6 +87,12 @@ export class FakeEmitter implements EmitterAdapter {
 
   async applySwitch(on: boolean, nowMs: number): Promise<void> {
     await this.waitGate();
+    if (this.switchWriteFails) {
+      // Rien n'est parti : ni trace de commutation, ni changement d'état réel du relais.
+      this.switchUnconfirmed = true;
+      return;
+    }
+    this.switchUnconfirmed = false;
     this.switches.push({ on, nowMs });
     this.realHeating = on;
   }

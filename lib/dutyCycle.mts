@@ -83,12 +83,27 @@ function resolveOnMs(onPercent: number, cycleMs: number, params: DutyCycleParams
 
   const raw = onPercent * cycleMs;
 
+  // Les deux durées minimales sont bornées à la MOITIÉ du cycle.
+  //
+  // Elles se règlent jusqu'à 900 s alors que le cycle descend à 60 s : deux valeurs légales qui,
+  // ensemble, rendaient la régulation impossible en silence. Une activation minimale supérieure au
+  // cycle fait rendre 0 ici pour TOUTE demande sous 100 % — le relais ne s'enclenchait jamais, sans
+  // avertissement ni trace, pendant que la tuile affichait une demande. Le défaut est symétrique :
+  // une coupure minimale trop grande fige le relais ALLUMÉ en permanence.
+  //
+  // La moitié plutôt que le cycle entier : à la borne exacte, seule une demande de 100 % passerait
+  // encore — ce qui reproduit la panne pour tout le reste. À la moitié, toute demande d'au moins
+  // 50 % peut chauffer et toute demande d'au plus 50 % peut couper.
+  const halfCycleMs = cycleMs / 2;
+  const minOnMs = Math.min(Math.max(0, params.minActivationSec) * 1000, halfCycleMs);
+  const minOffMs = Math.min(Math.max(0, params.minDeactivationSec) * 1000, halfCycleMs);
+
   // Trop court pour chauffer : on reste éteint tout le cycle.
-  if (raw < Math.max(0, params.minActivationSec) * 1000) return 0;
+  if (raw < minOnMs) return 0;
 
   // Trop court pour couper : on reste allumé tout le cycle.
   const off = cycleMs - raw;
-  if (off < Math.max(0, params.minDeactivationSec) * 1000) return cycleMs;
+  if (off < minOffMs) return cycleMs;
 
   return raw;
 }
