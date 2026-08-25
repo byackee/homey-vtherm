@@ -1,6 +1,35 @@
 {
   "triggers": [
     {
+      "id": "preset_changed",
+      "title": {
+        "en": "The preset changes",
+        "fr": "Le preset change",
+        "nl": "Het preset verandert"
+      },
+      "hint": {
+        "en": "Fires whoever made the change — a Flow, the picker, or a timed preset falling back on its own. It reports the preset you asked for, so with the Activity preset it does not fire when motion switches the level underneath; use Status for that.",
+        "fr": "Se déclenche quelle que soit l'origine du changement — un Flow, le sélecteur, ou un preset temporisé qui retombe de lui-même. Il annonce le preset demandé : avec le preset Activité, il ne part donc pas quand le mouvement bascule le niveau sous-jacent ; c'est l'État qui le dit.",
+        "nl": "Wordt geactiveerd ongeacht de oorzaak — een Flow, de kiezer, of een tijdelijk preset dat vanzelf terugvalt. Het meldt het gevraagde preset, niet het onderliggende niveau bij het Activiteit-preset; gebruik daarvoor Status."
+      },
+      "tokens": [
+        {
+          "name": "preset",
+          "type": "string",
+          "title": {
+            "en": "Preset",
+            "fr": "Preset",
+            "nl": "Preset"
+          },
+          "example": {
+            "en": "comfort",
+            "fr": "comfort",
+            "nl": "comfort"
+          }
+        }
+      ]
+    },
+    {
       "id": "demand_started",
       "title": {
         "en": "It starts calling for heat",

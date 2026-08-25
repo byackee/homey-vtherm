@@ -560,9 +560,9 @@ robinets se ferment. La description de l'app et le réglage doivent le rappeler.
 
 ## 10. Cartes Flow
 
-**Déclencheurs** : preset changé · état effectif changé (`vtherm_state`) · fenêtre ouverte/fermée détectée ·
-demande de chaleur démarrée/arrêtée · chaudière activée/désactivée · mode sécurité entré/sorti ·
-pourcentage de puissance changé.
+**Déclencheurs** : preset changé · état effectif changé (`vtherm_state`) · fenêtre ouverte/fermée
+détectée · demande de chaleur démarrée/arrêtée · chaudière activée/désactivée · mode central changé ·
+mode sécurité entré/sorti · pourcentage de puissance changé.
 
 **Conditions** : preset est … · fenêtre est ouverte · quelqu'un est présent · le VTherm demande de la chaleur ·
 la chaudière est active · le mode central est …
@@ -571,7 +571,9 @@ la chaudière est active · le mode central est …
 régler la consigne · allumer/éteindre · régler le mode central · ignorer la fenêtre (bypass) ·
 régler les coefficients TPI (équivalent `set_tpi_parameters`) · forcer l'état de présence.
 
-Les déclencheurs `_changed` automatiques des capabilities custom existent en plus, sans déclaration.
+Homey ne fabrique de cartes `_changed` automatiques que pour les capabilities dont l'identifiant
+porte un préfixe SYSTÈME (`measure_`, `meter_`, `alarm_`…). Aucune des nôtres n'en porte : toute
+carte que nous voulons offrir doit être déclarée, et déclenchée explicitement par le code.
 
 ## 11. Persistance
 

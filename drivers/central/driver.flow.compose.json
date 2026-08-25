@@ -1,6 +1,35 @@
 {
   "triggers": [
     {
+      "id": "central_mode_changed",
+      "title": {
+        "en": "The central mode changes",
+        "fr": "Le mode central change",
+        "nl": "De centrale modus verandert"
+      },
+      "hint": {
+        "en": "Fires whoever made the change — a Flow or the picker. Only a real change fires it: setting the mode it already holds does nothing.",
+        "fr": "Se déclenche quelle que soit l'origine du changement — un Flow ou le sélecteur. Seul un vrai changement le déclenche : régler le mode qu'il porte déjà ne fait rien.",
+        "nl": "Wordt geactiveerd ongeacht de oorzaak — een Flow of de kiezer. Alleen een echte wijziging activeert hem."
+      },
+      "tokens": [
+        {
+          "name": "mode",
+          "type": "string",
+          "title": {
+            "en": "Central mode",
+            "fr": "Mode central",
+            "nl": "Centrale modus"
+          },
+          "example": {
+            "en": "auto",
+            "fr": "auto",
+            "nl": "auto"
+          }
+        }
+      ]
+    },
+    {
       "id": "boiler_started",
       "title": {
         "en": "The boiler is started",

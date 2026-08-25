@@ -372,3 +372,45 @@ test('un relais désigné APRÈS coup est réaffirmé, pas oublié', async () =>
   assert.equal(relay.writes.length, 1, 'le nouveau relais reçoit son ordre');
   assert.equal(relayState(relay), false);
 });
+
+// --- Le mode central, et la carte Flow qui l'annonce ------------------------
+
+test('changer de mode central annonce le nouveau mode, et fait tiquer d\'abord', async () => {
+  const host = new FakeDeviceHost('central');
+  const ticks: string[] = [];
+  const central = new CentralParticipant({
+    host, boiler: null, params: PARAMS, mode: 'auto',
+    requestTick: (reason) => ticks.push(reason), nowMs: 0,
+  });
+
+  await central.setMode('frost');
+
+  assert.deepEqual(host.flows, [{ kind: 'central_mode_changed', mode: 'frost' }]);
+  assert.equal(central.mode, 'frost');
+  // La régulation ne doit pas attendre la carte Flow : le recalcul est demandé avant elle.
+  assert.deepEqual(ticks, ['central-mode']);
+});
+
+test('régler le mode qu\'on porte déjà n\'annonce RIEN', async () => {
+  // Un Flow horaire qui repose « tout arrêté » chaque nuit ne doit pas déclencher les Flows de
+  // l'utilisateur une fois par nuit sans que rien n'ait changé.
+  const { host, central } = world();
+
+  await central.setMode('stopped');
+  await central.setMode('stopped');
+  await central.setMode('stopped');
+
+  assert.deepEqual(host.flowKinds(), ['central_mode_changed'], 'une seule annonce pour un seul changement');
+});
+
+test('une carte Flow qui échoue ne fait pas perdre le changement de mode', async () => {
+  // Le mode central commande toute la maison : il doit survivre à une carte Flow qui lève, sinon
+  // un « tout arrêté » de vacances resterait sur « auto » à cause d'un Flow tiers cassé.
+  const { host, central } = world();
+  host.triggerFlow = async () => { throw new Error('carte Flow cassée'); };
+
+  await central.setMode('heat_only');
+
+  assert.equal(central.mode, 'heat_only', 'le mode est pris malgré la carte cassée');
+  assert.equal(host.errors.length, 1, 'et l\'échec est tracé plutôt qu\'avalé');
+});

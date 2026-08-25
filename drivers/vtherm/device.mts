@@ -265,13 +265,22 @@ export default class VThermDevice extends Homey.Device {
   /**
    * Traduction événement du noyau → carte Flow déclarée.
    *
-   * `sensor_quiet` s'appelle `sensor_went_quiet` côté carte, et `sensor_recovered`,
-   * `preset_changed` et `state_changed` n'ont pas de carte propre : les deux derniers sont déjà
-   * couverts par les déclencheurs `_changed` automatiques des capabilities. Un événement sans
-   * carte est ignoré, jamais une erreur.
+   * `sensor_quiet` s'appelle `sensor_went_quiet` côté carte. `sensor_recovered` et
+   * `state_changed` n'ont pas de carte : le premier est le retour à la normale d'un
+   * avertissement, le second se lit sur la capability `vtherm_state`. Un événement sans carte
+   * est ignoré, jamais une erreur.
+   *
+   * Ce commentaire a longtemps affirmé que `preset_changed` était « déjà couvert par les
+   * déclencheurs `_changed` automatiques des capabilities ». C'était faux : Homey ne fabrique
+   * ces cartes que pour les capabilities dont l'identifiant porte un préfixe SYSTÈME
+   * (`measure_`, `meter_`, `alarm_`…). `vtherm_preset` n'en porte aucun — aucune carte
+   * n'existait, et le changement de preset n'était donc déclenchable par personne.
    */
   private async triggerFlowCard(event: ParticipantEvent): Promise<void> {
     switch (event.kind) {
+      case 'preset_changed':
+        await this.trigger('preset_changed', { preset: event.preset });
+        return;
       case 'demand_started':
         await this.trigger('demand_started', { power_percent: event.percent });
         return;
