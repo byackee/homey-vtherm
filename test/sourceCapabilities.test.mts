@@ -10,6 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { matchesCapability } from '../lib/capabilityMatch.mjs';
+import { SOURCE_CAPABILITIES, EMITTER_CLASSES } from '../lib/sources.mjs';
 
 interface RealDevice {
   /** Classe Homey de l'appareil : c'est le seul discriminant du filtre émetteur. */
@@ -71,23 +72,22 @@ const REAL_DEVICES: Record<string, RealDevice> = {
     class: 'light',
     capabilities: ['onoff', 'dim', 'light_temperature'],
   },
+  // Aucun capteur de la maison ne publie encore `alarm_open` : c'est la capability système que
+  // Homey a introduite au firmware 12.11 pour les ouvertures, et les apps commenceront à s'en
+  // servir. Tant que `window` n'acceptait que `alarm_contact`, un tel capteur n'était même pas
+  // candidat au pairing — la liste s'affichait, simplement sans lui.
+  'Fenêtre bureau (alarm_open)': {
+    class: 'sensor',
+    capabilities: ['alarm_open', 'measure_battery', 'measure_linkquality'],
+  },
 };
 
-/** Doit rester identique à `SOURCE_CAPABILITIES` de drivers/vtherm/device.mts. */
-const ACCEPTED: Record<string, string[]> = {
-  room: ['measure_temperature'],
-  emitter: ['target_temperature', 'onoff'],
-  outdoor: ['measure_temperature'],
-  window: ['alarm_contact'],
-  motion: ['alarm_motion', 'alarm_presence', 'alarm_occupancy'],
-  presence: ['alarm_presence', 'alarm_occupancy', 'alarm_motion'],
-};
-
-/** Doit rester identique à `EMITTER_CLASSES` de drivers/vtherm/device.mts. */
-const EMITTER_CLASSES: readonly string[] = ['thermostat', 'heater', 'socket', 'other'];
-
+/**
+ * Les tables testées sont les vraies, importées de `lib/sources.mjs`. La suite en gardait une copie
+ * manuelle : élargir une source sans toucher la copie laissait les tests valider l'ancienne table.
+ */
 function candidatesFor(source: string): string[] {
-  const accepted = ACCEPTED[source] ?? [];
+  const accepted: readonly string[] = SOURCE_CAPABILITIES[source as keyof typeof SOURCE_CAPABILITIES] ?? [];
   return Object.entries(REAL_DEVICES)
     .filter(([, device]) => accepted.some((want) => matchesCapability(device.capabilities, want)))
     // Le filtre de classe ne s'applique qu'à l'émetteur : c'est la seule source dont les
@@ -114,6 +114,21 @@ test('les contacts de fenêtre sont candidats', () => {
   const found = candidatesFor('window');
   assert.ok(found.includes('Fenêtre cuisine'));
   assert.ok(found.includes('Fenêtre salon'));
+});
+
+test('un capteur d\'ouverture en alarm_open est candidat au même titre', () => {
+  // Même raison que les détecteurs de présence : la capability dépend du modèle, pas de l'usage.
+  assert.ok(candidatesFor('window').includes('Fenêtre bureau (alarm_open)'));
+  // Et il ne déborde pas sur les autres sources.
+  assert.ok(!candidatesFor('presence').includes('Fenêtre bureau (alarm_open)'));
+  assert.ok(!candidatesFor('room').includes('Fenêtre bureau (alarm_open)'));
+});
+
+test('alarm_contact reste en tête des capabilities acceptées pour une ouverture', () => {
+  // Ce n'est pas cosmétique : `SOURCE_CAPABILITIES.window[0]` est le repli utilisé tant que le hub
+  // n'a pas répondu. Le mettre après `alarm_open` lierait les capteurs existants sur une
+  // capability qu'ils ne portent pas.
+  assert.equal(SOURCE_CAPABILITIES.window[0], 'alarm_contact');
 });
 
 test('une vanne est candidate comme émetteur malgré sa sous-capability', () => {

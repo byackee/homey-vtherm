@@ -9,6 +9,9 @@
 
 import { resolveCapabilityId } from '../../lib/capabilityMatch.mjs';
 import {
+  SOURCE_STORE_KEYS, SOURCE_CAPABILITIES, EMITTER_CLASSES, type SourceKey,
+} from '../../lib/sources.mjs';
+import {
   VTHERM_EXPLAIN_IDS, changedSettings, explainSettings, joinLinkedLabels,
 } from '../../lib/settingsExplain.mjs';
 import Homey from 'homey';
@@ -29,60 +32,11 @@ import {
 } from '../../runtime/participants.mjs';
 import type VThermApp from '../../app.mjs';
 
-/**
- * Les six sources désignées au pairing, et la clé de `store` qui porte chacune.
- *
- * Les clés sont figées : elles voyagent de la vue de pairing jusqu'ici, et `onRepair` les réécrit
- * une par une quand un appareil Zigbee2MQTT ré-appairé a changé d'identifiant.
- */
-export const SOURCE_STORE_KEYS = {
-  room: 'roomId',
-  emitter: 'emitterId',
-  outdoor: 'outdoorId',
-  window: 'windowId',
-  motion: 'motionId',
-  presence: 'presenceId',
-} as const;
+export {
+  SOURCE_STORE_KEYS, SOURCE_CAPABILITIES, EMITTER_CLASSES,
+} from '../../lib/sources.mjs';
+export type { SourceKey } from '../../lib/sources.mjs';
 
-export type SourceKey = keyof typeof SOURCE_STORE_KEYS;
-
-/**
- * Capabilities acceptées pour chaque source, par ordre de préférence.
- *
- * Plusieurs par source, et ce n'est pas de la générosité : les détecteurs de présence de
- * l'installation de référence n'exposent PAS `alarm_motion`. Les mmWave publient
- * `alarm_presence`, d'autres `alarm_occupancy`. Une seule capability codée en dur rendait ces
- * appareils introuvables au pairing — ils n'étaient même pas candidats.
- *
- * Le pairing propose exactement cette liste, et la liaison résout ensuite celle que l'appareil
- * choisi porte réellement : il n'y a qu'une vérité, ici.
- *
- * L'émetteur en accepte deux : une consigne pour les vannes et les thermostats, un `onoff` pour les
- * relais et prises commutées qui pilotent un convecteur (mode `switch`). `onoff` seul serait
- * beaucoup trop large — toutes les lampes de la maison le portent —, d'où le filtre par classe
- * d'appareil de `EMITTER_CLASSES`, côté driver.
- */
-export const SOURCE_CAPABILITIES: Record<SourceKey, readonly string[]> = {
-  room: ['measure_temperature'],
-  emitter: ['target_temperature', 'onoff'],
-  outdoor: ['measure_temperature'],
-  window: ['alarm_contact'],
-  motion: ['alarm_motion', 'alarm_presence', 'alarm_occupancy'],
-  presence: ['alarm_presence', 'alarm_occupancy', 'alarm_motion'],
-};
-
-/**
- * Classes d'appareil admises pour un émetteur, `onoff` étant devenu acceptable.
- *
- * Sur l'installation de référence, 38 appareils portent `onoff` — toutes les lampes comprises. Sans
- * ce filtre, la liste des émetteurs deviendrait un annuaire de la maison, dans lequel les quelques
- * appareils qui chauffent seraient introuvables. Seules ces quatre classes peuvent chauffer une
- * pièce : `socket` couvre les prises commutées, et `other` les relais que leur app ne classe pas.
- *
- * Une classe de trop est bien moins grave qu'une classe manquante — un émetteur absent de la liste
- * est inatteignable, alors qu'un intrus se contente d'occuper une ligne.
- */
-export const EMITTER_CLASSES: readonly string[] = ['thermostat', 'heater', 'socket', 'other'];
 
 /** Sans elles, il n'y a pas de thermostat : une mesure de pièce et quelque chose à piloter. */
 const REQUIRED_SOURCES: readonly SourceKey[] = ['room', 'emitter'];
