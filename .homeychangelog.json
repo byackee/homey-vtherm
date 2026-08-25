@@ -28,5 +28,10 @@
     "en": "Fixes several failures that could stop a room heating without any warning — most importantly, the app now recovers on its own when it cannot reach Homey at startup, for example after a power cut.",
     "fr": "Corrige plusieurs pannes qui pouvaient arrêter le chauffage d'une pièce sans le moindre avertissement — surtout, l'app se rétablit désormais seule quand elle ne peut pas joindre Homey au démarrage, par exemple après une coupure de courant.",
     "nl": "Lost verschillende storingen op die een kamer zonder waarschuwing konden laten afkoelen — vooral herstelt de app zichzelf nu wanneer ze Homey bij het opstarten niet kan bereiken, bijvoorbeeld na een stroomuitval."
+  },
+  "1.0.6": {
+    "en": "Two new Flow cards: your Flows can now react when a thermostat's preset changes, and when the central mode changes. Until now a preset could only be set from a Flow — nothing could notice one changing, not even a change you made by hand on the device itself.",
+    "fr": "Deux nouvelles cartes Flow : vos Flows peuvent désormais réagir au changement de preset d'un thermostat, et au changement de mode central. Jusqu'ici un preset ne pouvait qu'être réglé depuis un Flow — rien ne pouvait constater qu'il changeait, pas même un changement fait à la main sur l'appareil.",
+    "nl": "Twee nieuwe Flow-kaarten: uw Flows kunnen nu reageren wanneer het preset van een thermostaat verandert, en wanneer de centrale modus verandert. Tot nu toe kon een preset alleen vanuit een Flow worden ingesteld — niets kon opmerken dat het veranderde, ook niet wanneer u het met de hand op het apparaat zelf wijzigde."
   }
 }

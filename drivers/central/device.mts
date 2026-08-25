@@ -144,9 +144,13 @@ export default class CentralDevice extends Homey.Device {
     };
   }
 
-  /** Les deux seules cartes déclenchées par le noyau côté central. Le reste est ignoré. */
+  /** Les trois seules cartes déclenchées par le noyau côté central. Le reste est ignoré. */
   private async triggerFlowCard(event: ParticipantEvent): Promise<void> {
     switch (event.kind) {
+      case 'central_mode_changed':
+        await this.homey.flow.getDeviceTriggerCard('central_mode_changed')
+          .trigger(this, { mode: event.mode }, {});
+        return;
       case 'boiler_started':
         await this.homey.flow.getDeviceTriggerCard('boiler_started')
           .trigger(this, { emitters: event.nbActive }, {});
@@ -175,7 +179,9 @@ export default class CentralDevice extends Homey.Device {
   /** Point d'entrée de la carte Flow `set_central_mode` comme du sélecteur de l'interface. */
   async applyCentralMode(mode: CentralMode): Promise<void> {
     await this.setCapabilityValue('vtherm_central_mode', mode);
-    this.participant?.setMode(mode);
+    // La capability est écrite AVANT : la carte `central_mode_changed` part depuis `setMode`, et
+    // une condition « le mode central est … » posée dans le même Flow doit y lire le mode neuf.
+    await this.participant?.setMode(mode);
   }
 
   /**

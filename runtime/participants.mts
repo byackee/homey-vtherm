@@ -91,7 +91,12 @@ const BOILER_STORE_KEY = 'central.boiler';
 
 export type CentralEvent =
   | { kind: 'boiler_started'; nbActive: number }
-  | { kind: 'boiler_stopped' };
+  | { kind: 'boiler_stopped' }
+  /**
+   * Le mode central a réellement changé. L'événement naît dans `setMode`, qui porte déjà la
+   * comparaison avec le mode précédent : régler le mode courant ne change rien et n'émet rien.
+   */
+  | { kind: 'central_mode_changed'; mode: CentralMode };
 
 export type ParticipantEvent = VThermEvent | CentralEvent;
 
@@ -713,10 +718,14 @@ export class CentralParticipant {
     return this.centralMode;
   }
 
-  setMode(mode: CentralMode): void {
+  async setMode(mode: CentralMode): Promise<void> {
     if (mode === this.centralMode) return;
     this.centralMode = mode;
+    // Le recalcul d'abord, le Flow ensuite : la régulation ne doit pas attendre qu'une carte
+    // Flow ait fini de se déclencher pour tenir compte du nouveau mode.
     this.requestTick('central-mode');
+    await this.safely('déclencheur mode central', () =>
+      this.host.triggerFlow({ kind: 'central_mode_changed', mode }));
   }
 
   updateParams(params: BoilerParams): void {
