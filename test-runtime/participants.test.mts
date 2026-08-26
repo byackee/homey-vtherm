@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { VThermParticipant, type VThermSourceBindings } from '../runtime/participants.mjs';
+import { FRESHNESS, VThermParticipant, type VThermSourceBindings } from '../runtime/participants.mjs';
 import { CONFIG, DEFAULTS } from './fixtures.mjs';
 import { FakeBinding } from './fakes/binding.mjs';
 import { FakeDeviceHost } from './fakes/deviceHost.mjs';
@@ -337,4 +337,45 @@ test('une ouverture bien envoyée n\'est PAS rejouée : la déduplication reste 
 
   await participant.tick(300_000);
   assert.equal(emitter.valves.length, afterFirst, 'aucune réécriture d\'une valeur déjà en place');
+});
+
+// --- Seuils de fraîcheur : ce que chacun protège --------------------------------
+
+/**
+ * PANNE EMPÊCHÉE : une tuile de pile perpétuellement vide sur du matériel qui va bien.
+ *
+ * Le seuil de la pile était calqué sur celui des autres sources — 24 h — alors que le raisonnement
+ * est inverse. Réguler sur une température figée est dangereux ; une charge de pile de deux
+ * semaines, elle, reste une information juste. Or une TRVZB ne rapporte la sienne que tous les
+ * plusieurs jours : sur l'installation de référence, deux vannes sur trois avaient une lecture
+ * vieille de sept jours, donc jamais publiée. Une tuile qui ne s'affiche jamais ne prévient de
+ * rien — c'est pourtant sa seule raison d'être.
+ */
+
+const DAY_MS = 24 * 60 * 60_000;
+
+test('la pile d\'une vanne silencieuse depuis une semaine reste affichable', () => {
+  assert.ok(
+    FRESHNESS.emitterBatteryMs > 7 * DAY_MS,
+    'sept jours est la cadence RÉELLE de rapport des vannes de référence, pas une marge de confort',
+  );
+});
+
+test('le seuil de la pile est le plus large de la table, celui de la pièce le plus strict', () => {
+  const regulation = [
+    FRESHNESS.roomTempMs, FRESHNESS.outdoorTempMs, FRESHNESS.emitterHeatingMs,
+    FRESHNESS.motionMs, FRESHNESS.presenceMs,
+  ];
+
+  for (const seuil of regulation) {
+    assert.ok(
+      FRESHNESS.emitterBatteryMs > seuil,
+      'une pile n\'entre dans aucune décision de chauffe : rien ne justifie de la juger aussi vite '
+      + 'qu\'une mesure dont dépend la régulation',
+    );
+    assert.ok(
+      FRESHNESS.roomTempMs <= seuil,
+      'la mesure de pièce commande tout : elle doit être la première déclarée périmée',
+    );
+  }
 });

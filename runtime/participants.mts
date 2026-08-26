@@ -51,8 +51,20 @@ export const FRESHNESS = {
   presenceMs: 2 * 60 * MS_PER_MINUTE,
   /** ~2 h. Sans lui, la demande de chaleur en mode consigne devient `unknown` (chaudière OFF). */
   emitterHeatingMs: 2 * 60 * MS_PER_MINUTE,
-  /** Une pile ne se rapporte que rarement ; l'afficher périmée n'apporterait rien. */
-  emitterBatteryMs: 24 * 60 * MS_PER_MINUTE,
+  /**
+   * ~14 jours, et c'est le seuil le plus large de la table — délibérément.
+   *
+   * Une charge de pile ne bouge pas en une journée, et une TRVZB ne rapporte la sienne que tous
+   * les plusieurs jours. À 24 h, la tuile restait donc vide la plupart du temps sur du matériel
+   * qui fonctionne parfaitement : sur l'installation de référence, deux vannes sur trois avaient
+   * une lecture vieille de sept jours, donc jamais publiée. Une tuile de pile qu'on n'affiche
+   * jamais ne prévient de rien — c'est pourtant sa seule raison d'être.
+   *
+   * Le raisonnement est l'inverse de celui de `roomTempMs` : réguler sur une température figée est
+   * dangereux, alors qu'une pile de deux semaines reste une information juste. Ce qui compte ici
+   * n'est pas l'instant de la mesure mais l'ordre de grandeur de ce qu'elle annonce.
+   */
+  emitterBatteryMs: 14 * 24 * 60 * MS_PER_MINUTE,
   emitterLocalTempMs: 2 * 60 * MS_PER_MINUTE,
 } as const;
 
