@@ -51,3 +51,17 @@ npm run app:run          # exécute sur un Homey connecté
 - **Zigbee2MQTT** (optionnelle) — si l'accès au broker est renseigné, débloque le contrôle direct de
   l'ouverture de vanne et l'injection de la température de pièce dans la vanne. Ces deux propriétés
   n'existent pas comme capabilities Homey : l'app Zigbee2MQTT ne les mappe pas.
+
+## Soutenir l'app ❤️
+
+Cette app est gratuite, écrite sur mon temps libre — des soirées à porter des algorithmes de
+régulation et à discuter avec des vannes qui font davantage confiance à leur propre thermomètre
+qu'à la pièce. Si elle rend la maison plus chaude et la facture plus légère, vous pouvez
+soutenir le travail :
+
+- ☕ Buy me a coffee : https://buymeacoffee.com/byackee
+- 🔗 Tous mes liens : https://linktr.ee/byackee
+
+Raconter comment elle se comporte chez vous aide tout autant — chaque retour améliore les
+réglages par défaut pour la personne suivante. Merci de l'utiliser, et pour chaque geste de
+soutien 🙏
