@@ -7,7 +7,10 @@
     },
     "emitter": {
       "title": "What heats this room?",
-      "lead": "The radiator valve, thermostat or heater this thermostat will drive. It must accept either a target temperature or an on/off switch — a switched socket is driven by on time within each cycle."
+      "lead": "Every radiator, valve or heater in this room. Pick more than one and they all follow the same setpoint. They must be all of one kind: either they all take a target temperature, or they are all plain on/off switches — a switched socket is driven by on time within each cycle.",
+      "continue": "Continue",
+      "count_one": "1 heater selected",
+      "count_many": "{n} heaters selected"
     },
     "boiler": {
       "title": "Which switch starts the boiler?",
@@ -31,7 +34,9 @@
     "error": {
       "incomplete": "Pick a room sensor and a heater before adding this thermostat.",
       "no_api": "Adaptive Thermostat cannot read your devices yet. Its access to the Homey API has not come up — reopen this in a few seconds, or restart the app.",
-      "repair_no_create": "This device already exists — you are repairing it, not creating a new one."
+      "repair_no_create": "This device already exists — you are repairing it, not creating a new one.",
+      "too_many_emitters": "That is more heaters than one thermostat can drive. Split the room across two thermostats instead.",
+      "mixed_emitters": "These heaters are not of the same kind. One takes a target temperature, another is a plain on/off switch, and a thermostat drives its heaters one way or the other — not both. Group the valves together and give the switched heaters their own thermostat."
     },
     "finish": "Create the thermostat",
     "creating": "Creating…",
@@ -44,7 +49,7 @@
       "room": "Room temperature sensor",
       "room_hint": "The thermometer that reads the temperature you care about — the one in the room, not the one inside the radiator valve.",
       "emitter": "Heater",
-      "emitter_hint": "Changing it reloads the device: its regulation restarts from the new heater."
+      "emitter_hint": "Every heater this room drives. Changing the list reloads the device: its regulation restarts from the new heaters."
     }
   },
   "settings": {

@@ -12,6 +12,14 @@
     li.selected { border-color: #E8590C; background: #fff6f0; }
     li .radio { width: 17px; height: 17px; border-radius: 50%; border: 2px solid #c3cbd2; flex: 0 0 auto; }
     li.selected .radio { border-color: #E8590C; border-width: 5px; }
+    /* Une CASE pour l'émetteur, seule source qui en accepte plusieurs : la forme doit dire
+       « plusieurs choix possibles » avant même qu'on ait lu le texte. */
+    li .check { width: 17px; height: 17px; border-radius: 5px; border: 2px solid #c3cbd2;
+                flex: 0 0 auto; position: relative; }
+    li.selected .check { border-color: #E8590C; background: #E8590C; }
+    li.selected .check::after { content: ''; position: absolute; left: 4px; top: 0px;
+                                width: 4px; height: 9px; border: solid #fff;
+                                border-width: 0 2px 2px 0; transform: rotate(45deg); }
     li .name { font-size: 14px; font-weight: 600; }
     li .meta { font-size: 12px; color: #7b8794; margin-top: 2px; }
     .state { border: 1px dashed #dfe4e8; border-radius: 10px; padding: 18px; text-align: center;
@@ -60,12 +68,18 @@
     // rien à réguler. Elles n'ont donc pas d'option « Aucun ».
     var VIEW = { slots: [
       { key: 'room',     event: 'select_room_sensor', required: true },
-      { key: 'emitter',  event: 'select_emitter',     required: true },
+      { key: 'emitter',  event: 'select_emitters',    required: true, multi: true },
       { key: 'outdoor',  event: 'select_outdoor' },
       { key: 'window',   event: 'select_window' },
       { key: 'motion',   event: 'select_motion' },
       { key: 'presence', event: 'select_presence' }
     ] };
+
+    /** Les têtes du groupe, dans l'ordre : la première est la tête de référence. */
+    var EMITTERS = [];
+
+    /** Borne côté vue, en plus de celle du driver : refuser APRÈS le clic serait incompréhensible. */
+    var MAX_EMITTERS = 8;
 
     /** Ce qui est lié aujourd'hui, pour montrer d'où l'on part. */
     var CURRENT = {};
@@ -153,10 +167,10 @@
         } catch (e) { report('nextView : ' + e.message); }
       }
   
-      function buildItem(device, onPick) {
+      function buildItem(device, onPick, multi) {
         var li = document.createElement('li');
         li.onclick = function () { onPick(li); };
-        var r = document.createElement('div'); r.className = 'radio';
+        var r = document.createElement('div'); r.className = multi ? 'check' : 'radio';
         var b = document.createElement('div');
         var n = document.createElement('div'); n.className = 'name'; n.textContent = device.name;
         b.appendChild(n);
@@ -201,6 +215,7 @@
       }
       all.forEach(function (d) {
         var li = buildItem(d, function (node) {
+          if (slot.multi) { toggleMulti(slot, d, node); return; }
           var items = root.querySelectorAll('li');
           for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
           node.classList.add('selected');
@@ -209,19 +224,70 @@
           emit(slot.event, d.id)
             .then(function () { showText(label('pair.updated', 'Change saved.')); })
             .catch(function (err) { showError(err.message); });
-        });
-        var isCurrent = (d.id === CURRENT[slot.key]) || (d.id === null && !CURRENT[slot.key]);
+        }, slot.multi);
+        var isCurrent = slot.multi
+          ? EMITTERS.indexOf(d.id) >= 0
+          : ((d.id === CURRENT[slot.key]) || (d.id === null && !CURRENT[slot.key]));
         if (isCurrent) li.classList.add('selected');
         ul.appendChild(li);
       });
       root.appendChild(ul);
     }
 
+    /**
+     * Ajoute ou retire une tête, puis envoie le groupe ENTIER.
+     *
+     * Entier et non « la différence » : le driver reçoit une liste et la pose telle quelle, ce qui
+     * fait que l'ordre — donc la tête de référence — reste celui affiché à l'écran. Envoyer un
+     * ajout isolé obligerait les deux côtés à s'accorder sur un état qu'aucun des deux ne détient.
+     *
+     * L'ÉTAT VISUEL N'EST APPLIQUÉ QU'APRÈS l'accord du driver : un groupe refusé — mélange de
+     * vannes et de relais, trop de têtes — laisserait sinon une case cochée pour un thermostat qui
+     * n'a pas changé, et c'est l'écran qui deviendrait faux.
+     */
+    function toggleMulti(slot, device, node) {
+      if (device.id === null) return;
+
+      var next = EMITTERS.slice();
+      var at = next.indexOf(device.id);
+      if (at < 0 && next.length >= MAX_EMITTERS) {
+        showError(label('pair.error.too_many_emitters', 'Too many heaters for one thermostat.'));
+        return;
+      }
+      if (at >= 0) {
+        // Un thermostat sans émetteur ne régule plus rien : le refus est ici, immédiat, plutôt
+        // qu'après un aller-retour qui aurait déjà décoché la case à l'écran.
+        if (next.length === 1) {
+          showError(label('pair.error.incomplete', 'Pick at least one heater.'));
+          return;
+        }
+        next.splice(at, 1);
+      } else {
+        next.push(device.id);
+      }
+
+      emit(slot.event, next)
+        .then(function () {
+          EMITTERS = next;
+          if (at >= 0) node.classList.remove('selected'); else node.classList.add('selected');
+          showText(label('pair.updated', 'Change saved.'));
+        })
+        .catch(function (err) { showError(err.message); });
+    }
+
     function start() {
       showText('…');
-      emit('current_sources', null)
-        .then(function (current) { CURRENT = current || {}; })
-        .catch(function () { CURRENT = {}; })
+      Promise.all([
+        emit('current_sources', null).catch(function () { return {}; }),
+        // Un driver d'avant les groupes n'a pas ce gestionnaire : on retombe alors sur l'émetteur
+        // unique de `current_sources`, et la page reste juste au lieu de s'afficher vide.
+        emit('current_emitters', null).catch(function () { return null; })
+      ])
+        .then(function (both) {
+          CURRENT = both[0] || {};
+          var listed = both[1];
+          EMITTERS = (listed && listed.length) ? listed : (CURRENT.emitter ? [CURRENT.emitter] : []);
+        })
         .then(function () {
           return Promise.all(VIEW.slots.map(function (s) {
             return emit('list_candidates', { source: s.key })

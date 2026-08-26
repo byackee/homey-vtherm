@@ -7,7 +7,10 @@
     },
     "emitter": {
       "title": "Wat verwarmt deze kamer?",
-      "lead": "De radiatorkraan, thermostaat of verwarming die deze thermostaat aanstuurt. Hij moet een doeltemperatuur accepteren, of een schakelaar zijn — een geschakelde stekker wordt aangestuurd via inschakeltijd binnen elke cyclus."
+      "lead": "Alle radiatoren, kranen of kachels in deze kamer. Kiest u er meerdere, dan volgen ze allemaal dezelfde doeltemperatuur. Ze moeten van dezelfde soort zijn: ofwel accepteren ze allemaal een doeltemperatuur, ofwel zijn het allemaal gewone aan/uit-schakelaars — een geschakelde stekker wordt aangestuurd via inschakeltijd binnen elke cyclus.",
+      "continue": "Doorgaan",
+      "count_one": "1 verwarming gekozen",
+      "count_many": "{n} verwarmingen gekozen"
     },
     "boiler": {
       "title": "Welke schakelaar start de ketel?",
@@ -31,7 +34,9 @@
     "error": {
       "incomplete": "Kies een kamersensor en een verwarming voordat u deze thermostaat toevoegt.",
       "no_api": "Adaptive Thermostat kan uw apparaten nog niet lezen. De toegang tot de Homey API is niet actief — probeer over enkele seconden opnieuw of herstart de app.",
-      "repair_no_create": "Dit apparaat bestaat al — u repareert het, u maakt er geen nieuw aan."
+      "repair_no_create": "Dit apparaat bestaat al — u repareert het, u maakt er geen nieuw aan.",
+      "too_many_emitters": "Dat zijn meer verwarmingen dan één thermostaat kan aansturen. Verdeel de kamer liever over twee thermostaten.",
+      "mixed_emitters": "Deze verwarmingen zijn niet van dezelfde soort. De ene accepteert een doeltemperatuur, de andere is een gewone schakelaar, en een thermostaat stuurt zijn verwarmingen op de ene of de andere manier aan — niet op beide. Groepeer de kranen samen en geef de geschakelde apparaten hun eigen thermostaat."
     },
     "finish": "Thermostaat aanmaken",
     "creating": "Aanmaken…",
@@ -44,7 +49,7 @@
       "room": "Kamertemperatuursensor",
       "room_hint": "De thermometer die de temperatuur meet waar het u om gaat — die in de kamer.",
       "emitter": "Verwarming",
-      "emitter_hint": "Wijzigen herlaadt het apparaat: de regeling begint opnieuw."
+      "emitter_hint": "Alle verwarmingen van deze kamer. De lijst wijzigen herlaadt het apparaat: de regeling begint opnieuw."
     }
   },
   "settings": {

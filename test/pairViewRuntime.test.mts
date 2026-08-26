@@ -60,9 +60,15 @@ function element(id = ''): FakeElement {
  * (la vue démarre immédiatement), `false` = il arrive plus tard. Les deux chemins doivent produire
  * exactement le même appel — c'est précisément ce qui n'était pas le cas.
  */
-function runView(relativePath: string, homeyReadyAtLoad: boolean): {
+function runView(
+  relativePath: string,
+  homeyReadyAtLoad: boolean,
+  /** Ce que le faux driver répond, par événement. Vide = une liste vide, comme avant. */
+  responses: Record<string, unknown> = {},
+): {
   emitted: Emitted[];
   handlerInstalled: boolean;
+  nodes: Map<string, FakeElement>;
 } {
   const html = readFileSync(join(process.cwd(), relativePath), 'utf8');
   const match = /<script type="text\/javascript">([\s\S]*?)<\/script>/.exec(html);
@@ -75,7 +81,9 @@ function runView(relativePath: string, homeyReadyAtLoad: boolean): {
   // seul document, et des identifiants nus se marchent dessus.
   const viewId = relativePath.split('/').pop()?.replace('.html', '') ?? '';
   const nodes = new Map<string, FakeElement>();
-  for (const base of ['state', 'list', 'outdoor', 'window', 'motion', 'presence', 'finish']) {
+  for (const base of [
+    'state', 'list', 'outdoor', 'window', 'motion', 'presence', 'finish', 'count', 'continue',
+  ]) {
     const id = `${viewId}-${base}`;
     nodes.set(id, element(id));
   }
@@ -83,8 +91,9 @@ function runView(relativePath: string, homeyReadyAtLoad: boolean): {
   const homey = {
     emit(event: string, data: unknown): Promise<unknown> {
       emitted.push({ event, data });
-      // Une liste vide suffit : on teste ce qui PART, pas ce qui revient.
-      return Promise.resolve([]);
+      // Une liste vide par défaut : la plupart des tests regardent ce qui PART, pas ce qui revient.
+      // Les vues à sélection multiple, elles, ont besoin de candidats pour qu'il y ait à cliquer.
+      return Promise.resolve(responses[event] ?? []);
     },
     __: (key: string) => key,
     nextView: () => { /* rien à faire ici */ },
@@ -116,7 +125,17 @@ function runView(relativePath: string, homeyReadyAtLoad: boolean): {
     onReady(homey);
   }
 
-  return { emitted, handlerInstalled };
+  return { emitted, handlerInstalled, nodes };
+}
+
+/** Les `li` rendus dans un conteneur : la vue les crée sous un `ul`, lui-même sous la racine. */
+function items(root: FakeElement | undefined): FakeElement[] {
+  return root?.children[0]?.children ?? [];
+}
+
+/** `onclick` est synchrone, mais ce qu'il déclenche ne l'est pas : on laisse tourner les promesses. */
+async function settle(): Promise<void> {
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
 }
 
 /**
@@ -195,4 +214,102 @@ test('le mode pairing/réparation est demandé, mais ne bloque rien', () => {
     assert.ok(emitted.some((e) => e.event === 'pair_mode'),
       `${view.path} ne demande jamais son mode : le bouton final agira comme en pairing`);
   }
+});
+
+// --- Sélection multiple de l'émetteur ------------------------------------------
+//
+// Cette vue est la seule qui n'envoie RIEN au clic : elle accumule, puis pose le groupe entier
+// quand l'utilisateur valide. Une vue qui émettrait à chaque clic créerait un thermostat à chaque
+// radiateur coché — c'est la panne que ces tests rendent impossible.
+
+/**
+ * Le tableau émis, recopié dans CE realm.
+ *
+ * La vue s'exécute dans un contexte `vm` : son `Array` a un autre prototype que le nôtre, et
+ * `deepStrictEqual` refuse deux tableaux de contenu identique mais de realms différents. Recopier
+ * compare ce qui nous intéresse — le contenu — sans relâcher la comparaison en `deepEqual` lâche.
+ */
+function sent(data: unknown): unknown[] {
+  return Array.isArray(data) ? Array.from(data as unknown[]) : [];
+}
+
+const DEUX_VANNES = [
+  { id: 'vanne-1', name: 'Vanne fenêtre', zoneName: 'Salon' },
+  { id: 'vanne-2', name: 'Vanne porte', zoneName: 'Salon' },
+];
+
+test('pick_emitter n\'émet rien tant que le groupe n\'est pas validé', async () => {
+  const { emitted, nodes } = runView(
+    'drivers/vtherm/pair/pick_emitter.html', true, { list_candidates: DEUX_VANNES },
+  );
+  await settle();
+
+  const lignes = items(nodes.get('pick_emitter-list'));
+  assert.equal(lignes.length, 2, 'les deux candidats doivent être affichés');
+
+  lignes[0]?.onclick?.();
+  lignes[1]?.onclick?.();
+  await settle();
+
+  assert.deepEqual(
+    emitted.filter((e) => e.event.startsWith('select_')),
+    [],
+    'un envoi par clic créerait un thermostat par radiateur coché',
+  );
+});
+
+test('la validation envoie le groupe entier, une seule fois, dans l\'ordre des clics', async () => {
+  const { emitted, nodes } = runView(
+    'drivers/vtherm/pair/pick_emitter.html', true, { list_candidates: DEUX_VANNES },
+  );
+  await settle();
+
+  const lignes = items(nodes.get('pick_emitter-list'));
+  // Volontairement la SECONDE d'abord : l'ordre des clics fait la tête de référence du groupe,
+  // et le trier par nom la ferait changer au premier renommage d'appareil.
+  lignes[1]?.onclick?.();
+  lignes[0]?.onclick?.();
+  await settle();
+
+  nodes.get('pick_emitter-continue')?.onclick?.();
+  await settle();
+
+  const envois = emitted.filter((e) => e.event.startsWith('select_'));
+  assert.equal(envois.length, 1);
+  assert.equal(envois[0]?.event, 'select_emitters');
+  assert.deepEqual(sent(envois[0]?.data), ['vanne-2', 'vanne-1']);
+});
+
+test('un second clic retire la tête au lieu de la doubler', async () => {
+  const { emitted, nodes } = runView(
+    'drivers/vtherm/pair/pick_emitter.html', true, { list_candidates: DEUX_VANNES },
+  );
+  await settle();
+
+  const lignes = items(nodes.get('pick_emitter-list'));
+  lignes[0]?.onclick?.();
+  lignes[1]?.onclick?.();
+  lignes[0]?.onclick?.();
+  await settle();
+
+  nodes.get('pick_emitter-continue')?.onclick?.();
+  await settle();
+
+  assert.deepEqual(
+    sent(emitted.find((e) => e.event === 'select_emitters')?.data),
+    ['vanne-2'],
+    'sans retrait, une case décochée à l\'écran resterait dans le groupe envoyé',
+  );
+});
+
+test('valider sans aucune tête n\'envoie rien', async () => {
+  const { emitted, nodes } = runView(
+    'drivers/vtherm/pair/pick_emitter.html', true, { list_candidates: DEUX_VANNES },
+  );
+  await settle();
+
+  nodes.get('pick_emitter-continue')?.onclick?.();
+  await settle();
+
+  assert.deepEqual(emitted.filter((e) => e.event === 'select_emitters'), []);
 });

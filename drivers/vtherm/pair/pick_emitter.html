@@ -9,8 +9,18 @@
     li { border: 1px solid #dfe4e8; border-radius: 10px; padding: 11px 13px; margin-bottom: 8px;
          cursor: pointer; display: flex; align-items: center; gap: 11px; }
     li.selected { border-color: #E8590C; background: #fff6f0; }
-    li .radio { width: 17px; height: 17px; border-radius: 50%; border: 2px solid #c3cbd2; flex: 0 0 auto; }
-    li.selected .radio { border-color: #E8590C; border-width: 5px; }
+    /* Une CASE, pas une pastille : la forme doit dire « plusieurs choix possibles » avant même
+       qu'on ait lu le texte. Un rond apprend le contraire, et l'utilisateur ne clique qu'une fois. */
+    li .check { width: 17px; height: 17px; border-radius: 5px; border: 2px solid #c3cbd2;
+                flex: 0 0 auto; position: relative; }
+    li.selected .check { border-color: #E8590C; background: #E8590C; }
+    li.selected .check::after { content: ''; position: absolute; left: 4px; top: 0px;
+                                width: 4px; height: 9px; border: solid #fff;
+                                border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    button { width: 100%; margin-top: 6px; padding: 13px; font-size: 15px; font-weight: 600;
+             color: #fff; background: #E8590C; border: 0; border-radius: 10px; cursor: pointer; }
+    button[disabled] { background: #d3d9de; cursor: default; }
+    p.count { font-size: 12px; color: #7b8794; margin: 12px 0 6px; text-align: center; }
     li .name { font-size: 14px; font-weight: 600; }
     li .meta { font-size: 12px; color: #7b8794; margin-top: 2px; }
     .state { border: 1px dashed #dfe4e8; border-radius: 10px; padding: 18px; text-align: center;
@@ -27,6 +37,8 @@
 <p class="lead" data-i18n="pair.emitter.lead"></p>
 <div id="pick_emitter-state" class="state">…</div>
 <div id="pick_emitter-list"></div>
+<p class="count" id="pick_emitter-count"></p>
+<button type="button" id="pick_emitter-continue" data-i18n="pair.emitter.continue" disabled></button>
 
 <script type="text/javascript">
 (function () {
@@ -34,7 +46,19 @@
     var PREFIX = 'pick_emitter-';
 
       // Configuration de la vue, en TÊTE de script : rien ne doit pouvoir la lire avant.
-      var VIEW = { source: 'emitter', selectEvent: 'select_emitter' };
+      var VIEW = { source: 'emitter', selectEvent: 'select_emitters' };
+
+      /**
+       * Les têtes retenues, dans l'ORDRE des clics.
+       *
+       * L'ordre compte et n'est pas cosmétique : la première est la tête de référence du groupe —
+       * c'est son mode qui fait celui du thermostat, et c'est elle que la réparation « émetteur »
+       * remplace. Trier la liste par nom la ferait changer de sens à chaque renommage d'appareil.
+       */
+      var SELECTED = [];
+
+      /** Borne côté vue, en plus de celle du driver : refuser APRÈS le clic serait incompréhensible. */
+      var MAX_EMITTERS = 8;
   
       var H = null;
       /** 'pair' ou 'repair'. Les mêmes vues servent aux deux, et elles ne doivent pas agir pareil. */
@@ -122,7 +146,7 @@
       function buildItem(device, onPick) {
         var li = document.createElement('li');
         li.onclick = function () { onPick(li); };
-        var r = document.createElement('div'); r.className = 'radio';
+        var r = document.createElement('div'); r.className = 'check';
         var b = document.createElement('div');
         var n = document.createElement('div'); n.className = 'name'; n.textContent = device.name;
         b.appendChild(n);
@@ -168,20 +192,62 @@
         hideState();
         var ul = document.createElement('ul');
         devices.forEach(function (d) {
-          ul.appendChild(buildItem(d, function (li) {
-            var items = root.querySelectorAll('li');
-            for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
-            li.classList.add('selected');
-            emit(VIEW.selectEvent, d.id)
-              .then(goNext)
-              .catch(function (err) { showError(err.message); });
-          }));
+          ul.appendChild(buildItem(d, function (li) { toggle(d, li); }));
         });
         root.appendChild(ul);
+        refreshCount();
+      }
+
+      /** Ajoute ou retire une tête. Rien n'est envoyé ici : le groupe part d'un seul coup. */
+      function toggle(device, li) {
+        var at = SELECTED.indexOf(device.id);
+        if (at >= 0) {
+          SELECTED.splice(at, 1);
+          li.classList.remove('selected');
+        } else {
+          if (SELECTED.length >= MAX_EMITTERS) {
+            showError(label('pair.error.too_many_emitters', 'Too many heaters for one thermostat.'));
+            return;
+          }
+          SELECTED.push(device.id);
+          li.classList.add('selected');
+        }
+        hideState();
+        refreshCount();
+      }
+
+      function refreshCount() {
+        var button = document.getElementById(PREFIX + 'continue');
+        if (button) button.disabled = SELECTED.length === 0;
+
+        var box = document.getElementById(PREFIX + 'count');
+        if (!box) return;
+        // Muet à zéro : le sous-titre de la page dit déjà quoi faire, et un « 0 sélectionné »
+        // sous une liste intacte ne fait que répéter ce que l'écran montre.
+        if (SELECTED.length === 0) { box.textContent = ''; return; }
+        var one = label('pair.emitter.count_one', '1 heater selected');
+        var many = label('pair.emitter.count_many', '{n} heaters selected');
+        box.textContent = SELECTED.length === 1 ? one : many.replace('{n}', String(SELECTED.length));
+      }
+
+      function submit() {
+        if (SELECTED.length === 0) return;
+        var button = document.getElementById(PREFIX + 'continue');
+        // Désarmé pendant l'aller-retour : un double clic enverrait deux fois le groupe, et la
+        // seconde réponse arriverait après le changement de vue.
+        if (button) button.disabled = true;
+        emit(VIEW.selectEvent, SELECTED.slice())
+          .then(goNext)
+          .catch(function (err) {
+            showError(err.message);
+            if (button) button.disabled = false;
+          });
       }
   
       function start() {
         showText('…');
+        var button = document.getElementById(PREFIX + 'continue');
+        if (button) button.onclick = submit;
         emit('list_candidates', { source: VIEW.source })
           .then(render)
           .catch(function (err) {

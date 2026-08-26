@@ -26,33 +26,57 @@ export interface DutyCycleParams {
 }
 
 export interface DutyCycleState {
-  /** Début du cycle courant. `null` tant qu'aucun cycle n'a commencé. */
+  /** Début du cycle courant, COMMUN à toutes les têtes. `null` tant qu'aucun cycle n'a commencé. */
   cycleStartMs: number | null;
-  /** Dernier état commandé, pour ne pas réécrire sans raison. */
-  commanded: boolean;
+  /**
+   * Dernier état commandé, une entrée par tête, pour ne pas réécrire sans raison.
+   *
+   * Un tableau et non un booléen depuis les groupes d'émetteurs : les têtes d'une même pièce sont
+   * DÉPHASÉES et n'ont donc pas le même état au même instant. Voir `stepDutyCycle`.
+   */
+  commanded: readonly boolean[];
 }
 
 export interface DutyCycleResult {
-  /** État que l'interrupteur doit avoir maintenant. */
-  commanded: boolean;
-  /** Vrai quand il diffère du précédent : seul ce cas justifie une écriture. */
-  changed: boolean;
-  /** Instant de la prochaine bascule. Le noyau n'arme aucune minuterie, il annonce l'échéance. */
+  /** État que chaque interrupteur doit avoir maintenant, dans l'ordre des têtes. */
+  commanded: boolean[];
+  /** Par tête : vrai quand il diffère du précédent. Seul ce cas justifie une écriture. */
+  changed: boolean[];
+  /**
+   * Instant de la prochaine bascule, la PLUS PROCHE toutes têtes confondues.
+   *
+   * Le noyau n'arme aucune minuterie, il annonce l'échéance — et il n'en annonce qu'une : prendre
+   * la plus lointaine ferait rater sa bascule à toutes les autres têtes.
+   */
   wakeUpAtMs: number;
   nextState: DutyCycleState;
 }
 
 export function createDutyCycleState(): DutyCycleState {
-  return { cycleStartMs: null, commanded: false };
+  return { cycleStartMs: null, commanded: [] };
 }
 
+/**
+ * Découpe la puissance en temps de marche, une tête à la fois, DÉPHASÉES entre elles.
+ *
+ * Le déphasage est la seule vraie nouveauté. Trois convecteurs commandés ensemble à 30 % tirent
+ * trois fois leur puissance pendant trois minutes, puis rien pendant sept : le disjoncteur voit une
+ * pointe qu'il ne verrait jamais avec trois thermostats séparés, et la pièce reçoit sa chaleur par
+ * à-coups. Décalés d'un tiers de cycle, ils délivrent exactement la même énergie — c'est le même
+ * `onMs` pour chacun — mais un seul à la fois tant que la demande reste sous 1/N.
+ *
+ * L'ancrage du cycle reste COMMUN : le déphasage se calcule à partir de lui, et donner à chaque
+ * tête son propre `cycleStartMs` les laisserait dériver jusqu'à se resynchroniser par hasard.
+ */
 export function stepDutyCycle(
   state: DutyCycleState,
   onPercent: number,
   params: DutyCycleParams,
   nowMs: number,
+  headCount = 1,
 ): DutyCycleResult {
   const cycleMs = Math.max(1, params.cycleMin) * 60_000;
+  const heads = Math.max(1, Math.trunc(headCount));
 
   // Nouveau cycle : au premier appel, et chaque fois que le précédent est consommé. Une horloge
   // qui recule redémarre aussi le cycle, plutôt que de calculer sur un écoulement négatif.
@@ -63,14 +87,38 @@ export function stepDutyCycle(
 
   const onMs = resolveOnMs(onPercent, cycleMs, params);
   const elapsed = nowMs - cycleStartMs;
-  const commanded = elapsed < onMs;
 
-  // Prochaine bascule : la fin de la période de marche si on chauffe, la fin du cycle sinon.
-  const wakeUpAtMs = commanded ? cycleStartMs + onMs : cycleStartMs + cycleMs;
+  // Aux deux bornes, le déphasage n'a plus d'objet : toutes les têtes sont dans le même état pour
+  // tout le cycle. Le calculer quand même produirait N échéances de réveil pour zéro bascule —
+  // l'ordonnanceur serait réveillé N fois par cycle pour ne rien faire.
+  const saturated = onMs <= 0 || onMs >= cycleMs;
+  const offsetMs = saturated ? 0 : cycleMs / heads;
+
+  const commanded: boolean[] = [];
+  const changed: boolean[] = [];
+  let wakeUpAtMs = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < heads; i += 1) {
+    // Le temps écoulé DEPUIS le début du cycle de CETTE tête. La tête n°1 démarre avec le cycle,
+    // la suivante un `offsetMs` plus tard, et ainsi de suite.
+    const local = saturated ? elapsed : (((elapsed - i * offsetMs) % cycleMs) + cycleMs) % cycleMs;
+    const on = local < onMs;
+
+    // Une tête absente de l'état précédent — un radiateur qu'on vient d'ajouter au groupe — doit
+    // recevoir une commande, pas hériter d'un « déjà dans le bon état » qu'on n'a jamais vérifié.
+    const previous = state.commanded[i];
+    commanded.push(on);
+    changed.push(previous === undefined || previous !== on);
+
+    const untilMs = saturated
+      ? cycleMs - elapsed
+      : (on ? onMs - local : cycleMs - local);
+    wakeUpAtMs = Math.min(wakeUpAtMs, nowMs + untilMs);
+  }
 
   return {
     commanded,
-    changed: commanded !== state.commanded,
+    changed,
     wakeUpAtMs,
     nextState: { cycleStartMs, commanded },
   };

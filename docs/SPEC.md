@@ -104,11 +104,62 @@ supplément, pas une béquille.
 | Source | Obligatoire | Rôle |
 |---|---|---|
 | Capteur de température de pièce | oui | `measure_temperature` d'un device Homey quelconque |
-| Émetteur sous-jacent | oui (**exactement 1 en v1**) | device portant `target_temperature` (+ éventuellement l'ouverture de vanne) |
+| Émetteur sous-jacent | oui (**1 à 8**, voir §2.1bis) | device portant `target_temperature` (+ éventuellement l'ouverture de vanne), ou un `onoff` de classe chauffante |
 | Capteur de température extérieure | non | alimente le terme `coef_ext` du TPI |
 | Capteur d'ouverture (fenêtre/porte) | non | `alarm_contact` — mode capteur de la détection fenêtre |
 | Capteur de mouvement | non | `alarm_motion` — preset Activité |
 | Capteur de présence | non | `alarm_motion`/`onoff` global au logement |
+
+### 2.1bis Groupe d'émetteurs — plusieurs têtes pour une pièce
+
+Une pièce a souvent deux ou trois émetteurs : deux radiateurs sous deux fenêtres, un convecteur de
+chaque côté d'un séjour traversant. Ils partagent une température, une consigne et un preset ; seul
+le nombre de vannes change.
+
+**Stockage.** `emitterIds` porte la liste ORDONNÉE, `emitterId` reste écrit et vaut toujours
+`emitterIds[0]`. Cette redondance est délibérée dans les deux sens : un thermostat créé avant les
+groupes n'a que `emitterId` et doit continuer de chauffer, et une version antérieure de l'app
+relisant un `store` de groupe doit retrouver une tête plutôt que rien. Un rétrogradage dégrade, il
+n'éteint pas.
+
+**Homogénéité — imposée au choix.** Toutes les têtes doivent accepter une consigne, ou aucune.
+`lib/step.mts` choisit une branche ENTIÈRE sur `emitterMode` : un groupe mixte n'a pas de
+comportement correct à offrir, il en aurait un par tête. Le refus est prononcé au moment du choix,
+pas découvert en hiver.
+
+**Ce que le noyau voit.** Il continue de raisonner sur la pièce. Le nombre de têtes n'entre dans
+`VThermInputs` que pour le découpage temporel, seule décision qui doive produire une commande
+différente par tête.
+
+**Déphasage (mode interrupteur).** Les têtes d'un groupe sont décalées de `1/N` de cycle. Trois
+convecteurs à 30 % commandés ensemble tirent trois fois leur puissance pendant trois minutes puis
+rien pendant sept ; décalés, ils délivrent exactement la même énergie sans jamais se superposer tant
+que la demande reste sous `1/N`. L'ancrage du cycle reste commun : donner à chaque tête son propre
+`cycleStartMs` les laisserait dériver jusqu'à se resynchroniser par hasard.
+
+**Agrégations.** `readHeating` est un OU — la pièce est chauffée dès qu'une tête l'est, et c'est ce
+qui décide de la demande envoyée à la chaudière. `readBattery` est un minimum : c'est la pire pile
+qui décidera de la prochaine intervention. Le doute sur une écriture (`valveUnconfirmed`,
+`switchUnconfirmed`) est un OU lui aussi — la demande passe `unknown` plutôt que de faire tourner
+une chaudière sur un circuit dont on ne sait pas s'il consomme.
+
+**Divergence.** Elle se lit TÊTE PAR TÊTE (`emitterHeatingHeads`). L'agrégat vaut `true` dès qu'une
+tête chauffe ; le comparer à l'état commandé d'une autre ferait voir une divergence permanente sur
+un groupe déphasé, c'est-à-dire une réécriture de tous les relais à chaque pas.
+
+**Tête dont le mode a dérivé.** Un appareil ré-annoncé par Zigbee2MQTT peut revenir sans sa
+consigne. Il est alors ÉCARTÉ des commandes tant qu'il n'est pas revenu — le garder ferait échouer
+chaque écriture, et son doute rendrait la demande `unknown` pour toujours : la chaudière resterait
+éteinte pour toute la pièce à cause d'une seule tête. La détection continue de le lire, c'est elle
+qui le fait revenir, et la remise en état sûr de fin de vie le couvre lui aussi.
+
+**Tuiles.** `vtherm_emitter_battery` et `vtherm_valve_open` sont déclarées dès qu'UNE tête les
+justifie. Une tête ajoutée plus tard peut les faire apparaître — `addCapability` sur une capability
+absente ne détruit aucun historique Insights. Elles ne sont jamais RETIRÉES : `removeCapability`
+coûterait la courbe de tout un hiver pour gagner une tuile en moins.
+
+**Borne à 8.** Chaque tête est un appareil de plus écrit à chaque pas, et le quota de l'API Athom se
+déclenche en production. Au-delà, le groupe est refusé — jamais tronqué en silence.
 
 ### 2.2 Driver `central` — configuration centrale et chaudière
 

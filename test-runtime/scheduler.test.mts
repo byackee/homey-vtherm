@@ -212,7 +212,7 @@ test('`stop()` REND la promesse du pas en vol : rien n\'écrit après la remise 
     tickId: 'salon',
     dueAtMs: () => Number.NEGATIVE_INFINITY,
     // Le pas allume le convecteur ; il restera bloqué dans cette écriture.
-    tick: async () => { await convecteur.applySwitch(true, homey.now()); },
+    tick: async () => { await convecteur.applySwitch([true], homey.now()); },
   });
 
   scheduler.start();
@@ -229,7 +229,7 @@ test('`stop()` REND la promesse du pas en vol : rien n\'écrit après la remise 
   assert.equal(rendu, true);
 
   // Ordre de `onUninit` : l'attente D'ABORD, la remise en état sûr ensuite.
-  await convecteur.applySwitch(false, homey.now());
+  await convecteur.applySwitch([false], homey.now());
 
   assert.deepEqual(
     convecteur.switches.map((s) => s.on), [true, false],
@@ -251,7 +251,7 @@ test('un pas en vol n\'en laisse pas démarrer un second : les deux écriraient 
     dueAtMs: () => Number.NEGATIVE_INFINITY,
     tick: async () => {
       entrees += 1;
-      await convecteur.applySwitch(true, homey.now());
+      await convecteur.applySwitch([true], homey.now());
     },
   });
 

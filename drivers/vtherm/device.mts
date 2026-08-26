@@ -9,7 +9,8 @@
 
 import { resolveCapabilityId } from '../../lib/capabilityMatch.mjs';
 import {
-  SOURCE_STORE_KEYS, SOURCE_CAPABILITIES, EMITTER_CLASSES, type SourceKey,
+  EMITTER_LIST_STORE_KEY, MAX_EMITTERS, SOURCE_STORE_KEYS, SOURCE_CAPABILITIES, EMITTER_CLASSES,
+  emitterExtraCapabilities, emitterStorePatch, readEmitterIds, type SourceKey,
 } from '../../lib/sources.mjs';
 import {
   VTHERM_EXPLAIN_IDS, changedSettings, explainSettings, joinLinkedLabels,
@@ -25,7 +26,8 @@ import {
   DEFAULT_TPI, DEFAULT_WINDOW, DEFAULT_AWAY_TEMPS, DEFAULT_SAFETY } from '../../lib/constants.mjs';
 import type { Preset, VThermConfig } from '../../lib/types.mjs';
 import type { CapValue } from '../../runtime/hub.mjs';
-import { HomeyEmitterAdapter } from '../../runtime/emitter.mjs';
+import { HomeyEmitterAdapter, type EmitterAdapter } from '../../runtime/emitter.mjs';
+import { MultiEmitterAdapter } from '../../runtime/multiEmitter.mjs';
 import {
   FRESHNESS, VThermParticipant,
   type DeviceHost, type ParticipantEvent, type PresenceOverride, type VThermSourceBindings,
@@ -33,7 +35,8 @@ import {
 import type VThermApp from '../../app.mjs';
 
 export {
-  SOURCE_STORE_KEYS, SOURCE_CAPABILITIES, EMITTER_CLASSES,
+  EMITTER_LIST_STORE_KEY, MAX_EMITTERS, SOURCE_STORE_KEYS, SOURCE_CAPABILITIES, EMITTER_CLASSES,
+  emitterExtraCapabilities, emitterStorePatch, readEmitterIds,
 } from '../../lib/sources.mjs';
 export type { SourceKey } from '../../lib/sources.mjs';
 
@@ -85,8 +88,8 @@ export default class VThermDevice extends Homey.Device {
   private listenersRegistered = false;
 
   override async onInit(): Promise<void> {
-    const emitterId = this.sourceId('emitter');
-    if (emitterId === null) {
+    const emitterIds = this.emitterIds();
+    if (emitterIds.length === 0) {
       // Un thermostat sans émetteur ne peut rien piloter. On le dit et on s'arrête là plutôt que
       // de tourner à vide : `onRepair` est la voie pour lui en redonner un.
       await this.setUnavailable(this.homey.__('device.no_emitter'));
@@ -102,9 +105,12 @@ export default class VThermDevice extends Homey.Device {
       this.attachSource(key);
     }
 
-    const emitter = new HomeyEmitterAdapter({
+    // Une tête par appareil désigné, puis un groupe seulement s'il y en a plusieurs. Envelopper
+    // systématiquement coûterait une indirection à toutes les installations existantes, dont
+    // l'immense majorité n'a qu'un radiateur par pièce.
+    const heads = emitterIds.map((deviceId) => new HomeyEmitterAdapter({
       hub,
-      deviceId: emitterId,
+      deviceId,
       freshness: {
         heatingMs: FRESHNESS.emitterHeatingMs,
         batteryMs: FRESHNESS.emitterBatteryMs,
@@ -114,7 +120,15 @@ export default class VThermDevice extends Homey.Device {
       syncMinIntervalMs: config.autoRegulationPeriodMin * MS_PER_MINUTE,
       log: (...args) => this.log(...args),
       error: (...args) => this.error(...args),
-    });
+    }));
+
+    const emitter: EmitterAdapter = heads.length === 1
+      ? heads[0]!
+      : new MultiEmitterAdapter({
+        heads,
+        log: (...args) => this.log(...args),
+        error: (...args) => this.error(...args),
+      });
 
     this.participant = new VThermParticipant({
       host: this.deviceHost(),
@@ -408,19 +422,28 @@ export default class VThermDevice extends Homey.Device {
 
     const lines = await Promise.all(
       (Object.keys(SOURCE_STORE_KEYS) as SourceKey[]).map(async (key) => {
-        const deviceId = this.sourceId(key);
-        if (deviceId === null) {
+        // L'émetteur est le seul à pouvoir être multiple : ses têtes tiennent sur une ligne,
+        // séparées par des virgules. Une ligne par tête ferait grossir un champ qui porte déjà les
+        // six sources, et Homey n'en affiche qu'un.
+        const deviceIds = key === 'emitter' ? this.emitterIds() : [this.sourceId(key)];
+        const present = deviceIds.filter((id): id is string => id !== null);
+        if (present.length === 0) {
           return `${labels[key]} : ${this.homey.__('settings.linked.none')}`;
         }
-        let name: string | null = null;
-        try {
-          name = (await this.app.hub.getDeviceSummary(deviceId))?.name ?? null;
-        } catch {
-          name = null;
-        }
-        // Un identifiant orphelin est le cas le plus fréquent : un appareil Zigbee ré-appairé
-        // change d'identifiant, et sans ce message rien n'expliquerait le silence du thermostat.
-        return `${labels[key]} : ${name ?? this.homey.__('settings.linked.missing')}`;
+
+        const names = await Promise.all(present.map(async (deviceId) => {
+          let name: string | null = null;
+          try {
+            name = (await this.app.hub.getDeviceSummary(deviceId))?.name ?? null;
+          } catch {
+            name = null;
+          }
+          // Un identifiant orphelin est le cas le plus fréquent : un appareil Zigbee ré-appairé
+          // change d'identifiant, et sans ce message rien n'expliquerait le silence du thermostat.
+          return name ?? this.homey.__('settings.linked.missing');
+        }));
+
+        return `${labels[key]} : ${names.join(', ')}`;
       }),
     );
 
@@ -464,15 +487,19 @@ export default class VThermDevice extends Homey.Device {
       throw new Error(this.homey.__('pair.error.incomplete'));
     }
 
-    await this.setStoreValue(SOURCE_STORE_KEYS[key], deviceId);
-    void this.refreshLinkedLabels();
-
     if (key === 'emitter') {
-      // L'adaptateur d'émetteur tient ses propres liaisons et n'est pas remplaçable à chaud :
-      // l'appareil se recharge pour repartir du nouvel identifiant.
-      await this.reload();
+      // Re-désigner « l'émetteur » remplace la tête n°1 SANS toucher aux suivantes : c'est la voie
+      // de réparation d'une vanne ré-appairée, pas une remise à zéro du groupe. Écrire `emitterId`
+      // seul laisserait `emitterIds` pointer sur l'ancien identifiant, qui l'emporte à la lecture —
+      // la réparation n'aurait alors servi à rien, en silence.
+      const ids = this.emitterIds();
+      ids[0] = deviceId!;
+      await this.setEmitterIds(ids);
       return;
     }
+
+    await this.setStoreValue(SOURCE_STORE_KEYS[key], deviceId);
+    void this.refreshLinkedLabels();
 
     this.attachSource(key);
     const participant = this.participant;
@@ -612,6 +639,68 @@ export default class VThermDevice extends Homey.Device {
   private sourceId(key: SourceKey): string | null {
     const value: unknown = this.getStoreValue(SOURCE_STORE_KEYS[key]);
     return typeof value === 'string' && value.length > 0 ? value : null;
+  }
+
+  /**
+   * Les têtes de ce thermostat, dans l'ordre d'appairage. Une seule sur un thermostat d'avant les
+   * groupes — c'est `readEmitterIds` qui absorbe la différence, et rien d'autre ici ne la voit.
+   */
+  emitterIds(): string[] {
+    return readEmitterIds({
+      [SOURCE_STORE_KEYS.emitter]: this.getStoreValue(SOURCE_STORE_KEYS.emitter) as unknown,
+      [EMITTER_LIST_STORE_KEY]: this.getStoreValue(EMITTER_LIST_STORE_KEY) as unknown,
+    });
+  }
+
+  /**
+   * Réécrit le groupe, puis recharge l'appareil.
+   *
+   * Les adaptateurs tiennent leurs propres liaisons et ne sont pas remplaçables à chaud : c'est la
+   * même raison qui fait recharger sur une re-liaison d'émetteur seul. Le rechargement passe par
+   * `teardown`, qui remet AVANT tout les anciennes têtes en état sûr — sans quoi une tête retirée
+   * du groupe resterait figée sur sa dernière ouverture, chauffée par personne.
+   */
+  async setEmitterIds(ids: readonly string[]): Promise<void> {
+    if (ids.length === 0) throw new Error(this.homey.__('pair.error.incomplete'));
+    if (ids.length > MAX_EMITTERS) throw new Error(this.homey.__('pair.error.too_many_emitters'));
+
+    for (const [key, value] of Object.entries(emitterStorePatch(ids))) {
+      await this.setStoreValue(key, value);
+    }
+    await this.grantEmitterCapabilities(ids);
+    void this.refreshLinkedLabels();
+    await this.reload();
+  }
+
+  /**
+   * Ajoute les tuiles que le nouveau groupe rend utiles. N'en RETIRE jamais aucune.
+   *
+   * L'asymétrie est le fond du sujet. `removeCapability` détruit l'historique Insights de la
+   * capability retirée : une tête débranchée coûterait la courbe d'ouverture de tout l'hiver, pour
+   * gagner une tuile en moins. `addCapability` sur une capability ABSENTE ne détruit rien — il n'y a
+   * pas d'historique à perdre —, et c'est la seule façon qu'a un thermostat créé sur un relais de
+   * secteur d'afficher la pile de la vanne qu'on vient de lui ajouter. Sans ça, la tuile serait
+   * perdue pour toujours et la seule issue serait de refaire le thermostat.
+   *
+   * Une tuile devenue vide après un retrait de tête est le prix, et il est bien plus petit.
+   */
+  private async grantEmitterCapabilities(ids: readonly string[]): Promise<void> {
+    const probes = await Promise.all(ids.map(async (id) => {
+      try {
+        return await this.app.hub.getDeviceSummary(id);
+      } catch {
+        return null;
+      }
+    }));
+
+    for (const capabilityId of emitterExtraCapabilities(probes)) {
+      if (this.hasCapability(capabilityId)) continue;
+      try {
+        await this.addCapability(capabilityId);
+      } catch (err) {
+        this.error(`Ajout de la capability ${capabilityId} :`, err);
+      }
+    }
   }
 
   // --- Réglages ---------------------------------------------------------------

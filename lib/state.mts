@@ -112,9 +112,33 @@ function parseRegulationState(value: unknown): RegulationState {
  * inventé ferait croire à un temps de marche déjà consommé, ou jamais consommé.
  */
 function parseDutyCycleState(value: unknown): DutyCycleState {
-  if (!isRecord(value) || typeof value.commanded !== 'boolean') return createDutyCycleState();
+  if (!isRecord(value)) return createDutyCycleState();
 
-  return { cycleStartMs: finiteOrNull(value.cycleStartMs), commanded: value.commanded };
+  const commanded = parseCommandedHeads(value.commanded);
+  // `commanded` illisible : l'état entier est douteux, on repart de zéro. Garder le début de cycle
+  // d'un enregistrement dont on vient de jeter la moitié ferait croire à un temps de marche déjà
+  // consommé sur un cycle dont plus rien ne dit qu'il a commencé.
+  if (commanded === null) return createDutyCycleState();
+
+  return { cycleStartMs: finiteOrNull(value.cycleStartMs), commanded };
+}
+
+/**
+ * L'état commandé de chaque tête, quelle que soit l'ancienneté de ce qui a été écrit.
+ *
+ * Un booléen nu est ce qu'écrivaient les versions d'avant les groupes d'émetteurs : il devient une
+ * tête unique. Le lire comme « illisible » remettrait le relais à `false` à chaque redémarrage,
+ * donc forcerait une écriture au premier pas — inoffensif une fois, mais c'est une commutation de
+ * contacteur gratuite sur CHAQUE thermostat de la maison à chaque mise à jour de l'app.
+ *
+ * Une entrée non booléenne dans un tableau vaut `false` plutôt que d'invalider tout le tableau :
+ * ce n'est jamais qu'une écriture de plus sur cette tête-là, alors que tout jeter en coûterait une
+ * sur toutes.
+ */
+function parseCommandedHeads(value: unknown): boolean[] | null {
+  if (typeof value === 'boolean') return [value];
+  if (Array.isArray(value)) return value.map((entry) => entry === true);
+  return null;
 }
 
 // --- Constructeurs ---------------------------------------------------------
@@ -141,10 +165,12 @@ export function createPersistentState(
 }
 
 export function createVolatileState(): VThermVolatileState {
-  // `switchOn` à `null` : rien n'a encore été commandé sur le relais depuis ce démarrage, donc le
-  // premier pas doit écrire même si le cycle relu dit que l'état est déjà le bon.
+  // `switchOn` vide : rien n'a encore été commandé sur aucun relais depuis ce démarrage, donc le
+  // premier pas doit écrire même si le cycle relu dit que l'état est déjà le bon. Une liste vide
+  // plutôt qu'une liste de `null` de la bonne longueur — on ne connaît pas encore le nombre de
+  // têtes ici, et une entrée absente se lit déjà comme « jamais commandée ».
   const lastWrite: VThermLastWrite = {
-    valvePercent: null, setpoint: null, switchOn: null, atMs: 0,
+    valvePercent: null, setpoint: null, switchOn: [], atMs: 0,
   };
 
   return {

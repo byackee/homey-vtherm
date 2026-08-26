@@ -85,7 +85,16 @@ export class FakeEmitter implements EmitterAdapter {
     this.valves.push({ percent, nowMs });
   }
 
-  async applySwitch(on: boolean, nowMs: number): Promise<void> {
+  readonly headCount = 1;
+
+  readHeatingHeads(nowMs: number): readonly (Reading<boolean> | null)[] {
+    return [this.readHeating(nowMs)];
+  }
+
+  async applySwitch(states: readonly (boolean | null)[], nowMs: number): Promise<void> {
+    const on = states[0] ?? null;
+    if (on === null) return;
+
     await this.waitGate();
     if (this.switchWriteFails) {
       // Rien n'est parti : ni trace de commutation, ni changement d'état réel du relais.

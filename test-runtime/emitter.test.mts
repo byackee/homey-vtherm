@@ -70,7 +70,7 @@ test('un appareil sans consigne inscriptible mais dont l\'`onoff` s\'écrit est 
   assert.equal(emitter.caps.switch, true);
   assert.equal(emitter.caps.setpoint, false);
 
-  await emitter.applySwitch(true, 0);
+  await emitter.applySwitch([true], 0);
   assert.equal(hub.binding('onoff')?.lastWrite?.value, true, 'le convecteur est ALLUMÉ');
 });
 
@@ -263,7 +263,7 @@ test('un émetteur de type interrupteur est ÉTEINT, et rien d\'autre ne lui est
   const emitter = adapter(hub);
   await emitter.detect(0);
 
-  await emitter.applySwitch(true, 0);
+  await emitter.applySwitch([true], 0);
   assert.equal(hub.binding('onoff')?.lastWrite?.value, true);
 
   await emitter.restoreSafeState(19);

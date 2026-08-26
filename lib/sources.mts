@@ -72,3 +72,120 @@ export const SOURCE_CAPABILITIES: Record<SourceKey, readonly string[]> = {
  * est inatteignable, alors qu'un intrus se contente d'occuper une ligne.
  */
 export const EMITTER_CLASSES: readonly string[] = ['thermostat', 'heater', 'socket', 'other'];
+
+// --- Groupe d'émetteurs ------------------------------------------------------
+
+/**
+ * Clé de `store` qui porte la liste ORDONNÉE des têtes, la première comprise.
+ *
+ * `emitterId` reste écrit et reste la tête n°1 : ce n'est pas une redondance oubliée, c'est ce qui
+ * fait qu'une version antérieure de l'app relisant ce `store` trouve encore un émetteur et continue
+ * de chauffer la pièce avec une tête, au lieu de rendre le thermostat indisponible. Un
+ * rétrogradage doit dégrader, jamais éteindre.
+ */
+export const EMITTER_LIST_STORE_KEY = 'emitterIds';
+
+/**
+ * Nombre maximal de têtes derrière un thermostat.
+ *
+ * Une borne, parce que chaque tête est un appareil de plus écrit à CHAQUE pas : le quota de l'API
+ * Athom est réel et se déclenche en production (voir la déduplication de `lib/step.mts`). Huit
+ * couvre très largement une pièce réelle — au-delà, ce n'est plus une pièce, c'est un circuit qui
+ * demande son propre thermostat.
+ */
+export const MAX_EMITTERS = 8;
+
+/**
+ * La liste des têtes telle qu'elle doit être lue d'un `store`, quelle que soit son ancienneté.
+ *
+ * Défensive de bout en bout, pour la même raison que `migratePersistentState` : une entrée
+ * illisible qui arriverait jusqu'aux liaisons ferait un adaptateur lié à `undefined`, c'est-à-dire
+ * une tête qui n'écrit jamais et ne le dit pas. Tout ce qui n'est pas une chaîne non vide est
+ * écarté, les doublons aussi — la même vanne deux fois recevrait deux écritures par pas, pour rien.
+ *
+ * Ordre de vérité : la liste si elle est exploitable, `emitterId` seul sinon. Un `store` d'avant
+ * cette version n'a que le second, et doit rendre exactement une tête.
+ */
+export function readEmitterIds(store: Readonly<Record<string, unknown>>): string[] {
+  const raw = store[EMITTER_LIST_STORE_KEY];
+  const listed = Array.isArray(raw) ? raw : [];
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of listed) {
+    if (typeof entry !== 'string' || entry === '') continue;
+    if (seen.has(entry)) continue;
+    seen.add(entry);
+    out.push(entry);
+    if (out.length === MAX_EMITTERS) break;
+  }
+
+  if (out.length > 0) return out;
+
+  const primary = store[SOURCE_STORE_KEYS.emitter];
+  return typeof primary === 'string' && primary !== '' ? [primary] : [];
+}
+
+/**
+ * Les deux champs à écrire pour une liste de têtes, toujours ensemble.
+ *
+ * Les écrire séparément est le seul moyen de les désynchroniser, et un `emitterId` qui ne serait
+ * plus `emitterIds[0]` ferait diverger la lecture d'une version antérieure de celle d'aujourd'hui —
+ * deux apps qui chauffent la même pièce par deux vannes différentes.
+ */
+export function emitterStorePatch(
+  ids: readonly string[],
+): Record<string, string | string[] | null> {
+  const kept = readEmitterIds({ [EMITTER_LIST_STORE_KEY]: [...ids] });
+  return {
+    [SOURCE_STORE_KEYS.emitter]: kept[0] ?? null,
+    [EMITTER_LIST_STORE_KEY]: kept.length > 0 ? kept : null,
+  };
+}
+
+/**
+ * Le minimum qu'il faut savoir d'un appareil pour décider des tuiles d'un thermostat.
+ *
+ * Structurellement compatible avec `DeviceSummary` de `runtime/hub.mts`, sans en dépendre : la
+ * couche pure ne peut pas importer le runtime, et cette décision doit rester testable.
+ */
+export interface EmitterProbe {
+  capabilities: readonly string[];
+  setable: Readonly<Record<string, boolean>>;
+}
+
+/** Vrai si cet appareil porte une consigne inscriptible — donc s'il peut avoir une ouverture. */
+export function hasWritableSetpoint(probe: EmitterProbe): boolean {
+  return probe.capabilities.some(
+    (id) => (id === 'target_temperature' || id.startsWith('target_temperature.'))
+      && probe.setable[id] === true,
+  );
+}
+
+/** Vrai si cet appareil rapporte une pile. */
+export function hasBattery(probe: EmitterProbe): boolean {
+  return probe.capabilities.some(
+    (id) => id === 'measure_battery' || id.startsWith('measure_battery.'),
+  );
+}
+
+/**
+ * Les capabilities que le groupe rend nécessaires, en plus du socle.
+ *
+ * Un OU sur les têtes, dans les deux cas, et pour la même raison : une seule vanne à pile suffit à
+ * rendre la tuile de pile utile, une seule tête à consigne suffit à rendre l'ouverture affichable.
+ * Une intersection masquerait une information vraie parce qu'une autre tête ne la porte pas.
+ *
+ * Une sonde `null` — le hub n'a pas répondu — compte comme une tête à consigne SANS pile : c'est le
+ * repli historique, et c'est le bon sens des deux côtés. Supposer une pile ferait apparaître une
+ * tuile perpétuellement vide sur un radiateur branché au secteur ; supposer l'absence de consigne
+ * priverait d'ouverture une vanne parfaitement pilotable.
+ */
+export function emitterExtraCapabilities(
+  probes: ReadonlyArray<EmitterProbe | null>,
+): string[] {
+  const out: string[] = [];
+  if (probes.some((p) => p !== null && hasBattery(p))) out.push('vtherm_emitter_battery');
+  if (probes.some((p) => p === null || hasWritableSetpoint(p))) out.push('vtherm_valve_open');
+  return out;
+}

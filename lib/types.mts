@@ -468,12 +468,14 @@ export interface VThermLastWrite {
   valvePercent: number | null;
   setpoint: number | null;
   /**
-   * Dernier état réellement envoyé à un émetteur de type interrupteur. `null` = jamais envoyé
-   * depuis le démarrage de l'app : le prochain pas doit alors commander, même si le cycle relu du
-   * `store` dit que le relais est déjà dans le bon état — personne ne garantit qu'il n'a pas été
-   * basculé à la main pendant que l'app était arrêtée.
+   * Dernier état réellement envoyé à chaque émetteur de type interrupteur, dans l'ordre des têtes.
+   *
+   * Une entrée `null` — ou absente, sur une tête qu'on vient d'ajouter — signifie « rien n'est
+   * parti depuis le démarrage de l'app » : le prochain pas doit alors commander, même si le cycle
+   * relu du `store` dit que le relais est déjà dans le bon état. Personne ne garantit qu'il n'a pas
+   * été basculé à la main pendant que l'app était arrêtée.
    */
-  switchOn: boolean | null;
+  switchOn: readonly (boolean | null)[];
   atMs: number;
 }
 
@@ -598,8 +600,30 @@ export interface VThermInputs {
   motion: Reading<boolean> | null;
   presence: Reading<boolean> | null;
   emitterHeating: Reading<boolean> | null;
+  /**
+   * L'état de chaque tête, pour la seule détection de divergence en mode interrupteur.
+   *
+   * `emitterHeating` juste au-dessus est l'agrégat — « cette pièce est-elle chauffée » — et c'est
+   * lui qui décide de la demande. Il ne peut pas servir ici : sur des têtes déphasées, il vaut
+   * `true` dès qu'une seule chauffe, et le comparer à l'état commandé d'une AUTRE tête ferait voir
+   * une divergence permanente, donc une réécriture à chaque pas sur tous les relais du groupe.
+   *
+   * Absent ou plus court que le groupe : la divergence n'est simplement pas détectée sur les têtes
+   * manquantes. C'est le comportement d'un émetteur qui ne rapporte pas son état, et il est sûr —
+   * on écrit alors sur bascule réelle, comme avant.
+   */
+  emitterHeatingHeads?: readonly (Reading<boolean> | null)[];
   /** Décidé par le groupe d'émetteurs : `valve` seulement si tous le supportent (PLAN lot 4). */
   emitterMode: EmitterMode;
+  /**
+   * Nombre de têtes derrière ce thermostat. Absent = une seule, ce qu'est l'immense majorité.
+   *
+   * Il n'entre dans le noyau que pour le découpage temporel : c'est la seule décision qui doit
+   * produire une commande DIFFÉRENTE par tête. Tout le reste — TPI, régulation, fenêtre, presets —
+   * raisonne sur la pièce, qui n'a qu'une température et qu'une consigne quel que soit le nombre
+   * de radiateurs qui la chauffent.
+   */
+  emitterCount?: number;
   /** `auto` quand aucun appareil central n'existe — c'est le défaut, pas un cas particulier. */
   centralMode: CentralMode;
   onoff: boolean;
@@ -659,13 +683,18 @@ export interface VThermOutputs {
   /** `null` = mode consigne, ou rien à écrire. */
   valvePercent: number | null;
   /**
-   * État à commander sur un émetteur de type interrupteur. `null` = NE RIEN ÉCRIRE.
+   * État à commander sur chaque émetteur de type interrupteur, dans l'ordre des têtes.
    *
-   * Rempli seulement quand la bascule a réellement lieu, ou qu'aucune commande n'est encore
-   * partie. Réaffirmer à chaque pas un relais déjà dans le bon état l'userait autant qu'une vraie
-   * commutation — un contacteur a une durée de vie qui se compte en commutations, pas en heures.
+   * `null` en tête de tout : l'émetteur n'est pas un interrupteur, il n'y a rien à découper. `null`
+   * à une position : CETTE tête-là n'a rien à recevoir à ce pas. Rempli seulement quand la bascule
+   * a réellement lieu, ou qu'aucune commande n'est encore partie sur cette tête. Réaffirmer à
+   * chaque pas un relais déjà dans le bon état l'userait autant qu'une vraie commutation — un
+   * contacteur a une durée de vie qui se compte en commutations, pas en heures.
+   *
+   * Les têtes d'un même groupe sont DÉPHASÉES : leurs entrées diffèrent au même instant, et c'est
+   * exactement ce qui évite que trois convecteurs tirent ensemble (voir `lib/dutyCycle.mts`).
    */
-  switchOn: boolean | null;
+  switchOn: readonly (boolean | null)[] | null;
   /** Fraction 0..1. `vtherm_power_percent` en est le centuple. */
   onPercent: number;
   slopePerHour: number | null;

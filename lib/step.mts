@@ -71,6 +71,39 @@ function usableBoolean(reading: Reading<boolean> | null): boolean | null {
   return reading.value;
 }
 
+/**
+ * L'état rapporté par UNE tête, pour la détection de divergence.
+ *
+ * Le repli sur l'agrégat n'a lieu que sur un émetteur unique — là où l'agrégat EST la tête. Sur un
+ * groupe, une tête qui ne rapporte rien rend `null` : mieux vaut ne pas détecter une divergence
+ * que d'en inventer une sur l'état d'un radiateur voisin.
+ */
+function headState(
+  inputs: VThermInputs,
+  index: number,
+  aggregate: boolean | null,
+  headCount: number,
+): boolean | null {
+  const heads = inputs.emitterHeatingHeads;
+  if (heads !== undefined && index < heads.length) return usableBoolean(heads[index] ?? null);
+  return headCount === 1 && index === 0 ? aggregate : null;
+}
+
+/**
+ * Fusionne les commandes de ce pas dans la mémoire d'écriture, tête par tête.
+ *
+ * Une tête qui n'a rien reçu garde ce qu'elle avait : c'est ce qui fait qu'une bascule commandée il
+ * y a dix minutes ne redevient pas « jamais commandée » au pas suivant, ce qui forcerait une
+ * réécriture perpétuelle sur tout le groupe.
+ */
+function mergeSwitchWrites(
+  previous: readonly (boolean | null)[],
+  commanded: readonly (boolean | null)[] | null,
+): readonly (boolean | null)[] {
+  if (commanded === null) return previous;
+  return commanded.map((value, index) => value ?? previous[index] ?? null);
+}
+
 /** Phases où la détection d'ouverture est confirmée, indépendamment du bypass. */
 function isDetectedOpen(phase: WindowPhase): boolean {
   return phase === 'open' || phase === 'pending_close';
@@ -390,10 +423,11 @@ export function stepVTherm(
 
   let dutyCycle = persistent.dutyCycle;
   let switchCommanded: boolean | null = null;
-  let switchOn: boolean | null = null;
+  let switchOn: (boolean | null)[] | null = null;
   let dutyWakeUpAtMs: number | null = null;
 
   if (inputs.emitterMode === 'switch' && switchDemand !== null) {
+    const headCount = Math.max(1, Math.trunc(inputs.emitterCount ?? 1));
     const duty = stepDutyCycle(
       dutyCycle,
       switchDemand,
@@ -403,26 +437,36 @@ export function stepVTherm(
         minDeactivationSec: config.minDeactivationSec,
       },
       nowMs,
+      headCount,
     );
     dutyCycle = duty.nextState;
-    switchCommanded = duty.commanded;
+    // La pièce est chauffée dès qu'une tête l'est. Sur des têtes déphasées, c'est la seule lecture
+    // juste : à 30 % sur trois relais décalés, il y en a presque toujours un qui consomme, et la
+    // chaudière doit le savoir.
+    switchCommanded = duty.commanded.some((on) => on);
     dutyWakeUpAtMs = duty.wakeUpAtMs;
 
-    // Le relais a pu diverger sans nous : micro-coupure Zigbee (la prise revient sur son
-    // `power_on_behavior`, souvent OFF), coupure de courant, bascule à la main. À puissance
-    // saturée (`on_percent >= 1`) l'état commandé ne change JAMAIS, donc `duty.changed` est
-    // éternellement faux et plus aucune écriture ne partirait : la pièce resterait froide toute la
-    // journée pendant que l'app affiche « en chauffe ». Réaffirmer sur DIVERGENCE plutôt que
-    // périodiquement ne coûte aucune commutation tant qu'il n'y en a pas — et un contacteur a une
-    // durée de vie qui se compte en commutations.
-    const diverged = emitterHeating !== null && emitterHeating !== duty.commanded;
+    switchOn = duty.commanded.map((on, index) => {
+      // Le relais a pu diverger sans nous : micro-coupure Zigbee (la prise revient sur son
+      // `power_on_behavior`, souvent OFF), coupure de courant, bascule à la main. À puissance
+      // saturée (`on_percent >= 1`) l'état commandé ne change JAMAIS, donc `duty.changed` est
+      // éternellement faux et plus aucune écriture ne partirait : la pièce resterait froide toute
+      // la journée pendant que l'app affiche « en chauffe ». Réaffirmer sur DIVERGENCE plutôt que
+      // périodiquement ne coûte aucune commutation tant qu'il n'y en a pas — et un contacteur a une
+      // durée de vie qui se compte en commutations.
+      //
+      // La divergence se lit TÊTE PAR TÊTE : l'agrégat vaut `true` dès qu'une seule chauffe, et le
+      // comparer à l'état commandé d'une autre ferait voir une divergence permanente sur un groupe
+      // déphasé — c'est-à-dire une réécriture de tous les relais à chaque pas.
+      const reported = headState(inputs, index, emitterHeating, headCount);
+      const diverged = reported !== null && reported !== on;
 
-    // Une écriture inutile use le contacteur autant qu'une utile : on ne commande que sur bascule
-    // réelle, sur divergence constatée, ou tant que rien n'est parti depuis le démarrage de l'app
-    // — auquel cas le relais peut avoir été basculé à la main pendant l'arrêt.
-    if (duty.changed || diverged || volatile.lastWrite.switchOn === null) {
-      switchOn = duty.commanded;
-    }
+      // Une écriture inutile use le contacteur autant qu'une utile : on ne commande que sur bascule
+      // réelle, sur divergence constatée, ou tant que rien n'est parti depuis le démarrage de l'app
+      // — auquel cas le relais peut avoir été basculé à la main pendant l'arrêt.
+      const never = (volatile.lastWrite.switchOn[index] ?? null) === null;
+      return (duty.changed[index] === true || diverged || never) ? on : null;
+    });
   }
 
   // === 9. Demande de chaleur ===============================================
@@ -520,7 +564,7 @@ export function stepVTherm(
   const nextLastWrite: VThermLastWrite = {
     valvePercent: valvePercent ?? lastWrite.valvePercent,
     setpoint: setpointToEmitter ?? lastWrite.setpoint,
-    switchOn: switchOn ?? lastWrite.switchOn,
+    switchOn: mergeSwitchWrites(lastWrite.switchOn, switchOn),
     atMs: wrote ? nowMs : lastWrite.atMs,
   };
 

@@ -66,9 +66,28 @@ export interface EmitterAdapter {
   get switchUnconfirmed(): boolean;
   applySetpoint(v: number, nowMs: number): Promise<void>;
   applyValve(percent: number, nowMs: number): Promise<void>;
-  applySwitch(on: boolean, nowMs: number): Promise<void>;
+  /**
+   * Commande les interrupteurs du groupe, une entrée par tête et dans leur ordre.
+   *
+   * Une entrée `null` = ne pas toucher à cette tête à ce pas. Les têtes d'une même pièce sont
+   * déphasées (voir `lib/dutyCycle.mts`) : elles ne basculent pas ensemble, et une signature à
+   * booléen unique obligerait à leur imposer le même état — c'est-à-dire à faire tirer tous les
+   * convecteurs en même temps, ce que le déphasage existe précisément pour éviter.
+   */
+  applySwitch(on: readonly (boolean | null)[], nowMs: number): Promise<void>;
   pushRoomTemperature(t: number, mode: SyncMode, nowMs: number): Promise<void>;
+  /** L'état agrégé : « cette pièce est-elle chauffée ». C'est lui qui décide de la demande. */
   readHeating(nowMs: number): Reading<boolean> | null;
+  /**
+   * L'état de CHAQUE tête, aligné sur `headCount`, pour la seule détection de divergence.
+   *
+   * Distinct de `readHeating` parce que l'agrégat ne peut pas servir à ça : il vaut `true` dès
+   * qu'une tête chauffe, et le comparer à l'état commandé d'une autre ferait voir une divergence
+   * permanente sur un groupe déphasé.
+   */
+  readHeatingHeads(nowMs: number): readonly (Reading<boolean> | null)[];
+  /** Nombre de têtes derrière cet émetteur. Toujours 1 pour un appareil seul. */
+  readonly headCount: number;
   readBattery(nowMs: number): Reading<number> | null;
   /**
    * Rend la vanne neutre quand la dorsale disparaît en cours de route. `false` = elle est restée
@@ -418,7 +437,20 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
    * La parcimonie reste entière : c'est le noyau qui décide s'il faut écrire, et lui ne commande
    * pas sans raison — un contacteur se compte en commutations.
    */
-  async applySwitch(on: boolean, nowMs: number): Promise<void> {
+  get headCount(): number {
+    return 1;
+  }
+
+  readHeatingHeads(nowMs: number): readonly (Reading<boolean> | null)[] {
+    return [this.readHeating(nowMs)];
+  }
+
+  async applySwitch(states: readonly (boolean | null)[], nowMs: number): Promise<void> {
+    const on = states[0] ?? null;
+    // Rien à commander sur cette tête à ce pas : on ne touche pas non plus au drapeau de doute,
+    // qui doit continuer de refléter la DERNIÈRE écriture réellement tentée.
+    if (on === null) return;
+
     const binding = this.switchBinding;
     if (binding === null) {
       // Plus de liaison : rien n'a été commandé. Le dire, sinon la demande reste `active` et la

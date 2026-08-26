@@ -86,10 +86,13 @@ type Candidate = { id: string; name: string; zoneName: string | null };
 
 interface VThermInternals {
   listCandidates(data: unknown): Promise<Candidate[]>;
-  buildDevice(selection: ReadonlyMap<SourceKey, string | null>): Promise<{
+  buildDevice(
+    selection: ReadonlyMap<SourceKey, string | null>,
+    emitterIds: readonly string[],
+  ): Promise<{
     name: string;
     data: { id: string };
-    store: Record<string, string | null>;
+    store: Record<string, string | string[] | null>;
     capabilities: string[];
   }>;
 }
@@ -211,6 +214,22 @@ function selection(entries: Partial<Record<SourceKey, string>>): ReadonlyMap<Sou
   return new Map(Object.entries(entries) as [SourceKey, string | null][]);
 }
 
+/**
+ * Crée l'appareil comme le ferait la vue de pairing.
+ *
+ * Les têtes sont un paramètre à part parce qu'elles le sont dans le driver : `emitter` dans la
+ * sélection n'est plus que le reflet de la tête n°1. Les appeler ensemble ici garde les tests
+ * lisibles sans masquer cette séparation — `emitters` explicite reste possible pour un groupe.
+ */
+function build(
+  driver: VThermInternals,
+  entries: Partial<Record<SourceKey, string>>,
+  emitters?: readonly string[],
+): ReturnType<VThermInternals['buildDevice']> {
+  const ids = emitters ?? (entries.emitter === undefined ? [] : [entries.emitter]);
+  return driver.buildDevice(selection(entries), ids);
+}
+
 const PIECE = summaryOf({
   id: 'capteur', name: 'Capteur salon', deviceClass: 'sensor', capabilities: ['measure_temperature'],
 });
@@ -218,7 +237,7 @@ const PIECE = summaryOf({
 test('un émetteur sans consigne inscriptible n\'a PAS de tuile d\'ouverture de vanne', async () => {
   const driver = vthermDriver(newApp([PIECE, PRISE]));
 
-  const created = await driver.buildDevice(selection({ room: 'capteur', emitter: 'prise' }));
+  const created = await build(driver, { room: 'capteur', emitter: 'prise' });
 
   assert.ok(
     !created.capabilities.includes('vtherm_valve_open'),
@@ -230,7 +249,7 @@ test('un émetteur sans consigne inscriptible n\'a PAS de tuile d\'ouverture de 
 test('une vanne à consigne inscriptible reçoit l\'ouverture et la pile', async () => {
   const driver = vthermDriver(newApp([PIECE, VANNE]));
 
-  const created = await driver.buildDevice(selection({ room: 'capteur', emitter: 'vanne' }));
+  const created = await build(driver, { room: 'capteur', emitter: 'vanne' });
 
   assert.ok(created.capabilities.includes('vtherm_valve_open'));
   assert.ok(created.capabilities.includes('vtherm_emitter_battery'));
@@ -242,15 +261,13 @@ test('`alarm_contact` seulement si une fenêtre est désignée', async () => {
   });
   const driver = vthermDriver(newApp([PIECE, VANNE, fenetre]));
 
-  const sans = await driver.buildDevice(selection({ room: 'capteur', emitter: 'vanne' }));
+  const sans = await build(driver, { room: 'capteur', emitter: 'vanne' });
   assert.ok(
     !sans.capabilities.includes('alarm_contact'),
     'une tuile « Fenêtre » perpétuellement fausse est une promesse que l\'app ne tient pas',
   );
 
-  const avec = await driver.buildDevice(
-    selection({ room: 'capteur', emitter: 'vanne', window: 'fenetre' }),
-  );
+  const avec = await build(driver, { room: 'capteur', emitter: 'vanne', window: 'fenetre' });
   assert.ok(avec.capabilities.includes('alarm_contact'));
   assert.ok(!avec.capabilities.includes('alarm_motion'), 'aucun mouvement désigné');
 });
@@ -258,19 +275,140 @@ test('`alarm_contact` seulement si une fenêtre est désignée', async () => {
 test('sans capteur de pièce ou sans émetteur, il n\'y a pas de thermostat à créer', async () => {
   const driver = vthermDriver(newApp([PIECE, VANNE]));
 
-  await assert.rejects(() => driver.buildDevice(selection({ room: 'capteur' })), /pair\.error\.incomplete/);
-  await assert.rejects(() => driver.buildDevice(selection({ emitter: 'vanne' })), /pair\.error\.incomplete/);
+  await assert.rejects(() => build(driver, { room: 'capteur' }), /pair\.error\.incomplete/);
+  await assert.rejects(() => build(driver, { emitter: 'vanne' }), /pair\.error\.incomplete/);
 });
 
 test('les sources choisies sont rangées dans le `store`, les autres à `null`', async () => {
   const driver = vthermDriver(newApp([PIECE, VANNE]));
 
-  const created = await driver.buildDevice(selection({ room: 'capteur', emitter: 'vanne' }));
+  const created = await build(driver, { room: 'capteur', emitter: 'vanne' });
 
   assert.equal(created.store.roomId, 'capteur');
   assert.equal(created.store.emitterId, 'vanne');
   assert.equal(created.store.windowId, null);
   assert.ok(created.data.id.length > 0, 'l\'identité est tirée une fois et survit aux réparations');
+});
+
+// --- Groupe d'émetteurs : plusieurs têtes pour une pièce ----------------------------
+
+const VANNE_2 = summaryOf({
+  id: 'vanne-2',
+  name: 'Vanne fenêtre',
+  deviceClass: 'thermostat',
+  capabilities: ['target_temperature'],
+  setable: ['target_temperature'],
+});
+
+const PRISE_2 = summaryOf({
+  id: 'prise-2', name: 'Prise convecteur nord', deviceClass: 'socket',
+  capabilities: ['onoff'], setable: ['onoff'],
+});
+
+test('toutes les têtes sont rangées, et `emitterId` reste la première', async () => {
+  const driver = vthermDriver(newApp([PIECE, VANNE, VANNE_2]));
+
+  const created = await build(driver, { room: 'capteur' }, ['vanne', 'vanne-2']);
+
+  assert.deepEqual(created.store.emitterIds, ['vanne', 'vanne-2']);
+  assert.equal(
+    created.store.emitterId,
+    'vanne',
+    'une version antérieure de l\'app relit ce champ : il doit désigner la tête de référence',
+  );
+});
+
+test('une tuile suffit qu\'UNE tête la justifie', async () => {
+  const driver = vthermDriver(newApp([PIECE, VANNE, VANNE_2]));
+
+  // `vanne-2` d'abord : c'est elle la tête de référence, et elle n'a PAS de pile. La tuile vient
+  // donc entièrement de la seconde tête — c'est tout l'objet de ce test.
+  const created = await build(driver, { room: 'capteur' }, ['vanne-2', 'vanne']);
+
+  assert.ok(
+    created.capabilities.includes('vtherm_emitter_battery'),
+    'une intersection aurait masqué la pile de la seule tête qui en a une, donc la seule '
+    + 'qui s\'arrêtera un jour faute d\'avoir été changée',
+  );
+  assert.ok(created.capabilities.includes('vtherm_valve_open'));
+});
+
+test('un groupe qui mélange une vanne et un relais est refusé AU CHOIX, pas en hiver', async () => {
+  const driver = vthermDriver(newApp([PIECE, VANNE, PRISE]));
+
+  await assert.rejects(
+    () => build(driver, { room: 'capteur' }, ['vanne', 'prise']),
+    /pair\.error\.mixed_emitters/,
+    '`lib/step.mts` choisit une branche entière sur `emitterMode` : un groupe mixte n\'a pas '
+    + 'de comportement correct à offrir, il en aurait un par tête',
+  );
+});
+
+test('un groupe homogène passe, dans les deux natures', async () => {
+  const vannes = vthermDriver(newApp([PIECE, VANNE, VANNE_2]));
+  await assert.doesNotReject(() => build(vannes, { room: 'capteur' }, ['vanne', 'vanne-2']));
+
+  const prises = vthermDriver(newApp([PIECE, PRISE, PRISE_2]));
+  const created = await build(prises, { room: 'capteur' }, ['prise', 'prise-2']);
+  assert.deepEqual(
+    created.capabilities.filter((c) => c.startsWith('vtherm_valve') || c.endsWith('battery')),
+    [],
+    'deux prises restent deux interrupteurs : ni ouverture, ni pile',
+  );
+});
+
+test('au-delà de la borne, le groupe est REFUSÉ et non tronqué en silence', async () => {
+  const many = Array.from({ length: 9 }, (_, i) => summaryOf({
+    id: `vanne-${i}`, name: `Vanne ${i}`, deviceClass: 'thermostat',
+    capabilities: ['target_temperature'], setable: ['target_temperature'],
+  }));
+  const driver = vthermDriver(newApp([PIECE, ...many]));
+
+  await assert.rejects(
+    () => build(driver, { room: 'capteur' }, many.map((d) => d.id)),
+    /pair\.error\.too_many_emitters/,
+    'tronquer rendrait un groupe plus petit que celui qu\'on vient de choisir, sans un mot, '
+    + 'pendant que l\'écran continue d\'afficher les têtes qui ne sont pas passées',
+  );
+});
+
+test('un groupe vide reste un refus, comme l\'absence d\'émetteur avant lui', async () => {
+  const driver = vthermDriver(newApp([PIECE, VANNE]));
+
+  await assert.rejects(() => build(driver, { room: 'capteur' }, []), /pair\.error\.incomplete/);
+});
+
+test('le pairing accepte les deux formes : une tête seule, ou la liste', async () => {
+  const app = newApp([PIECE, VANNE, VANNE_2]);
+  const driver = vthermDriver(app) as unknown as Pairable;
+  const session = new FakePairSession();
+  await driver.onPair(session);
+
+  await session.emit('select_room_sensor', 'capteur');
+  await session.emit('select_emitter', 'vanne');
+  const seule = await session.emit('build_device') as { store: Record<string, unknown> };
+  assert.deepEqual(seule.store.emitterIds, ['vanne']);
+
+  await session.emit('select_emitters', ['vanne', 'vanne-2']);
+  const groupe = await session.emit('build_device') as { store: Record<string, unknown> };
+  assert.deepEqual(
+    groupe.store.emitterIds,
+    ['vanne', 'vanne-2'],
+    'une vue non rechargée émet encore `select_emitter` : elle doit continuer de marcher',
+  );
+});
+
+test('un doublon envoyé par la vue ne devient pas deux têtes', async () => {
+  const app = newApp([PIECE, VANNE, VANNE_2]);
+  const driver = vthermDriver(app) as unknown as Pairable;
+  const session = new FakePairSession();
+  await driver.onPair(session);
+
+  await session.emit('select_room_sensor', 'capteur');
+  await session.emit('select_emitters', ['vanne', 'vanne', 'vanne-2']);
+  const created = await session.emit('build_device') as { store: Record<string, unknown> };
+
+  assert.deepEqual(created.store.emitterIds, ['vanne', 'vanne-2']);
 });
 
 // --- Appareil central : l'unicité --------------------------------------------------

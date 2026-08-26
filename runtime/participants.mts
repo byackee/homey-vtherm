@@ -356,7 +356,9 @@ export class VThermParticipant implements Tickable {
       motion: readBoolean(this.sources.motion, nowMs, FRESHNESS.motionMs),
       presence: this.resolvePresence(nowMs),
       emitterHeating: this.emitter.readHeating(nowMs),
+      emitterHeatingHeads: this.emitter.readHeatingHeads(nowMs),
       emitterMode: this.emitter.mode,
+      emitterCount: this.emitter.headCount,
       centralMode: this.centralMode(),
       // Capability absente au tout premier pas : un thermostat neuf est allumé.
       onoff: typeof onoff === 'boolean' ? onoff : true,
@@ -408,10 +410,12 @@ export class VThermParticipant implements Tickable {
         this.emitter.applySetpoint(setpointToEmitter, nowMs));
     }
 
-    // `null` = le noyau n'a rien à commander : soit le relais est déjà dans le bon état, soit la
+    // `null` = le noyau n'a rien à commander : soit les relais sont déjà dans le bon état, soit la
     // mesure s'est tue et on n'y touche pas. Écrire quand même userait le contacteur pour rien.
+    // Une entrée `null` dans la liste dit la même chose de CETTE tête-là — les têtes d'un groupe
+    // sont déphasées, elles ne basculent donc pas au même pas.
     const switchOn = outputs.switchOn;
-    if (switchOn !== null) {
+    if (switchOn !== null && switchOn.some((on) => on !== null)) {
       await this.safely('bascule de l\'interrupteur', () =>
         this.emitter.applySwitch(switchOn, nowMs));
     }

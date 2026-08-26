@@ -13,7 +13,8 @@ import type { Preset } from '../../lib/types.mjs';
 import type { PresenceOverride } from '../../runtime/participants.mjs';
 import type VThermApp from '../../app.mjs';
 import VThermDevice, {
-  EMITTER_CLASSES, SOURCE_STORE_KEYS, toPreset, type SourceKey, SOURCE_CAPABILITIES,
+  EMITTER_CLASSES, MAX_EMITTERS, SOURCE_STORE_KEYS, emitterExtraCapabilities, emitterStorePatch,
+  toPreset, type SourceKey, SOURCE_CAPABILITIES,
 } from './device.mjs';
 
 /** `@types/homey` n'exporte pas `PairSession` : on le reprend de la signature qui l'emploie. */
@@ -21,15 +22,23 @@ type PairSession = Parameters<Homey.Driver['onPair']>[0];
 
 const DRIVER_TAG = 'vtherm';
 
-/** Événement émis par la vue de pairing, et clé de source qu'il désigne. */
+/**
+ * Événement émis par la vue de pairing, et clé de source qu'il désigne.
+ *
+ * L'émetteur n'y est PAS : il est le seul à pouvoir être multiple, et son événement rend une liste.
+ * Le laisser ici l'aurait fait passer par le chemin « un identifiant, une source », qui écrase le
+ * groupe au lieu de le poser.
+ */
 const SELECT_EVENTS: ReadonlyArray<{ event: string; key: SourceKey }> = [
   { event: 'select_room_sensor', key: 'room' },
-  { event: 'select_emitter', key: 'emitter' },
   { event: 'select_outdoor', key: 'outdoor' },
   { event: 'select_window', key: 'window' },
   { event: 'select_motion', key: 'motion' },
   { event: 'select_presence', key: 'presence' },
 ];
+
+/** Les deux formes acceptées pour désigner les têtes : une seule, ou la liste du groupe. */
+const EMITTER_SELECT_EVENTS = ['select_emitter', 'select_emitters'] as const;
 
 const PRESENCE_OVERRIDES: readonly PresenceOverride[] = ['auto', 'home', 'away'];
 
@@ -51,6 +60,7 @@ export default class VThermDriver extends Homey.Driver {
 
   override async onPair(session: PairSession): Promise<void> {
     const selection = new Map<SourceKey, string | null>();
+    let emitterIds: string[] = [];
 
     // Une erreur JavaScript dans une vue de pairing est autrement invisible : la page reste
     // blanche, et une app installée par CLI n'a pas de log lisible. La vue nous les renvoie ici.
@@ -72,10 +82,21 @@ export default class VThermDriver extends Homey.Driver {
       });
     }
 
+    // Les deux événements aboutissent au même endroit : une vue qui n'aurait pas été mise à jour
+    // continue de désigner une tête unique, et pose un groupe d'une tête. C'est exactement le
+    // comportement d'avant les groupes, sans branche particulière pour l'obtenir.
+    for (const event of EMITTER_SELECT_EVENTS) {
+      session.setHandler(event, async (data: unknown) => {
+        emitterIds = asDeviceIds(data);
+        selection.set('emitter', emitterIds[0] ?? null);
+        return true;
+      });
+    }
+
     // La vue crée l'appareil elle-même. Naviguer d'une vue custom vers le template
     // `add_devices` ferme l'assistant sans rien créer sur Homey Pro 2023 ; les apps publiées
     // appellent `Homey.createDevice()` puis `Homey.done()` depuis la vue, c'est ce qu'on fait.
-    session.setHandler('build_device', async () => this.buildDevice(selection));
+    session.setHandler('build_device', async () => this.buildDevice(selection, emitterIds));
   }
 
   /**
@@ -101,6 +122,10 @@ export default class VThermDriver extends Homey.Driver {
     // ne peut pas vérifier ce qui est lié aujourd'hui.
     session.setHandler('current_sources', async () => target.currentSources());
 
+    // La liste des têtes, à part : `current_sources` rend un identifiant par source, et une source
+    // qui en porte plusieurs n'y entre pas sans mentir sur les autres.
+    session.setHandler('current_emitters', async () => target.emitterIds());
+
     // La vue ne devrait jamais l'appeler en réparation — mais si elle le fait, mieux vaut un
     // message qu'un « no such event » opaque affiché à l'utilisateur.
     session.setHandler('build_device', async () => {
@@ -115,6 +140,48 @@ export default class VThermDriver extends Homey.Driver {
         return true;
       });
     }
+
+    for (const event of EMITTER_SELECT_EVENTS) {
+      session.setHandler(event, async (data: unknown) => {
+        const ids = asDeviceIds(data);
+        // Le refus vient d'ici et non de `setEmitterIds` : la vue doit pouvoir afficher POURQUOI
+        // le groupe est refusé, et `setEmitterIds` recharge l'appareil avant de savoir répondre.
+        await this.assertHomogeneous(ids);
+        await target.setEmitterIds(ids);
+        return true;
+      });
+    }
+  }
+
+  /**
+   * Refuse un groupe qui mélange des têtes à consigne et des têtes en tout-ou-rien.
+   *
+   * `lib/step.mts` choisit une branche ENTIÈRE sur `emitterMode` : découpage temporel d'un côté,
+   * pilotage d'ouverture de l'autre. Un groupe mixte n'a donc pas de comportement correct à offrir —
+   * il en aurait un par tête, et le noyau n'en connaît qu'un. Mieux vaut un refus explicite au
+   * moment du choix qu'une pièce à moitié régulée qu'on découvre en hiver.
+   *
+   * L'appareil dont le hub ne dit rien est considéré COMPATIBLE : le repli de `buildDevice` est le
+   * mode consigne, et refuser sur une ignorance rendrait le groupe impossible à former pendant la
+   * minute qui suit le démarrage de l'app.
+   */
+  private async assertHomogeneous(ids: readonly string[]): Promise<void> {
+    if (ids.length < 2) return;
+
+    const modes = await Promise.all(ids.map(async (id) => this.isSetpointCapable(id)));
+    if (modes.every((m) => m === modes[0])) return;
+
+    throw new Error(this.homey.__('pair.error.mixed_emitters'));
+  }
+
+  /** Vrai si l'appareil porte une consigne inscriptible. `true` quand le hub n'a pas répondu. */
+  private async isSetpointCapable(deviceId: string): Promise<boolean> {
+    const summary = await this.app.hub.getDeviceSummary(deviceId);
+    if (summary === null) return true;
+    return summary.capabilities.some(
+      (id) => (id === 'target_temperature' || id.startsWith('target_temperature.'))
+        && summary.setable[id] === true,
+    );
   }
 
   /** Lu du manifeste plutôt qu'écrit en dur : l'identifiant de l'app changera à la publication. */
@@ -197,44 +264,43 @@ export default class VThermDriver extends Homey.Driver {
     'vtherm_regulated_setpoint', 'vtherm_power_percent', 'vtherm_slope',
   ] as const;
 
-  private async buildDevice(selection: ReadonlyMap<SourceKey, string | null>): Promise<{
+  private async buildDevice(
+    selection: ReadonlyMap<SourceKey, string | null>,
+    emitterIds: readonly string[],
+  ): Promise<{
     name: string;
     data: { id: string };
-    store: Record<string, string | null>;
+    store: Record<string, string | string[] | null>;
     capabilities: string[];
   }> {
     const roomId = selection.get('room') ?? null;
-    const emitterId = selection.get('emitter') ?? null;
-    if (roomId === null || emitterId === null) {
+    if (roomId === null || emitterIds.length === 0) {
       throw new Error(this.homey.__('pair.error.incomplete'));
     }
+    if (emitterIds.length > MAX_EMITTERS) {
+      throw new Error(this.homey.__('pair.error.too_many_emitters'));
+    }
+    await this.assertHomogeneous(emitterIds);
 
-    const store: Record<string, string | null> = {};
+    const store: Record<string, string | string[] | null> = {};
     for (const key of Object.keys(SOURCE_STORE_KEYS) as SourceKey[]) {
       store[SOURCE_STORE_KEYS[key]] = selection.get(key) ?? null;
     }
+    // APRÈS la boucle : elle vient d'écrire `emitterId` depuis la sélection, et le patch est ce qui
+    // garantit que cet identifiant est bien la tête n°1 de la liste, pas un reste de sélection.
+    Object.assign(store, emitterStorePatch(emitterIds));
 
     const capabilities: string[] = [...VThermDriver.BASE_CAPABILITIES];
     if (selection.get('window')) capabilities.push('alarm_contact');
     if (selection.get('motion') || selection.get('presence')) capabilities.push('alarm_motion');
 
-    // La pile n'est affichée que si l'émetteur en rapporte une : un radiateur sur secteur n'en
-    // a pas, et une tuile de pile vide sur un appareil branché n'apprend rien à personne.
-    const emitter = await this.app.hub.getDeviceSummary(emitterId);
-    if (emitter?.capabilities.some((id) => id === 'measure_battery' || id.startsWith('measure_battery.'))) {
-      capabilities.push('vtherm_emitter_battery');
-    }
-
-    // L'ouverture de vanne n'a de sens que si l'émetteur peut en avoir une. Un émetteur qui n'a
-    // aucune consigne inscriptible est un interrupteur, définitivement : aucune dorsale ne le
-    // rendra pilotable en ouverture. Lui déclarer cette capability afficherait une tuile
-    // perpétuellement vide, et on ne peut pas la retirer plus tard sans détruire son historique
-    // Insights.
-    const setpointCapable = emitter?.capabilities.some(
-      (id) => (id === 'target_temperature' || id.startsWith('target_temperature.'))
-        && emitter.setable[id] === true,
-    ) ?? true;
-    if (setpointCapable) capabilities.push('vtherm_valve_open');
+    // La pile n'est affichée que si une tête en rapporte une, l'ouverture que si une tête peut en
+    // avoir une : un radiateur sur secteur n'a pas de pile, et une tuile vide sur un appareil
+    // branché n'apprend rien à personne. Voir `emitterExtraCapabilities` pour les deux règles.
+    const probes = await Promise.all(
+      emitterIds.map(async (id) => this.app.hub.getDeviceSummary(id)),
+    );
+    capabilities.push(...emitterExtraCapabilities(probes));
 
     return {
       name: await this.proposeName(roomId),
@@ -345,6 +411,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Une vue de pairing envoie `null` pour « aucune source ». Tout le reste est traité comme tel. */
 function asDeviceId(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * Une liste d'identifiants, quelle que soit la forme reçue de la vue.
+ *
+ * Une chaîne nue est acceptée et rend une liste d'un : c'est ce qu'émet une vue d'avant les groupes,
+ * et la refuser casserait le pairing sur une app dont seules les vues n'auraient pas été rechargées.
+ * Les doublons partent — la même vanne deux fois recevrait deux écritures par pas, pour rien.
+ *
+ * Aucune borne ICI, délibérément : tronquer rendrait un groupe plus petit que celui qu'on vient de
+ * choisir, sans un mot, et l'écran continuerait d'afficher les têtes qui ne sont pas passées. La
+ * borne est appliquée plus loin, et elle REFUSE.
+ */
+function asDeviceIds(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : [value];
+  const out: string[] = [];
+  for (const entry of raw) {
+    const id = asDeviceId(entry);
+    if (id === null || out.includes(id)) continue;
+    out.push(id);
+  }
+  return out;
 }
 
 /**
