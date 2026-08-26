@@ -88,6 +88,15 @@ export interface EmitterAdapter {
   readHeatingHeads(nowMs: number): readonly (Reading<boolean> | null)[];
   /** Nombre de têtes derrière cet émetteur. Toujours 1 pour un appareil seul. */
   readonly headCount: number;
+  /**
+   * Les têtes qu'on a cessé de commander parce que leur mode a dérivé. Vide sur un émetteur seul.
+   *
+   * Exposé au CONTRAT et pas seulement au journal : une tête écartée ne reçoit plus rien et reste
+   * figée sur sa dernière position, sans que son doute ne compte ni que la demande faiblisse. La
+   * pièce chauffe alors à une fraction de sa puissance, indéfiniment, derrière une tuile
+   * parfaitement normale. C'est au participant d'en faire un avertissement visible.
+   */
+  readonly mismatchedHeadIds: readonly string[];
   readBattery(nowMs: number): Reading<number> | null;
   /**
    * Rend la vanne neutre quand la dorsale disparaît en cours de route. `false` = elle est restée
@@ -425,6 +434,19 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
     if (sent) this.remember('valve', value, nowMs);
   }
 
+  get headCount(): number {
+    return 1;
+  }
+
+  /** Un émetteur seul est toujours d'accord avec lui-même. */
+  get mismatchedHeadIds(): readonly string[] {
+    return [];
+  }
+
+  readHeatingHeads(nowMs: number): readonly (Reading<boolean> | null)[] {
+    return [this.readHeating(nowMs)];
+  }
+
   /**
    * Bascule d'un émetteur de type interrupteur.
    *
@@ -437,14 +459,6 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
    * La parcimonie reste entière : c'est le noyau qui décide s'il faut écrire, et lui ne commande
    * pas sans raison — un contacteur se compte en commutations.
    */
-  get headCount(): number {
-    return 1;
-  }
-
-  readHeatingHeads(nowMs: number): readonly (Reading<boolean> | null)[] {
-    return [this.readHeating(nowMs)];
-  }
-
   async applySwitch(states: readonly (boolean | null)[], nowMs: number): Promise<void> {
     const on = states[0] ?? null;
     // Rien à commander sur cette tête à ce pas : on ne touche pas non plus au drapeau de doute,

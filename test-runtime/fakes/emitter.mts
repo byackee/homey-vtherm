@@ -86,6 +86,7 @@ export class FakeEmitter implements EmitterAdapter {
   }
 
   readonly headCount = 1;
+  readonly mismatchedHeadIds: readonly string[] = [];
 
   readHeatingHeads(nowMs: number): readonly (Reading<boolean> | null)[] {
     return [this.readHeating(nowMs)];

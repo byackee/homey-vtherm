@@ -87,6 +87,8 @@ export default class VThermDevice extends Homey.Device {
   private onHubConnected: (() => void) | null = null;
   /** Homey refuse deux écouteurs sur la même capability, et `onInit` se rejoue à la réparation. */
   private listenersRegistered = false;
+  /** Fil d'attente des écritures de groupe. Voir `setEmitterIds` : elles ne peuvent pas se croiser. */
+  private emitterWrite: Promise<void> = Promise.resolve();
 
   override async onInit(): Promise<void> {
     const emitterIds = this.emitterIds();
@@ -494,6 +496,12 @@ export default class VThermDevice extends Homey.Device {
       // seul laisserait `emitterIds` pointer sur l'ancien identifiant, qui l'emporte à la lecture —
       // la réparation n'aurait alors servi à rien, en silence.
       const ids = this.emitterIds();
+      // Désigner comme tête n°1 un appareil DÉJÀ dans le groupe ferait disparaître un radiateur :
+      // le doublon serait écarté à l'écriture et le groupe passerait de trois têtes à deux, sans un
+      // mot. La page de réglages n'affiche qu'un émetteur — celui-là — donc la méprise est facile.
+      if (ids.indexOf(deviceId!) > 0) {
+        throw new Error(this.homey.__('pair.error.duplicate_emitter'));
+      }
       ids[0] = deviceId!;
       await this.setEmitterIds(ids);
       return;
@@ -662,6 +670,21 @@ export default class VThermDevice extends Homey.Device {
    * du groupe resterait figée sur sa dernière ouverture, chauffée par personne.
    */
   async setEmitterIds(ids: readonly string[]): Promise<void> {
+    // SÉRIALISÉ, parce que la page de réparation appelle ceci à CHAQUE case cochée et qu'un
+    // rechargement dure plusieurs allers-retours réseau. Deux appels qui se chevauchent voyaient
+    // chacun `this.participant` à `null` — le premier venait de le vider — et le second
+    // reconstruisait un participant pendant que le premier finissait de détruire les liaisons du
+    // second. Restaient un participant orphelin, des abonnements au hub jamais relâchés, et un
+    // instant où deux participants commandaient les mêmes vannes. Construire un groupe de trois
+    // têtes en une session de réparation suffisait à l'atteindre.
+    const run = this.emitterWrite
+      .catch(() => undefined)
+      .then(async () => this.applyEmitterIds(ids));
+    this.emitterWrite = run.catch(() => undefined);
+    return run;
+  }
+
+  private async applyEmitterIds(ids: readonly string[]): Promise<void> {
     if (ids.length === 0) throw new Error(this.homey.__('pair.error.incomplete'));
     if (ids.length > MAX_EMITTERS) throw new Error(this.homey.__('pair.error.too_many_emitters'));
     await this.assertHomogeneous(ids);

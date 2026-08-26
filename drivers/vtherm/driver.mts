@@ -87,7 +87,13 @@ export default class VThermDriver extends Homey.Driver {
     // comportement d'avant les groupes, sans branche particulière pour l'obtenir.
     for (const event of EMITTER_SELECT_EVENTS) {
       session.setHandler(event, async (data: unknown) => {
-        emitterIds = asDeviceIds(data);
+        const ids = asDeviceIds(data);
+        // Refusé AU CLIC et pas à la création, pour que les deux chemins s'accordent : la page de
+        // réparation refuse déjà là. Sinon l'utilisateur coche une vanne et une prise, traverse
+        // quatre écrans de capteurs facultatifs, et n'apprend qu'au bouton « Créer » que le mélange
+        // est impossible — après avoir tout ressaisi pour rien.
+        await this.assertHomogeneous(ids);
+        emitterIds = ids;
         selection.set('emitter', emitterIds[0] ?? null);
         return true;
       });
@@ -141,14 +147,23 @@ export default class VThermDriver extends Homey.Driver {
       });
     }
 
-    for (const event of EMITTER_SELECT_EVENTS) {
-      session.setHandler(event, async (data: unknown) => {
-        // `setEmitterIds` porte le refus des groupes mixtes : c'est le seul point de passage, et
-        // le dupliquer ici ferait deux règles à garder d'accord. La vue affiche son message.
-        await target.setEmitterIds(asDeviceIds(data));
-        return true;
-      });
-    }
+    // Les deux événements ne veulent PAS dire la même chose en réparation, et les confondre
+    // effaçait des radiateurs. `select_emitters` pose le groupe entier, tel que l'écran le montre.
+    // `select_emitter` au singulier ne peut venir que d'une vue d'avant les groupes, et il désigne
+    // « l'émetteur » : il remplace la tête n°1 SANS toucher aux suivantes, ce qui est exactement le
+    // contrat de `rebindSource`. Le router vers `setEmitterIds` supprimait en silence toutes les
+    // têtes sauf celle qu'on venait de cliquer.
+    session.setHandler('select_emitters', async (data: unknown) => {
+      // `setEmitterIds` porte le refus des groupes mixtes : c'est le seul point de passage, et le
+      // dupliquer ici ferait deux règles à garder d'accord. La vue affiche son message.
+      await target.setEmitterIds(asDeviceIds(data));
+      return true;
+    });
+
+    session.setHandler('select_emitter', async (data: unknown) => {
+      await target.rebindSource('emitter', asDeviceId(data));
+      return true;
+    });
   }
 
   /**
@@ -245,8 +260,13 @@ export default class VThermDriver extends Homey.Driver {
    * perpétuellement fausse sur un thermostat sans capteur d'ouverture est une promesse que
    * l'app ne tient pas.
    *
-   * Elles sont fixées à la CRÉATION et jamais modifiées ensuite : `addCapability` et
-   * `removeCapability` détruisent l'historique Insights de l'appareil.
+   * Elles ne sont jamais RETIRÉES : `removeCapability` détruit l'historique Insights de la
+   * capability, et une tuile devenue vide coûte infiniment moins cher qu'une courbe d'hiver perdue.
+   *
+   * Elles peuvent en revanche être AJOUTÉES après coup, et l'asymétrie est délibérée : sur une
+   * capability absente il n'y a pas d'historique à perdre. C'est ce qui permet à un thermostat créé
+   * sur un relais de secteur d'afficher la pile de la vanne qu'on vient de lui ajouter au lieu de
+   * la perdre pour toujours. Voir `grantEmitterCapabilities` dans `device.mts`.
    */
   private static readonly BASE_CAPABILITIES = [
     'onoff', 'target_temperature', 'measure_temperature',

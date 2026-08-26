@@ -34,7 +34,8 @@
       "no_api": "Adaptive Thermostat ne peut pas encore lire vos appareils. Son accès à l'API Homey n'est pas monté — réessayez dans quelques secondes, ou redémarrez l'app.",
       "repair_no_create": "Cet appareil existe déjà — vous êtes en train de le réparer, pas d'en créer un nouveau.",
       "too_many_emitters": "Cela fait plus d'émetteurs qu'un thermostat ne peut en piloter. Répartissez plutôt la pièce sur deux thermostats.",
-      "mixed_emitters": "Ces émetteurs ne sont pas de même nature. L'un accepte une consigne de température, l'autre est un simple interrupteur, et un thermostat pilote ses émetteurs d'une façon ou de l'autre — pas des deux. Regroupez les vannes ensemble et donnez leur propre thermostat aux appareils commutés."
+      "mixed_emitters": "Ces émetteurs ne sont pas de même nature. L'un accepte une consigne de température, l'autre est un simple interrupteur, et un thermostat pilote ses émetteurs d'une façon ou de l'autre — pas des deux. Regroupez les vannes ensemble et donnez leur propre thermostat aux appareils commutés.",
+      "duplicate_emitter": "Cet émetteur fait déjà partie de ce thermostat. Choisissez-en un autre, ou modifiez plutôt la liste entière — le désigner à nouveau ferait disparaître un des autres, sans un mot."
     },
     "finish": "Créer le thermostat",
     "creating": "Création…",
@@ -143,7 +144,8 @@
       "no_sensor": "Aucun capteur de température de pièce exploitable : la régulation est suspendue et rien n'est envoyé à l'émetteur.",
       "sensor_stale": "Mesure de température de pièce périmée : la régulation est suspendue et rien n'est envoyé à l'émetteur.",
       "sensor_stale_safety": "Mesure de température de pièce périmée. Le mode sécurité maintient un repli de chauffe jusqu'au retour du capteur, puis il abandonne.",
-      "valve_stuck": "La dorsale Zigbee2MQTT a disparu et la vanne est restée sur sa dernière ouverture : la pièce peut ne pas chauffer, quelle que soit la consigne. La régulation continue par consigne."
+      "valve_stuck": "La dorsale Zigbee2MQTT a disparu et la vanne est restée sur sa dernière ouverture : la pièce peut ne pas chauffer, quelle que soit la consigne. La régulation continue par consigne.",
+      "emitter_mismatch": "Un des émetteurs de cette pièce n'est plus piloté : il est revenu en annonçant un autre type de commande, et il reste là où on l'a laissé. La pièce chauffera à une fraction de sa puissance tant qu'il n'est pas revenu ou que vous n'avez pas réparé le thermostat."
     }
   },
   "flow": {

@@ -34,7 +34,8 @@
       "no_api": "Adaptive Thermostat cannot read your devices yet. Its access to the Homey API has not come up — reopen this in a few seconds, or restart the app.",
       "repair_no_create": "This device already exists — you are repairing it, not creating a new one.",
       "too_many_emitters": "That is more heaters than one thermostat can drive. Split the room across two thermostats instead.",
-      "mixed_emitters": "These heaters are not of the same kind. One takes a target temperature, another is a plain on/off switch, and a thermostat drives its heaters one way or the other — not both. Group the valves together and give the switched heaters their own thermostat."
+      "mixed_emitters": "These heaters are not of the same kind. One takes a target temperature, another is a plain on/off switch, and a thermostat drives its heaters one way or the other — not both. Group the valves together and give the switched heaters their own thermostat.",
+      "duplicate_emitter": "That heater is already part of this thermostat. Pick another one, or edit the whole list instead — assigning it again would quietly drop one of the others."
     },
     "finish": "Create the thermostat",
     "creating": "Creating…",
@@ -143,7 +144,8 @@
       "no_sensor": "No usable room temperature sensor: regulation is suspended and nothing is being sent to the heater.",
       "sensor_stale": "The room temperature reading is stale: regulation is suspended and nothing is being sent to the heater.",
       "sensor_stale_safety": "The room temperature reading is stale. Safety mode holds a fallback heating level until the sensor comes back, then it gives up.",
-      "valve_stuck": "The Zigbee2MQTT backbone went away and the valve stayed at its last opening: the room may not heat whatever the setpoint says. Regulation continues by setpoint."
+      "valve_stuck": "The Zigbee2MQTT backbone went away and the valve stayed at its last opening: the room may not heat whatever the setpoint says. Regulation continues by setpoint.",
+      "emitter_mismatch": "One of this room's heaters is no longer being driven: it came back reporting a different kind of control, and it is now sitting wherever it was last left. The room will heat at a fraction of its power until it returns or you repair the thermostat."
     }
   },
   "flow": {

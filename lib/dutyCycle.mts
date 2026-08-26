@@ -110,10 +110,16 @@ export function stepDutyCycle(
     commanded.push(on);
     changed.push(previous === undefined || previous !== on);
 
+    // Plancher à 1 ms, et ce n'est pas de la superstition. `cycleMs / heads` n'est pas
+    // représentable en binaire pour 7 têtes : l'arrondi finit par rendre un `untilMs` de l'ordre de
+    // 1e-10, que l'addition à `nowMs` avale entièrement — l'échéance annoncée EST alors l'instant
+    // courant. L'ordonnanceur d'aujourd'hui est un scrutateur et ne s'y perdrait pas, mais le
+    // contrat de `wakeUpAtMs` dit « la prochaine bascule », et le jour où il devient événementiel
+    // ce serait une minuterie à zéro qui tourne en boucle sur la Homey.
     const untilMs = saturated
       ? cycleMs - elapsed
       : (on ? onMs - local : cycleMs - local);
-    wakeUpAtMs = Math.min(wakeUpAtMs, nowMs + untilMs);
+    wakeUpAtMs = Math.min(wakeUpAtMs, nowMs + Math.max(1, untilMs));
   }
 
   return {

@@ -94,6 +94,16 @@ const WARNING_KEYS: Record<VThermWarning, string> = {
  */
 const VALVE_STUCK_WARNING_KEY = 'device.warning.valve_stuck';
 
+/**
+ * Une tête du groupe a cessé d'être pilotée, et c'est la panne la plus silencieuse de toutes.
+ *
+ * Elle ne coupe rien, ne lève rien, ne fait faiblir aucune demande : la pièce chauffe simplement à
+ * une fraction de sa puissance pendant que la tuile affiche une régulation normale. Sans ce
+ * bandeau, le seul signe en serait une ligne de journal — que personne ne lit, et qu'une app
+ * installée par CLI ne rend même pas lisible.
+ */
+const EMITTER_MISMATCH_WARNING_KEY = 'device.warning.emitter_mismatch';
+
 const VTHERM_STORE_KEY = 'vtherm.state';
 const BOILER_STORE_KEY = 'central.boiler';
 
@@ -239,6 +249,8 @@ export class VThermParticipant implements Tickable {
   private coreWarning: VThermWarning | null = null;
   /** La dorsale est tombée ET la vanne est restée figée : voir `onValveBackendAvailability`. */
   private valveStuck = false;
+  /** Têtes écartées du groupe au dernier pas. Relu de l'émetteur, jamais déduit ici. */
+  private emitterMismatch = false;
 
   /** Vrai pendant qu'un pas est en vol. Garde de réentrance, voir `tick`. */
   private ticking = false;
@@ -336,6 +348,9 @@ export class VThermParticipant implements Tickable {
         this.host.error('Détection des capabilities de l\'émetteur :', err);
       }
     }
+
+    // APRÈS la détection, qui est ce qui fait sortir une tête du groupe ou l'y ramène.
+    this.emitterMismatch = this.emitter.mismatchedHeadIds.length > 0;
 
     const roomTemp = readNumber(this.sources.room, nowMs, FRESHNESS.roomTempMs);
     const inputs = this.collectInputs(roomTemp, nowMs);
@@ -455,10 +470,14 @@ export class VThermParticipant implements Tickable {
    * qu'une vanne figée la dégrade.
    */
   private async refreshWarning(): Promise<void> {
+    // Ordre de priorité, du plus grave au moins grave. Le capteur muet passe devant : il suspend
+    // toute la régulation. Vient ensuite la tête écartée, parce qu'elle est DURABLE et invisible,
+    // là où la vanne figée accompagne une panne de dorsale que l'utilisateur constate par ailleurs.
     const core = this.coreWarning;
-    const key = core !== null
-      ? WARNING_KEYS[core]
-      : (this.valveStuck ? VALVE_STUCK_WARNING_KEY : null);
+    let key: string | null = null;
+    if (core !== null) key = WARNING_KEYS[core];
+    else if (this.emitterMismatch) key = EMITTER_MISMATCH_WARNING_KEY;
+    else if (this.valveStuck) key = VALVE_STUCK_WARNING_KEY;
 
     if (key === this.publishedWarningKey) return;
     this.publishedWarningKey = key;

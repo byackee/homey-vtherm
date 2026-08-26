@@ -230,3 +230,23 @@ test('une tête unique se comporte EXACTEMENT comme avant les groupes', () => {
     }
   }
 });
+
+test('l\'échéance annoncée est toujours dans le futur, même à 7 têtes', () => {
+  // `cycleMs / 7` n'est pas représentable en binaire : l'arrondi finit par rendre un `untilMs` de
+  // l'ordre de 1e-10, que l'addition à `nowMs` avale entièrement. L'échéance rendue devenait alors
+  // l'instant courant. Le scrutateur d'aujourd'hui ne s'y perdrait pas ; une minuterie armée sur
+  // cette valeur tournerait en boucle.
+  for (const heads of [1, 2, 3, 5, 6, 7, 8]) {
+    let state = createDutyCycleState();
+    let now = 0;
+    for (let pas = 0; pas < 60; pas += 1) {
+      const r = stepDutyCycle(state, 0.3, P, now, heads);
+      assert.ok(
+        r.wakeUpAtMs > now,
+        `${heads} têtes, pas ${pas} : échéance ${r.wakeUpAtMs} pour un instant ${now}`,
+      );
+      state = r.nextState;
+      now = r.wakeUpAtMs;
+    }
+  }
+});

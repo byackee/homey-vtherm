@@ -34,7 +34,8 @@
       "no_api": "Adaptive Thermostat kan uw apparaten nog niet lezen. De toegang tot de Homey API is niet actief — probeer over enkele seconden opnieuw of herstart de app.",
       "repair_no_create": "Dit apparaat bestaat al — u repareert het, u maakt er geen nieuw aan.",
       "too_many_emitters": "Dat zijn meer verwarmingen dan één thermostaat kan aansturen. Verdeel de kamer liever over twee thermostaten.",
-      "mixed_emitters": "Deze verwarmingen zijn niet van dezelfde soort. De ene accepteert een doeltemperatuur, de andere is een gewone schakelaar, en een thermostaat stuurt zijn verwarmingen op de ene of de andere manier aan — niet op beide. Groepeer de kranen samen en geef de geschakelde apparaten hun eigen thermostaat."
+      "mixed_emitters": "Deze verwarmingen zijn niet van dezelfde soort. De ene accepteert een doeltemperatuur, de andere is een gewone schakelaar, en een thermostaat stuurt zijn verwarmingen op de ene of de andere manier aan — niet op beide. Groepeer de kranen samen en geef de geschakelde apparaten hun eigen thermostaat.",
+      "duplicate_emitter": "Deze verwarming hoort al bij deze thermostaat. Kies een andere, of bewerk in plaats daarvan de hele lijst — hem opnieuw toewijzen zou stilzwijgend een van de andere laten vallen."
     },
     "finish": "Thermostaat aanmaken",
     "creating": "Aanmaken…",
@@ -143,7 +144,8 @@
       "no_sensor": "Geen bruikbare kamertemperatuursensor: de regeling is opgeschort en er wordt niets naar de verwarming gestuurd.",
       "sensor_stale": "De kamertemperatuurmeting is verouderd: de regeling is opgeschort en er wordt niets naar de verwarming gestuurd.",
       "sensor_stale_safety": "De kamertemperatuurmeting is verouderd. De veiligheidsmodus houdt een terugval aan tot de sensor terugkomt, daarna geeft hij op.",
-      "valve_stuck": "De Zigbee2MQTT-verbinding is weggevallen en de klep bleef op zijn laatste opening staan: de kamer verwarmt mogelijk niet, ongeacht het instelpunt. De regeling gaat verder via het instelpunt."
+      "valve_stuck": "De Zigbee2MQTT-verbinding is weggevallen en de klep bleef op zijn laatste opening staan: de kamer verwarmt mogelijk niet, ongeacht het instelpunt. De regeling gaat verder via het instelpunt.",
+      "emitter_mismatch": "Een van de verwarmingen in deze kamer wordt niet meer aangestuurd: hij kwam terug met een ander soort besturing en blijft staan waar hij het laatst stond. De kamer verwarmt op een fractie van zijn vermogen totdat hij terugkeert of u de thermostaat repareert."
     }
   },
   "flow": {

@@ -86,15 +86,31 @@ export class MultiEmitterAdapter implements EmitterAdapter {
   }
 
   /**
-   * Le mode du groupe est celui de la tête de référence.
+   * Le mode du groupe est celui du PLUS GRAND NOMBRE de têtes, jamais celui d'une tête désignée.
    *
-   * Pas un vote majoritaire : la branche entière de `lib/step.mts` en dépend, et une majorité qui
-   * bascule ferait passer une pièce du découpage temporel au pilotage d'ouverture en cours de
-   * cycle. L'appairage impose des têtes homogènes ; ceci n'est que le comportement en cas de
-   * dérive constatée après coup.
+   * Une première version suivait la tête n°1, et c'était une faute : un groupe de trois vannes dont
+   * seule la PREMIÈRE est ré-annoncée sans consigne basculait tout entier en tout-ou-rien, écartait
+   * les deux vannes saines, et les laissait figées sur leur dernière ouverture indéfiniment. Le cas
+   * symétrique — une tête quelconque qui dérive — était pourtant déjà traité. Faire dépendre le
+   * groupe d'une tête particulière donnait à un seul appareil le pouvoir de geler tous les autres.
+   *
+   * La majorité choisit donc le mode qui garde le plus de têtes pilotables. À égalité — un groupe de
+   * deux dont l'une dérive — c'est le mode à CONSIGNE qui l'emporte, et l'asymétrie est délibérée :
+   * une vanne Zigbee2MQTT ré-annoncée sans sa consigne est une panne observée et transitoire, alors
+   * qu'un relais qui gagnerait une consigne n'existe pas.
    */
   get mode(): EmitterWriteMode {
-    return this.heads[0]!.mode;
+    const tally = new Map<EmitterWriteMode, number>();
+    for (const head of this.heads) tally.set(head.mode, (tally.get(head.mode) ?? 0) + 1);
+
+    let best = this.heads[0]!.mode;
+    for (const [mode, count] of tally) {
+      const bestCount = tally.get(best) ?? 0;
+      if (count > bestCount) best = mode;
+      // Égalité : la consigne l'emporte sur le tout-ou-rien, jamais l'inverse.
+      else if (count === bestCount && best === 'switch' && mode !== 'switch') best = mode;
+    }
+    return best;
   }
 
   /** Les têtes qui ne sont pas dans le mode du groupe, et qui ne reçoivent donc plus rien. */
@@ -187,21 +203,30 @@ export class MultiEmitterAdapter implements EmitterAdapter {
   // --- Lectures --------------------------------------------------------------
 
   /**
-   * Vrai dès qu'une tête chauffe.
+   * Vrai dès qu'une tête chauffe — parmi celles dont la lecture est encore valable.
    *
-   * `stale` n'est vrai que si TOUTES les lectures le sont : une lecture fraîche, même sur une seule
-   * tête, est une information de première main sur la pièce. `atMs` est la plus récente, pour la
-   * même raison — dater le groupe sur la tête la plus muette ferait périmer une information qu'on
-   * vient d'obtenir.
+   * LE FILTRE SUR LA FRAÎCHEUR N'EST PAS UN DÉTAIL. Une première version prenait le OU sur TOUTES
+   * les lectures tout en ne déclarant le groupe périmé que si TOUTES l'étaient : une vanne tombée
+   * du réseau alors qu'elle chauffait restait éternellement à `true`, une vanne saine lisait
+   * `false`, et l'agrégat rendait « ça chauffe, et c'est frais ». Le noyau l'acceptait, la demande
+   * restait `active` pour toujours, et la chaudière chauffait une pièce qui ne chauffait pas.
+   *
+   * Une lecture fraîche, même sur une seule tête, reste une information de première main : tant
+   * qu'il en existe une, elle seule décide, et `atMs` est la plus récente d'entre elles. Quand
+   * toutes se sont tues, on rend leur agrégat en le disant périmé — c'est au noyau de trancher ce
+   * qu'il fait d'une ignorance, pas à l'adaptateur de la déguiser.
    */
   readHeating(nowMs: number): Reading<boolean> | null {
     const readings = this.collect((head) => head.readHeating(nowMs));
     if (readings.length === 0) return null;
 
+    const fresh = readings.filter((r) => !r.stale);
+    const usable = fresh.length > 0 ? fresh : readings;
+
     return {
-      value: readings.some((r) => r.value),
-      atMs: Math.max(...readings.map((r) => r.atMs)),
-      stale: readings.every((r) => r.stale),
+      value: usable.some((r) => r.value),
+      atMs: Math.max(...usable.map((r) => r.atMs)),
+      stale: fresh.length === 0,
     };
   }
 
@@ -222,20 +247,44 @@ export class MultiEmitterAdapter implements EmitterAdapter {
     return this.heads.map((head) => (head.mode === mode ? head.readHeating(nowMs) : null));
   }
 
-  /** La pire pile du groupe, telle quelle : c'est elle qui décidera de la prochaine intervention. */
+  /**
+   * La pire pile du groupe — parmi celles dont la lecture est encore valable.
+   *
+   * Le filtre a la même raison d'être que dans `readHeating`, et il rattrape ici la panne même que
+   * cette version corrigeait par ailleurs : le participant ne publie que les lectures fraîches, si
+   * bien qu'une seule tête muette au-delà du seuil — la plus faible, justement, puisqu'une pile qui
+   * s'épuise finit par ne plus rien émettre — supprimait la tuile pour TOUT le groupe, alors que
+   * les autres têtes rapportaient parfaitement.
+   *
+   * Quand aucune lecture n'est fraîche on rend quand même la pire, périmée : le participant s'en
+   * chargera. Rendre `null` effacerait la distinction entre « aucune tête n'a de pile » et « aucune
+   * ne l'a dit récemment ».
+   */
   readBattery(nowMs: number): Reading<number> | null {
     const readings = this.collect((head) => head.readBattery(nowMs));
     if (readings.length === 0) return null;
 
-    return readings.reduce((worst, r) => (r.value < worst.value ? r : worst));
+    const fresh = readings.filter((r) => !r.stale);
+    const usable = fresh.length > 0 ? fresh : readings;
+
+    return usable.reduce((worst, r) => (r.value < worst.value ? r : worst));
   }
 
   // --- Cycle de vie ----------------------------------------------------------
 
-  /** `false` dès qu'une tête est restée figée : l'utilisateur doit savoir qu'il en reste une. */
+  /**
+   * `false` dès qu'une tête est restée figée : l'utilisateur doit savoir qu'il en reste une.
+   *
+   * TOUTES les têtes, écartées comprises, et pour le mot près la raison écrite sous
+   * `restoreSafeState` : une tête sortie du groupe est justement celle qu'on risque de laisser
+   * ouverte pour toujours. Le filtre `participating()` était doublement fautif ici — la tête
+   * divergente n'était pas libérée, ET son absence du `every()` faisait rendre `true`, donc
+   * `valveStuck` restait faux et l'avertissement « vanne figée » ne partait pas. La dorsale tombait,
+   * une vanne restait ouverte, et rien ne le disait.
+   */
   async releaseValve(nowMs: number): Promise<boolean> {
     const results = await Promise.all(
-      this.participating().map(async (head) => {
+      this.heads.map(async (head) => {
         try {
           return await head.releaseValve(nowMs);
         } catch (err) {

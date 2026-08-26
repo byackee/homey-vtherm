@@ -74,6 +74,7 @@ class FakeHead implements EmitterAdapter {
   async applySetpoint(v: number): Promise<void> { await this.record('setpoint', `setpoint:${v}`); }
   async applyValve(p: number): Promise<void> { await this.record('valve', `valve:${p}`); }
   readonly headCount = 1;
+  readonly mismatchedHeadIds: readonly string[] = [];
 
   readHeatingHeads(): readonly (Reading<boolean> | null)[] { return [this.heating]; }
 
@@ -378,4 +379,94 @@ test('les identifiants gardent l\'ordre d\'appairage : la première est la tête
 
   assert.deepEqual(g.headIds, ['a', 'b']);
   assert.equal(g.deviceId, 'a');
+});
+
+// --- Ce qu'une relecture indépendante a trouvé ----------------------------------
+//
+// Quatre défauts, tous de la même famille : l'agrégation avait l'air juste, et mentait dans un cas
+// que les tests d'origine ne visitaient pas. Ils sont ici pour que ce cas soit visité.
+
+test('une lecture PÉRIMÉE ne rend pas le groupe « en chauffe et frais »', async () => {
+  // La vanne b est tombée du réseau alors qu'elle chauffait : sa dernière lecture dit `true` pour
+  // toujours. La vanne a, saine, dit `false`. L'agrégat naïf rendait { true, frais } — le noyau
+  // l'acceptait, la demande restait active, et la chaudière chauffait une pièce qui ne chauffe pas.
+  const g = group([
+    new FakeHead({ id: 'a', heating: fresh(false, 1_000) }),
+    new FakeHead({ id: 'b', heating: stale(true, 100) }),
+  ]);
+
+  assert.deepEqual(
+    g.readHeating(2_000),
+    { value: false, atMs: 1_000, stale: false },
+    'tant qu\'une lecture fraîche existe, elle seule décide',
+  );
+});
+
+test('quand toutes les têtes se taisent, le groupe le DIT au lieu de trancher', async () => {
+  const g = group([
+    new FakeHead({ id: 'a', heating: stale(false, 100) }),
+    new FakeHead({ id: 'b', heating: stale(true, 200) }),
+  ]);
+
+  const reading = g.readHeating(9_000);
+  assert.equal(reading?.stale, true, 'c\'est au noyau de décider quoi faire d\'une ignorance');
+  assert.equal(reading?.value, true);
+});
+
+test('la pire pile est la pire des CRÉDIBLES, pas la pire tout court', async () => {
+  // Une pile qui s'épuise finit par ne plus rien émettre : c'est justement la plus faible qui
+  // devient muette. La retenir périmée supprimait la tuile de tout le groupe, alors que les autres
+  // têtes rapportaient parfaitement — la panne même que cette version corrigeait par ailleurs.
+  const g = group([
+    new FakeHead({ id: 'a', battery: { value: 60, atMs: 1_000, stale: false } }),
+    new FakeHead({ id: 'b', battery: { value: 5, atMs: 10, stale: true } }),
+  ]);
+
+  assert.deepEqual(g.readBattery(2_000), { value: 60, atMs: 1_000, stale: false });
+});
+
+test('une tête de RÉFÉRENCE qui dérive ne gèle pas les têtes saines', async () => {
+  // Le cas symétrique était traité, celui-ci ne l'était pas : suivre la tête n°1 donnait à un seul
+  // appareil le pouvoir d'écarter tous les autres. Deux vannes saines seraient restées figées.
+  const heads = [
+    new FakeHead({ id: 'a', mode: 'switch' }),
+    new FakeHead({ id: 'b', mode: 'setpoint' }),
+    new FakeHead({ id: 'c', mode: 'setpoint' }),
+  ];
+  const g = group(heads);
+
+  assert.equal(g.mode, 'setpoint', 'la majorité décide');
+  assert.deepEqual(g.mismatchedHeadIds, ['a']);
+
+  await g.applySetpoint(20, 1_000);
+  assert.deepEqual(heads[1]!.calls, ['setpoint:20']);
+  assert.deepEqual(heads[2]!.calls, ['setpoint:20']);
+});
+
+test('à égalité, la consigne l\'emporte sur le tout-ou-rien', async () => {
+  // Une vanne ré-annoncée sans sa consigne est une panne observée et transitoire ; un relais qui
+  // gagnerait une consigne n'existe pas. L'asymétrie penche donc du côté qui se répare tout seul.
+  const g = group([
+    new FakeHead({ id: 'a', mode: 'switch' }),
+    new FakeHead({ id: 'b', mode: 'setpoint' }),
+  ]);
+
+  assert.equal(g.mode, 'setpoint');
+  assert.deepEqual(g.mismatchedHeadIds, ['a']);
+});
+
+test('la libération de vanne couvre les têtes écartées, et le dit quand l\'une résiste', async () => {
+  // Double peine du filtre : la tête divergente n'était pas libérée, ET son absence du décompte
+  // faisait rendre « tout va bien » — donc aucun avertissement « vanne figée ».
+  const divergente = new FakeHead({ id: 'b', mode: 'switch', released: false });
+  const heads = [new FakeHead({ id: 'a', mode: 'valve' }), divergente];
+
+  const released = await group(heads).releaseValve(1_000);
+
+  assert.ok(divergente.calls.includes('release'), 'elle est justement celle qu\'on laisserait ouverte');
+  assert.equal(released, false, 'sinon l\'avertissement « vanne figée » ne part jamais');
+});
+
+test('un émetteur seul n\'a aucune tête écartée à signaler', () => {
+  assert.deepEqual(new FakeHead({ id: 'a' }).mismatchedHeadIds, []);
 });
