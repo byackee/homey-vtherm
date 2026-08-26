@@ -15,6 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { MAX_EMITTERS } from '../lib/sources.mjs';
 
 const ROOT = process.cwd();
 const DRIVERS = join(ROOT, 'drivers');
@@ -267,5 +268,33 @@ test('chaque vue déclare son préfixe et ne cible que ses propres éléments', 
       assert.fail(
         `${view.driverId}/${view.viewId}.html cible « ${match[1]} » en dur au lieu de passer par PREFIX`);
     }
+  }
+});
+
+/**
+ * La borne du groupe est recopiée dans les vues : ce test est ce qui l'empêche de dériver.
+ *
+ * Une vue de pairing est du JavaScript de navigateur : elle ne peut rien importer de `lib/`. Les
+ * deux vues qui laissent cocher des émetteurs portent donc leur propre `MAX_EMITTERS`, en dur.
+ * C'est une copie manuelle, et une copie manuelle qu'aucun test ne surveille finit toujours par
+ * mentir — la borne changerait dans `lib/sources.mts`, les vues laisseraient cocher au-delà, et le
+ * refus n'arriverait qu'APRÈS le clic, sans que l'écran ne le montre.
+ */
+test('les vues connaissent la MÊME borne d\'émetteurs que le noyau', () => {
+  const views = [
+    'drivers/vtherm/pair/pick_emitter.html',
+    'drivers/vtherm/pair/edit_sources.html',
+  ];
+
+  for (const path of views) {
+    const source = readFileSync(join(process.cwd(), path), 'utf8');
+    const match = /var MAX_EMITTERS = (\d+);/.exec(source);
+
+    assert.ok(match !== null, `${path} ne déclare pas de borne d'émetteurs`);
+    assert.equal(
+      Number(match?.[1]),
+      MAX_EMITTERS,
+      `${path} borne à ${match?.[1]} alors que lib/sources.mts borne à ${MAX_EMITTERS}`,
+    );
   }
 });
