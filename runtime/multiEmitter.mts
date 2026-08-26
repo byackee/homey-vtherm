@@ -19,7 +19,8 @@
  *     abandonne les têtes restantes au premier rejet : un radiateur injoignable laisserait les
  *     autres à leur position précédente, et la pièce se réglerait sur une fraction de sa puissance
  *     sans que rien ne le dise. On tente tout, puis on relaie la première erreur.
- *  2. **Les têtes dont le mode diverge sont ÉCARTÉES des écritures, pas ignorées en silence.** Un
+ *  2. **Les têtes dont le mode diverge sont écartées de la CONSIGNE et de la VANNE — jamais de la
+ *     bascule.** Voir `applySwitch` pour la raison, qui est le contraire d'un détail. Un
  *     appareil Zigbee2MQTT ré-annoncé peut revenir sans sa consigne, donc en mode `switch` dans un
  *     groupe de vannes. Lui envoyer une bascule échouerait à chaque pas, et son doute
  *     (`switchUnconfirmed`) rendrait la demande `unknown` pour toujours : la chaudière resterait
@@ -149,24 +150,34 @@ export class MultiEmitterAdapter implements EmitterAdapter {
   /**
    * Chaque tête reçoit SON état, pas celui du groupe.
    *
-   * L'indexation porte sur la liste COMPLÈTE, têtes écartées comprises : le noyau a raisonné sur
-   * `headCount`, et décaler les indices ici enverrait à la tête n°2 ce qui était calculé pour la
-   * n°3 — c'est-à-dire l'inverse du déphasage, deux radiateurs qui tirent ensemble.
+   * L'indexation porte sur la liste COMPLÈTE : le noyau a raisonné sur `headCount`, et décaler les
+   * indices ici enverrait à la tête n°2 ce qui était calculé pour la n°3 — c'est-à-dire l'inverse
+   * du déphasage, deux radiateurs qui tirent ensemble.
+   *
+   * SEULE ÉCRITURE QUI NE FILTRE PAS SUR LE MODE, et ce n'est pas un oubli.
+   *
+   * Écarter ici une tête au mode divergent créait un mensonge : le noyau enregistre dans sa mémoire
+   * d'écriture qu'il a commandé cette tête, alors que rien n'est parti. Quand elle revient, « rien
+   * n'est jamais parti » est devenu faux, l'état commandé n'a pas basculé entre-temps, et une tête
+   * qui ne rapporte pas son propre état ne peut pas non plus être vue en divergence. Elle n'est
+   * alors JAMAIS commandée. À puissance saturée l'état commandé ne bascule plus jamais : le relais
+   * reste éteint pour toujours pendant que la tuile affiche une pièce en chauffe — exactement la
+   * panne que la réaffirmation sur divergence existe pour empêcher.
+   *
+   * Tenter ne coûte rien : une tête sans liaison d'interrupteur rend la main sans appeler Homey, et
+   * son doute n'est pas lu tant qu'elle est hors du groupe. Le filtrage par mode reste en place là
+   * où une écriture pourrait faire du dégât — la consigne et l'ouverture de vanne.
    */
   async applySwitch(states: readonly (boolean | null)[], nowMs: number): Promise<void> {
-    const mode = this.mode;
-    const targets = this.heads
-      .map((head, index) => ({ head, on: states[index] ?? null }))
-      .filter((entry) => entry.on !== null && entry.head.mode === mode);
+    const targets: { head: EmitterAdapter; on: boolean }[] = [];
+    this.heads.forEach((head, index) => {
+      const on = states[index] ?? null;
+      if (on !== null) targets.push({ head, on });
+    });
 
-    await this.settleAll(
-      'bascule',
-      targets.map((entry) => entry.head),
-      async (head) => {
-        const entry = targets.find((t) => t.head === head)!;
-        await head.applySwitch([entry.on], nowMs);
-      },
-    );
+    await this.settleItems('bascule', targets, async ({ head, on }) => {
+      await head.applySwitch([on], nowMs);
+    });
   }
 
   async pushRoomTemperature(value: number, mode: SyncMode, nowMs: number): Promise<void> {
@@ -317,13 +328,31 @@ export class MultiEmitterAdapter implements EmitterAdapter {
     heads: readonly EmitterAdapter[],
     run: (head: EmitterAdapter) => Promise<void>,
   ): Promise<void> {
-    const results = await Promise.allSettled(heads.map(async (head) => run(head)));
+    await this.settleItems(label, heads.map((head) => ({ head })), ({ head }) => run(head));
+  }
+
+  /**
+   * Tente sur tous les éléments, puis relaie la PREMIÈRE erreur.
+   *
+   * Par ÉLÉMENT et non par tête : une commande de bascule porte un état propre à chaque tête, et
+   * retrouver cet état depuis la tête obligerait à chercher par identité d'objet dans la liste —
+   * une correspondance qui devient fausse à la première tête présente deux fois.
+   *
+   * Relayer plutôt qu'avaler : `runtime/participants.mts` enveloppe chaque écriture dans son propre
+   * `safely`, qui journalise. Avaler ici rendrait une écriture ratée totalement silencieuse.
+   */
+  private async settleItems<T extends { head: EmitterAdapter }>(
+    label: string,
+    items: readonly T[],
+    run: (item: T) => Promise<void>,
+  ): Promise<void> {
+    const results = await Promise.allSettled(items.map(async (item) => run(item)));
 
     let first: unknown = null;
     for (let i = 0; i < results.length; i += 1) {
       const result = results[i]!;
       if (result.status !== 'rejected') continue;
-      this.logError(`${label} sur ${heads[i]!.deviceId} :`, result.reason);
+      this.logError(`${label} sur ${items[i]!.head.deviceId} :`, result.reason);
       if (first === null) first = result.reason;
     }
 

@@ -140,20 +140,50 @@ test('une tête qui refuse n\'empêche pas les autres de recevoir la commande', 
 });
 
 test('chaque tête reçoit SON état, et l\'indexation reste alignée sur la liste complète', async () => {
-  // La tête du milieu diverge : elle ne reçoit rien. Les deux autres doivent recevoir ce qui a été
-  // calculé POUR ELLES — décaler les indices ici enverrait à la n°3 l'ordre de la n°2, c'est-à-dire
-  // l'inverse exact du déphasage.
+  // Chacune doit recevoir ce qui a été calculé POUR ELLE — décaler les indices enverrait à la n°3
+  // l'ordre de la n°2, c'est-à-dire l'inverse exact du déphasage.
   const heads = [
     new FakeHead({ id: 'a', mode: 'switch' }),
-    new FakeHead({ id: 'b', mode: 'valve' }),
+    new FakeHead({ id: 'b', mode: 'switch' }),
     new FakeHead({ id: 'c', mode: 'switch' }),
   ];
 
-  await group(heads).applySwitch([true, true, false], 1_000);
+  await group(heads).applySwitch([true, null, false], 1_000);
 
   assert.deepEqual(heads[0]!.calls, ['switch:true']);
-  assert.deepEqual(heads[1]!.calls, [], 'tête écartée : elle ne reçoit rien');
+  assert.deepEqual(heads[1]!.calls, [], 'entrée nulle : on ne touche pas à cette tête');
   assert.deepEqual(heads[2]!.calls, ['switch:false'], 'la n°3 reçoit bien l\'ordre de la n°3');
+});
+
+test('une bascule est tentée MÊME sur une tête au mode divergent', async () => {
+  // RÉGRESSION. L'écarter ici créait un mensonge : le noyau enregistre qu'il a commandé cette tête
+  // alors que rien n'était parti. À son retour, « rien n'est jamais parti » est devenu faux,
+  // l'état commandé n'a pas basculé entre-temps, et une tête qui ne rapporte pas son état ne peut
+  // pas être vue en divergence — elle n'est alors JAMAIS commandée. À puissance saturée l'état ne
+  // bascule plus jamais : le relais reste éteint pour toujours pendant que la tuile affiche une
+  // pièce en chauffe. C'est exactement la panne que la réaffirmation sur divergence empêche.
+  const divergente = new FakeHead({ id: 'b', mode: 'valve' });
+  const heads = [new FakeHead({ id: 'a', mode: 'switch' }), divergente];
+
+  await group(heads).applySwitch([true, true], 1_000);
+
+  assert.deepEqual(
+    divergente.calls,
+    ['switch:true'],
+    'tenter ne coûte rien — une tête sans liaison d\'interrupteur rend la main sans appeler Homey',
+  );
+});
+
+test('la consigne et la vanne, elles, restent filtrées par mode', async () => {
+  // L'asymétrie est voulue : une bascule sur une tête sans interrupteur est un non-événement,
+  // alors qu'une consigne ou une ouverture envoyée au mauvais mode écrit vraiment quelque chose.
+  const divergente = new FakeHead({ id: 'b', mode: 'switch' });
+  const g = group([new FakeHead({ id: 'a', mode: 'valve' }), divergente]);
+
+  await g.applyValve(40, 1_000);
+  await g.applySetpoint(20, 1_000);
+
+  assert.deepEqual(divergente.calls, []);
 });
 
 test('une entrée nulle ne touche pas à sa tête : les têtes ne basculent pas au même pas', async () => {

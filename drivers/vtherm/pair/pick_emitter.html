@@ -198,7 +198,19 @@
         refreshCount();
       }
 
-      /** Ajoute ou retire une tête. Rien n'est envoyé ici : le groupe part d'un seul coup. */
+      /**
+       * Ajoute ou retire une tête, PUIS envoie le groupe entier au driver.
+       *
+       * Envoyer à chaque coche et non à la validation, et c'est une correction, pas un choix de
+       * confort : l'assistant de Homey affiche SON PROPRE bouton « Continuer » sous la vue, que
+       * nous ne contrôlons pas et qui ne peut pas être grisé. Un utilisateur qui coche ses vannes
+       * puis presse ce bouton-là — le geste naturel — faisait avancer l'assistant sans que rien ne
+       * soit jamais parti, et le thermostat était refusé à la création pour « aucun émetteur »
+       * alors que l'écran en montrait trois cochés.
+       *
+       * Le driver remplace la liste à chaque appel : la répétition est sans effet de bord, et le
+       * dernier état de l'écran est toujours celui qu'il détient.
+       */
       function toggle(device, li) {
         var at = SELECTED.indexOf(device.id);
         if (at >= 0) {
@@ -214,6 +226,13 @@
         }
         hideState();
         refreshCount();
+        send();
+      }
+
+      /** Pose le groupe courant chez le driver. Sans navigation : la vue n'avance pas toute seule. */
+      function send() {
+        return emit(VIEW.selectEvent, SELECTED.slice())
+          .catch(function (err) { showError(err.message); });
       }
 
       function refreshCount() {
@@ -230,6 +249,14 @@
         box.textContent = SELECTED.length === 1 ? one : many.replace('{n}', String(SELECTED.length));
       }
 
+      /**
+       * Le bouton de la vue : il renvoie le groupe puis avance.
+       *
+       * Il fait doublon avec le bouton de l'assistant, et c'est voulu — celui de l'assistant est
+       * hors de notre portée, celui-ci est à côté de la liste, là où le regard se trouve après
+       * avoir coché. Le renvoi est redondant depuis que chaque coche envoie déjà : on le garde
+       * parce qu'il ne coûte rien et qu'il rend la vue correcte même si un `emit` de coche a échoué.
+       */
       function submit() {
         if (SELECTED.length === 0) return;
         var button = document.getElementById(PREFIX + 'continue');
