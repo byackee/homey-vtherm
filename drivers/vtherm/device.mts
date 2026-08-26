@@ -10,7 +10,8 @@
 import { resolveCapabilityId } from '../../lib/capabilityMatch.mjs';
 import {
   EMITTER_LIST_STORE_KEY, MAX_EMITTERS, SOURCE_STORE_KEYS, SOURCE_CAPABILITIES, EMITTER_CLASSES,
-  emitterExtraCapabilities, emitterStorePatch, readEmitterIds, type SourceKey,
+  emitterExtraCapabilities, emitterStorePatch, isHomogeneous, readEmitterIds,
+  type EmitterProbe, type SourceKey,
 } from '../../lib/sources.mjs';
 import {
   VTHERM_EXPLAIN_IDS, changedSettings, explainSettings, joinLinkedLabels,
@@ -36,7 +37,7 @@ import type VThermApp from '../../app.mjs';
 
 export {
   EMITTER_LIST_STORE_KEY, MAX_EMITTERS, SOURCE_STORE_KEYS, SOURCE_CAPABILITIES, EMITTER_CLASSES,
-  emitterExtraCapabilities, emitterStorePatch, readEmitterIds,
+  emitterExtraCapabilities, emitterStorePatch, isHomogeneous, readEmitterIds,
 } from '../../lib/sources.mjs';
 export type { SourceKey } from '../../lib/sources.mjs';
 
@@ -663,6 +664,7 @@ export default class VThermDevice extends Homey.Device {
   async setEmitterIds(ids: readonly string[]): Promise<void> {
     if (ids.length === 0) throw new Error(this.homey.__('pair.error.incomplete'));
     if (ids.length > MAX_EMITTERS) throw new Error(this.homey.__('pair.error.too_many_emitters'));
+    await this.assertHomogeneous(ids);
 
     for (const [key, value] of Object.entries(emitterStorePatch(ids))) {
       await this.setStoreValue(key, value);
@@ -670,6 +672,39 @@ export default class VThermDevice extends Homey.Device {
     await this.grantEmitterCapabilities(ids);
     void this.refreshLinkedLabels();
     await this.reload();
+  }
+
+  /**
+   * Refuse un groupe qui mélange des têtes à consigne et des têtes en tout-ou-rien.
+   *
+   * ICI et non chez l'appelant, parce que c'est le seul point de passage. Le pairing et la page de
+   * réparation vérifiaient déjà, mais `rebindSource('emitter')` remplace la tête n°1 sans rien
+   * demander — et il est atteignable depuis la page de RÉGLAGES de l'app, via `setThermostatSource`
+   * de `api.mts`. Un groupe de deux vannes dont on change l'émetteur pour une prise commutée
+   * basculait ainsi tout entier en tout-ou-rien : la seconde vanne, restée en mode consigne, n'était
+   * plus jamais commandée et restait figée sur sa dernière ouverture, sans un mot.
+   *
+   * `lib/step.mts` choisit une branche ENTIÈRE sur `emitterMode` : un groupe mixte n'a pas de
+   * comportement correct à offrir, il en aurait un par tête.
+   *
+   * Une sonde que le hub ne connaît pas compte comme COMPATIBLE : refuser sur une ignorance rendrait
+   * le groupe immodifiable pendant la minute qui suit le démarrage de l'app.
+   */
+  private async assertHomogeneous(ids: readonly string[]): Promise<void> {
+    if (ids.length < 2) return;
+
+    const probes = await Promise.all(ids.map(async (id) => this.probe(id)));
+    if (isHomogeneous(probes)) return;
+
+    throw new Error(this.homey.__('pair.error.mixed_emitters'));
+  }
+
+  private async probe(deviceId: string): Promise<EmitterProbe | null> {
+    try {
+      return await this.app.hub.getDeviceSummary(deviceId);
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -685,13 +720,7 @@ export default class VThermDevice extends Homey.Device {
    * Une tuile devenue vide après un retrait de tête est le prix, et il est bien plus petit.
    */
   private async grantEmitterCapabilities(ids: readonly string[]): Promise<void> {
-    const probes = await Promise.all(ids.map(async (id) => {
-      try {
-        return await this.app.hub.getDeviceSummary(id);
-      } catch {
-        return null;
-      }
-    }));
+    const probes = await Promise.all(ids.map(async (id) => this.probe(id)));
 
     for (const capabilityId of emitterExtraCapabilities(probes)) {
       if (this.hasCapability(capabilityId)) continue;

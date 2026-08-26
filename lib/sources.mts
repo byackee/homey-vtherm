@@ -189,3 +189,23 @@ export function emitterExtraCapabilities(
   if (probes.some((p) => p === null || hasWritableSetpoint(p))) out.push('vtherm_valve_open');
   return out;
 }
+
+/**
+ * Vrai quand toutes les têtes se pilotent de la même façon.
+ *
+ * `lib/step.mts` choisit une branche ENTIÈRE sur `emitterMode` : découpage temporel d'un côté,
+ * pilotage d'ouverture de l'autre. Un groupe mixte n'a donc pas de comportement correct à offrir —
+ * il en aurait un par tête, et le noyau n'en connaît qu'un. La tête qui n'est pas du mode du groupe
+ * se retrouve écartée des écritures et reste figée sur sa dernière position, sans un mot.
+ *
+ * Une sonde `null` — le hub n'a pas répondu — compte comme COMPATIBLE avec n'importe quoi. Refuser
+ * sur une ignorance rendrait un groupe impossible à former ou à modifier pendant la minute qui suit
+ * le démarrage de l'app, alors que l'appareil visé est peut-être parfaitement conforme.
+ *
+ * Ici, dans la couche pure, parce que trois chemins y mènent — la création, la réparation et la
+ * page de réglages — et qu'une règle recopiée trois fois est une règle qui finira par diverger.
+ */
+export function isHomogeneous(probes: ReadonlyArray<EmitterProbe | null>): boolean {
+  const known = probes.filter((p): p is EmitterProbe => p !== null).map(hasWritableSetpoint);
+  return known.every((value) => value === known[0]);
+}

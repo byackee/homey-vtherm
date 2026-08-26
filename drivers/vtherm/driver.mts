@@ -14,7 +14,7 @@ import type { PresenceOverride } from '../../runtime/participants.mjs';
 import type VThermApp from '../../app.mjs';
 import VThermDevice, {
   EMITTER_CLASSES, MAX_EMITTERS, SOURCE_STORE_KEYS, emitterExtraCapabilities, emitterStorePatch,
-  toPreset, type SourceKey, SOURCE_CAPABILITIES,
+  isHomogeneous, toPreset, type SourceKey, SOURCE_CAPABILITIES,
 } from './device.mjs';
 
 /** `@types/homey` n'exporte pas `PairSession` : on le reprend de la signature qui l'emploie. */
@@ -143,11 +143,9 @@ export default class VThermDriver extends Homey.Driver {
 
     for (const event of EMITTER_SELECT_EVENTS) {
       session.setHandler(event, async (data: unknown) => {
-        const ids = asDeviceIds(data);
-        // Le refus vient d'ici et non de `setEmitterIds` : la vue doit pouvoir afficher POURQUOI
-        // le groupe est refusé, et `setEmitterIds` recharge l'appareil avant de savoir répondre.
-        await this.assertHomogeneous(ids);
-        await target.setEmitterIds(ids);
+        // `setEmitterIds` porte le refus des groupes mixtes : c'est le seul point de passage, et
+        // le dupliquer ici ferait deux règles à garder d'accord. La vue affiche son message.
+        await target.setEmitterIds(asDeviceIds(data));
         return true;
       });
     }
@@ -168,20 +166,12 @@ export default class VThermDriver extends Homey.Driver {
   private async assertHomogeneous(ids: readonly string[]): Promise<void> {
     if (ids.length < 2) return;
 
-    const modes = await Promise.all(ids.map(async (id) => this.isSetpointCapable(id)));
-    if (modes.every((m) => m === modes[0])) return;
+    const probes = await Promise.all(
+      ids.map(async (id) => this.app.hub.getDeviceSummary(id)),
+    );
+    if (isHomogeneous(probes)) return;
 
     throw new Error(this.homey.__('pair.error.mixed_emitters'));
-  }
-
-  /** Vrai si l'appareil porte une consigne inscriptible. `true` quand le hub n'a pas répondu. */
-  private async isSetpointCapable(deviceId: string): Promise<boolean> {
-    const summary = await this.app.hub.getDeviceSummary(deviceId);
-    if (summary === null) return true;
-    return summary.capabilities.some(
-      (id) => (id === 'target_temperature' || id.startsWith('target_temperature.'))
-        && summary.setable[id] === true,
-    );
   }
 
   /** Lu du manifeste plutôt qu'écrit en dur : l'identifiant de l'app changera à la publication. */

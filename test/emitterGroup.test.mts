@@ -14,7 +14,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMITTER_LIST_STORE_KEY, MAX_EMITTERS, SOURCE_STORE_KEYS,
-  emitterExtraCapabilities, emitterStorePatch, hasBattery, hasWritableSetpoint,
+  emitterExtraCapabilities, emitterStorePatch, hasBattery, hasWritableSetpoint, isHomogeneous,
   type EmitterProbe,
 } from '../lib/sources.mjs';
 import { readEmitterIds } from '../lib/sources.mjs';
@@ -160,4 +160,48 @@ test('le hub muet compte comme une tête à consigne SANS pile', () => {
     'supposer une pile afficherait une tuile vide sur un radiateur branché au secteur ; '
     + 'supposer l\'absence de consigne priverait d\'ouverture une vanne pilotable',
   );
+});
+
+// --- Homogénéité du groupe ----------------------------------------------------
+//
+// PANNE EMPÊCHÉE : un groupe de deux vannes dont on change l'émetteur pour une prise commutée.
+// Le groupe bascule tout entier en tout-ou-rien ; la seconde vanne, restée en mode consigne, est
+// écartée des écritures et reste figée sur sa dernière ouverture — sans un mot. Trois chemins y
+// mènent (création, réparation, page de réglages de l'app), d'où une règle unique, ici.
+
+test('deux vannes vont ensemble, deux prises aussi', () => {
+  assert.equal(isHomogeneous([VANNE, VANNE]), true);
+  assert.equal(isHomogeneous([PRISE, PRISE]), true);
+});
+
+test('une vanne et une prise ne se pilotent PAS de la même façon', () => {
+  assert.equal(
+    isHomogeneous([VANNE, PRISE]),
+    false,
+    '`lib/step.mts` choisit une branche entière sur `emitterMode` : un groupe mixte en aurait '
+    + 'une par tête, et le noyau n\'en connaît qu\'une',
+  );
+});
+
+test('une consigne en lecture seule range l\'appareil avec les interrupteurs', () => {
+  // C'est le même prédicat que la détection de mode : porter l'identifiant ne suffit pas, il faut
+  // pouvoir écrire dedans. Une vanne figée est un interrupteur du point de vue du pilotage.
+  assert.equal(isHomogeneous([VANNE_FIGEE, PRISE]), true);
+  assert.equal(isHomogeneous([VANNE_FIGEE, VANNE]), false);
+});
+
+test('une tête seule est toujours homogène avec elle-même', () => {
+  assert.equal(isHomogeneous([VANNE]), true);
+  assert.equal(isHomogeneous([]), true);
+});
+
+test('le hub muet ne bloque rien : il est compatible avec tout', () => {
+  assert.equal(
+    isHomogeneous([null, VANNE]),
+    true,
+    'refuser sur une ignorance rendrait le groupe immodifiable pendant la minute qui suit le '
+    + 'démarrage de l\'app, alors que l\'appareil visé est peut-être parfaitement conforme',
+  );
+  assert.equal(isHomogeneous([null, null]), true);
+  assert.equal(isHomogeneous([null, VANNE, PRISE]), false, 'ce qu\'on SAIT continue de trancher');
 });
