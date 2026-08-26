@@ -148,6 +148,10 @@ async function settle(): Promise<void> {
 const SINGLE_VIEWS: { path: string; field: 'source' | 'capability'; value: string }[] = [
   { path: 'drivers/vtherm/pair/pick_room_sensor.html', field: 'source', value: 'room' },
   { path: 'drivers/vtherm/pair/pick_emitter.html', field: 'source', value: 'emitter' },
+  { path: 'drivers/vtherm/pair/pick_outdoor.html', field: 'source', value: 'outdoor' },
+  { path: 'drivers/vtherm/pair/pick_window.html', field: 'source', value: 'window' },
+  { path: 'drivers/vtherm/pair/pick_motion.html', field: 'source', value: 'motion' },
+  { path: 'drivers/vtherm/pair/pick_presence.html', field: 'source', value: 'presence' },
   { path: 'drivers/central/pair/pick_boiler.html', field: 'capability', value: 'onoff' },
 ];
 
@@ -168,22 +172,92 @@ for (const view of SINGLE_VIEWS) {
   }
 }
 
-for (const readyAtLoad of [true, false]) {
-  const when = readyAtLoad ? 'Homey deja pret' : 'Homey pret plus tard';
-  test(`pick_optional demande ses quatre sources (${when})`, () => {
-    const { emitted } = runView('drivers/vtherm/pair/pick_optional.html', readyAtLoad);
-    const asked = emitted
-      .filter((e) => e.event === 'list_candidates')
-      .map((e) => (e.data as { source?: unknown }).source);
+// --- Les sources facultatives, une par page -------------------------------------
+//
+// PANNE EMPÊCHÉE : les quatre sources tenaient sur un même écran, l'une sous l'autre. Sur un
+// téléphone, seule la première était visible. Les utilisateurs ne faisaient pas défiler et
+// repartaient sans capteur d'ouverture ni détecteur de mouvement, sans savoir qu'on les leur avait
+// proposés. Ces tests fixent ce qui rend le découpage sûr : « Aucun » toujours offert, et un choix
+// qui fait avancer tout seul.
 
-    assert.equal(asked.length, 4);
-    for (const source of asked) {
-      assert.notEqual(source, undefined, 'un emplacement demandé sans source');
-    }
-    assert.deepEqual(new Set(asked),
-      new Set(['outdoor', 'window', 'motion', 'presence']));
+const OPTIONAL_PAGES = [
+  { path: 'drivers/vtherm/pair/pick_outdoor.html', id: 'pick_outdoor', event: 'select_outdoor' },
+  { path: 'drivers/vtherm/pair/pick_window.html', id: 'pick_window', event: 'select_window' },
+  { path: 'drivers/vtherm/pair/pick_motion.html', id: 'pick_motion', event: 'select_motion' },
+];
+
+for (const page of OPTIONAL_PAGES) {
+  test(`${page.id} offre « Aucun » MÊME sans aucun candidat`, async () => {
+    const { nodes } = runView(page.path, true, { list_candidates: [] });
+    await settle();
+
+    assert.equal(
+      items(nodes.get(`${page.id}-list`)).length,
+      1,
+      'sans « Aucun », une page sans candidat n\'offrirait aucun geste : la seule issue serait le '
+      + 'bouton de l\'assistant, celui-là même que personne ne pense à presser',
+    );
+  });
+
+  test(`${page.id} envoie son choix et passe à la suite`, async () => {
+    const { emitted, nodes } = runView(
+      page.path, true, { list_candidates: [{ id: 'x', name: 'Un capteur', zoneName: null }] },
+    );
+    await settle();
+
+    const lignes = items(nodes.get(`${page.id}-list`));
+    assert.equal(lignes.length, 2, '« Aucun » puis le candidat');
+
+    lignes[1]?.onclick?.();
+    await settle();
+
+    const envoi = emitted.find((e) => e.event === page.event);
+    assert.equal(envoi?.data, 'x');
+  });
+
+  test(`${page.id} sait aussi ne RIEN désigner`, async () => {
+    const { emitted, nodes } = runView(
+      page.path, true, { list_candidates: [{ id: 'x', name: 'Un capteur', zoneName: null }] },
+    );
+    await settle();
+
+    items(nodes.get(`${page.id}-list`))[0]?.onclick?.();
+    await settle();
+
+    const envoi = emitted.find((e) => e.event === page.event);
+    assert.equal(envoi?.data, null, '« Aucun » doit délier la source, pas être un clic mort');
   });
 }
+
+test('pick_presence n\'avance pas : c\'est elle qui crée l\'appareil', async () => {
+  const { emitted, nodes } = runView(
+    'drivers/vtherm/pair/pick_presence.html', true,
+    { list_candidates: [{ id: 'x', name: 'Un capteur', zoneName: null }] },
+  );
+  await settle();
+
+  items(nodes.get('pick_presence-list'))[1]?.onclick?.();
+  await settle();
+
+  assert.equal(emitted.find((e) => e.event === 'select_presence')?.data, 'x');
+  assert.deepEqual(
+    emitted.filter((e) => e.event === 'build_device'),
+    [],
+    'un clic sur un capteur ne doit pas créer l\'appareil : c\'est le bouton qui décide',
+  );
+});
+
+test('le bouton de pick_presence crée l\'appareil', async () => {
+  const { emitted, nodes } = runView(
+    'drivers/vtherm/pair/pick_presence.html', true, { list_candidates: [] },
+  );
+  await settle();
+
+  nodes.get('pick_presence-finish')?.onclick?.();
+  await settle();
+
+  assert.equal(emitted.filter((e) => e.event === 'build_device').length, 1);
+});
 
 test('une vue installe son interception d\'erreurs', () => {
   // Un plantage survenu avant l'installation du gestionnaire ne laisserait aucune trace :

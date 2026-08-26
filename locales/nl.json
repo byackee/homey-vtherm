@@ -17,8 +17,6 @@
       "lead": "Dit apparaat wordt ingeschakeld wanneer genoeg kamers warmte vragen, en uitgeschakeld zodra geen enkele dat doet. Controleer of uw ketel eigen beveiligingen heeft."
     },
     "optional": {
-      "title": "Nog iets om mee te beslissen?",
-      "lead": "Dit is allemaal optioneel. Laat het leeg en de thermostaat werkt gewoon — elke bron maakt hem alleen slimmer.",
       "none": "Geen",
       "outdoor": "Buitentemperatuur",
       "outdoor_hint": "Laat het algoritme warmteverlies anticiperen in plaats van er alleen op te reageren. Zonder deze blijft zelfregulering uit.",

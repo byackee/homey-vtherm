@@ -17,8 +17,6 @@
       "lead": "This device is turned on when enough rooms call for heat, and off as soon as none do. Check that your boiler has its own safety cut-out before letting anything drive it."
     },
     "optional": {
-      "title": "Anything else to help it decide?",
-      "lead": "All of these are optional. Leave them empty and the thermostat still works — each one simply makes it smarter.",
       "none": "None",
       "outdoor": "Outdoor temperature",
       "outdoor_hint": "Lets the algorithm anticipate heat loss instead of only reacting to it. Without it, self-regulation stays off.",

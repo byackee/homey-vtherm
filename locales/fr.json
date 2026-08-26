@@ -17,8 +17,6 @@
       "lead": "Cet appareil est allumé quand assez de pièces demandent de la chaleur, et éteint dès qu'aucune n'en demande. Vérifiez que votre chaudière a ses propres sécurités avant de laisser quoi que ce soit la piloter."
     },
     "optional": {
-      "title": "Autre chose pour l'aider à décider ?",
-      "lead": "Tout ceci est facultatif. Laissez vide et le thermostat fonctionne quand même — chaque source le rend simplement plus fin.",
       "none": "Aucun",
       "outdoor": "Température extérieure",
       "outdoor_hint": "Permet à l'algorithme d'anticiper les déperditions au lieu de seulement les subir. Sans elle, l'auto-régulation reste inactive.",

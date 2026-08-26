@@ -69,13 +69,34 @@
       "id": "pick_emitter",
       "navigation": {
         "prev": "pick_room_sensor",
-        "next": "pick_optional"
+        "next": "pick_outdoor"
       }
     },
     {
-      "id": "pick_optional",
+      "id": "pick_outdoor",
       "navigation": {
-        "prev": "pick_emitter"
+        "prev": "pick_emitter",
+        "next": "pick_window"
+      }
+    },
+    {
+      "id": "pick_window",
+      "navigation": {
+        "prev": "pick_outdoor",
+        "next": "pick_motion"
+      }
+    },
+    {
+      "id": "pick_motion",
+      "navigation": {
+        "prev": "pick_window",
+        "next": "pick_presence"
+      }
+    },
+    {
+      "id": "pick_presence",
+      "navigation": {
+        "prev": "pick_motion"
       }
     }
   ],

@@ -1,0 +1,217 @@
+<!-- Une source facultative, seule sur sa page. Voir le commentaire de `render` : les quatre
+     sources tenaient sur un même écran, et personne ne faisait défiler jusqu'aux dernières. -->
+<style>
+    /* Portée limitée à cette vue : le document est partagé avec les autres vues du driver. */
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           margin: 0; padding: 16px; color: #1f2933; }
+    h2 { font-size: 17px; margin: 0 0 4px; }
+    p.lead { font-size: 13px; color: #62707d; margin: 0 0 16px; line-height: 1.45; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { border: 1px solid #dfe4e8; border-radius: 10px; padding: 11px 13px; margin-bottom: 8px;
+         cursor: pointer; display: flex; align-items: center; gap: 11px; }
+    li.selected { border-color: #E8590C; background: #fff6f0; }
+    li .radio { width: 17px; height: 17px; border-radius: 50%; border: 2px solid #c3cbd2; flex: 0 0 auto; }
+    li.selected .radio { border-color: #E8590C; border-width: 5px; }
+    li .name { font-size: 14px; font-weight: 600; }
+    li .meta { font-size: 12px; color: #7b8794; margin-top: 2px; }
+    .state { border: 1px dashed #dfe4e8; border-radius: 10px; padding: 18px; text-align: center;
+             color: #7b8794; font-size: 13px; line-height: 1.5; }
+    .state.error { border-color: #f0b6b6; background: #fff5f5; color: #a12727; text-align: left;
+                   white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace;
+                   font-size: 12px; }
+</style>
+
+<h2 data-i18n="pair.optional.outdoor"></h2>
+<p class="lead" data-i18n="pair.optional.outdoor_hint"></p>
+<div id="pick_outdoor-state" class="state">…</div>
+<div id="pick_outdoor-list"></div>
+
+<script type="text/javascript">
+(function () {
+    /** Les vues d'un même driver partagent le document : chaque identifiant porte le sien. */
+    var PREFIX = 'pick_outdoor-';
+
+      // Configuration de la vue, en TÊTE de script : rien ne doit pouvoir la lire avant.
+      var VIEW = { source: 'outdoor', selectEvent: 'select_outdoor' };
+
+      var H = null;
+      /** 'pair' ou 'repair'. Les mêmes vues servent aux deux, et elles ne doivent pas agir pareil. */
+      var MODE = 'pair';
+
+      function report(message) {
+        try { if (H && H.emit) H.emit('viewLog', String(message)); } catch (e) { /* rien à faire */ }
+      }
+
+      window.addEventListener('error', function (event) {
+        report('erreur JS : ' + (event && event.message));
+        showError('' + (event && event.message));
+      });
+
+      function showError(message) {
+        var box = document.getElementById(PREFIX + 'state');
+        if (!box) return;
+        box.className = 'state error';
+        box.textContent = message;
+        box.style.display = '';
+      }
+
+      function showText(message) {
+        var box = document.getElementById(PREFIX + 'state');
+        if (!box) return;
+        box.className = 'state';
+        box.textContent = message;
+        box.style.display = '';
+      }
+
+      function hideState() {
+        var box = document.getElementById(PREFIX + 'state');
+        if (box) box.style.display = 'none';
+      }
+
+      /** `Homey.emit` est tantôt à promesse, tantôt à callback selon le contexte. On accepte les deux. */
+      function emit(event, data) {
+        return new Promise(function (resolve, reject) {
+          var settled = false;
+          function ok(v) { if (!settled) { settled = true; resolve(v); } }
+          function ko(e) { if (!settled) { settled = true; reject(e instanceof Error ? e : new Error(String(e))); } }
+          try {
+            var returned = H.emit(event, data, function (err, result) {
+              if (err) ko(err); else ok(result);
+            });
+            if (returned && typeof returned.then === 'function') returned.then(ok, ko);
+          } catch (e) { ko(e); }
+        });
+      }
+
+      /** Traduction : `data-i18n` n'est pas garanti d'être appliqué, on le fait nous-mêmes. */
+      function translate() {
+        if (!H || typeof H.__ !== 'function') return;
+        var nodes = document.querySelectorAll('[data-i18n]');
+        for (var i = 0; i < nodes.length; i++) {
+          var key = nodes[i].getAttribute('data-i18n');
+          var text = H.__(key);
+          if (text && text !== key) nodes[i].textContent = text;
+        }
+      }
+
+      function label(key, fallback) {
+        if (H && typeof H.__ === 'function') {
+          var t = H.__(key);
+          if (t && t !== key) return t;
+        }
+        return fallback;
+      }
+
+      /**
+       * Passe à l'étape suivante.
+       *
+       * Il n'existe AUCUN moyen de griser le bouton « Suivant » depuis une vue de pairing :
+       * `setNavigationNext` n'existe pas dans l'objet Homey — vérifié contre la documentation
+       * officielle, les mocks communautaires et les apps publiées. Les apps réelles avancent donc
+       * à la sélection, ce que fait cette vue.
+       */
+      function goNext() {
+        try {
+          if (H && typeof H.nextView === 'function') H.nextView();
+        } catch (e) { report('nextView : ' + e.message); }
+      }
+
+      function buildItem(device, onPick) {
+        var li = document.createElement('li');
+        li.onclick = function () { onPick(li); };
+        var r = document.createElement('div'); r.className = 'radio';
+        var b = document.createElement('div');
+        var n = document.createElement('div'); n.className = 'name'; n.textContent = device.name;
+        b.appendChild(n);
+        if (device.zoneName) {
+          var m = document.createElement('div'); m.className = 'meta'; m.textContent = device.zoneName;
+          b.appendChild(m);
+        }
+        li.appendChild(r); li.appendChild(b);
+        return li;
+      }
+
+      function boot(homey) {
+        if (H) return;                 // déjà démarré par l'autre convention
+        H = homey || window.Homey;
+        if (!H) { showError('Homey object not found in this view.'); return; }
+        try {
+          translate();
+          // Le mode est demandé EN PARALLÈLE, jamais en amont : il ne sert qu'au moment du clic, et
+          // enchaîner le chargement de la liste derrière lui ferait dépendre l'affichage d'un
+          // aller-retour de plus. Une vue qui n'affiche rien tant qu'une question secondaire n'a pas
+          // répondu, c'est la panne qu'on vient de corriger.
+          emit('pair_mode', null)
+            .then(function (mode) { if (mode === 'repair') MODE = 'repair'; })
+            .catch(function () { /* un driver sans ce gestionnaire est en pairing */ });
+          start();
+        } catch (e) {
+          report('démarrage : ' + e.message);
+          showError('Cannot start this view: ' + e.message);
+        }
+        try { if (typeof H.ready === 'function') H.ready(); } catch (e) { /* facultatif */ }
+      }
+
+      /**
+       * Une seule source par page, « Aucun » en tête.
+       *
+       * Les quatre sources facultatives tenaient sur un même écran, l'une sous l'autre. Sur un
+       * téléphone, seule la première était visible : les utilisateurs ne faisaient pas défiler et
+       * repartaient sans capteur d'ouverture ni détecteur de mouvement, sans savoir qu'on les leur
+       * avait proposés. Une page par question coûte trois écrans de plus et ne laisse rien passer.
+       *
+       * « Aucun » est rendu MÊME quand la liste est vide : sans lui, une page sans candidat
+       * n'offrirait aucun geste, et la seule issue serait le bouton de l'assistant — celui-là même
+       * que personne ne pense à presser.
+       */
+      function render(devices) {
+        report('reçu ' + ((devices && devices.length) || 0) + ' element(s) pour ' + VIEW.source);
+        var root = document.getElementById(PREFIX + 'list');
+        root.innerHTML = '';
+        hideState();
+
+        var all = [{ id: null, name: label('pair.optional.none', 'None'), zoneName: null }]
+          .concat(devices || []);
+        var ul = document.createElement('ul');
+        all.forEach(function (d, index) {
+          var li = buildItem(d, function (node) {
+            var items = root.querySelectorAll('li');
+            for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
+            node.classList.add('selected');
+            emit(VIEW.selectEvent, d.id)
+              .then(goNext)
+              .catch(function (err) { showError(err.message); });
+          });
+          // « Aucun » présélectionné : c'est le défaut, et il doit se voir sans rien lire.
+          if (index === 0) li.classList.add('selected');
+          ul.appendChild(li);
+        });
+        root.appendChild(ul);
+      }
+
+      function start() {
+        showText('…');
+        emit('list_candidates', { source: VIEW.source })
+          .then(render)
+          .catch(function (err) {
+            report('list_candidates : ' + err.message);
+            // Une liste indisponible ne doit pas bloquer une page facultative : on rend au moins
+            // « Aucun », et l'utilisateur passe. L'erreur part au journal de l'app, pas à l'écran.
+            render([]);
+          });
+      }
+
+      var previousReady = window.onHomeyReady;
+  window.onHomeyReady = function (homey) {
+    if (typeof previousReady === 'function') previousReady(homey);
+    boot(homey);
+  };
+      if (typeof Homey !== 'undefined' && Homey) { boot(Homey); }
+      else {
+        document.addEventListener('DOMContentLoaded', function () {
+          if (typeof Homey !== 'undefined' && Homey) boot(Homey);
+        });
+      }
+
+})();
+</script>
