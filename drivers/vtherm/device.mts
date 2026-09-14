@@ -26,6 +26,7 @@ import {
   DEFAULT_OPENING_THRESHOLD, DEFAULT_PRESET_TEMPS, DEFAULT_REGULATION_THRESHOLD, DEFAULT_SLOPE,
   DEFAULT_TPI, DEFAULT_WINDOW, DEFAULT_AWAY_TEMPS, DEFAULT_SAFETY } from '../../lib/constants.mjs';
 import type { Preset, VThermConfig } from '../../lib/types.mjs';
+import { windowModeForContact } from '../../lib/windowDetector.mjs';
 import type { CapValue } from '../../runtime/hub.mjs';
 import { HomeyEmitterAdapter, type EmitterAdapter } from '../../runtime/emitter.mjs';
 import { MultiEmitterAdapter } from '../../runtime/multiEmitter.mjs';
@@ -510,12 +511,24 @@ export default class VThermDevice extends Homey.Device {
     await this.setStoreValue(SOURCE_STORE_KEYS[key], deviceId);
     void this.refreshLinkedLabels();
 
+    // `setSettings` ne rappelle pas `onSettings` : la config du participant est relue plus bas.
+    let windowModeChanged = false;
+    if (key === 'window') {
+      const current = pick(this.settings, 'window_mode', WINDOW_MODES, DEFAULT_WINDOW.mode);
+      const next = windowModeForContact(current, deviceId);
+      if (next !== null) {
+        await this.setSettings({ window_mode: next });
+        windowModeChanged = true;
+      }
+    }
+
     this.attachSource(key);
     const participant = this.participant;
     if (participant === null) return;
 
     // Le mouvement conditionne le preset Activité : sa présence ou son absence change la config.
-    if (key === 'motion') participant.updateConfig(this.readConfig());
+    // Le contact, lui, peut avoir fait basculer le mode de détection juste au-dessus.
+    if (key === 'motion' || windowModeChanged) participant.updateConfig(this.readConfig());
     this.app.requestTick(`${this.deviceId()}:repair:${key}`);
   }
 

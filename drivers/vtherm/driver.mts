@@ -9,7 +9,9 @@
 import { randomUUID } from 'node:crypto';
 import Homey from 'homey';
 
+import { DEFAULT_WINDOW } from '../../lib/constants.mjs';
 import type { Preset } from '../../lib/types.mjs';
+import { windowModeForContact } from '../../lib/windowDetector.mjs';
 import type { PresenceOverride } from '../../runtime/participants.mjs';
 import type VThermApp from '../../app.mjs';
 import VThermDevice, {
@@ -282,6 +284,7 @@ export default class VThermDriver extends Homey.Driver {
     data: { id: string };
     store: Record<string, string | string[] | null>;
     capabilities: string[];
+    settings: Record<string, string>;
   }> {
     const roomId = selection.get('room') ?? null;
     if (roomId === null || emitterIds.length === 0) {
@@ -312,6 +315,12 @@ export default class VThermDriver extends Homey.Driver {
     );
     capabilities.push(...emitterExtraCapabilities(probes));
 
+    // Un contact choisi à cette étape doit servir dès la création : le réglage « Détection » part
+    // sinon de `off`, et la fenêtre ouverte chaufferait sans que rien ne l'indique.
+    const settings: Record<string, string> = {};
+    const windowMode = windowModeForContact(DEFAULT_WINDOW.mode, selection.get('window') ?? null);
+    if (windowMode !== null) settings.window_mode = windowMode;
+
     return {
       name: await this.proposeName(roomId),
       // Tiré une fois, immuable : `data` est l'identité du device pour Homey et le `tickId` du
@@ -319,6 +328,7 @@ export default class VThermDriver extends Homey.Driver {
       data: { id: randomUUID() },
       store,
       capabilities,
+      settings,
     };
   }
 

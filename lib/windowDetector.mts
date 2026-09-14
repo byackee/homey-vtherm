@@ -4,7 +4,7 @@
  * désactive toute détection et remet l'état à `closed`.
  */
 
-import type { WindowInput, WindowParams, WindowResult, WindowState } from './types.mjs';
+import type { WindowInput, WindowMode, WindowParams, WindowResult, WindowState } from './types.mjs';
 
 export function createWindowState(): WindowState {
   return { phase: 'closed', phaseSinceMs: null, openSinceMs: null, autoDisarmed: false };
@@ -132,4 +132,20 @@ export function stepWindow(state: WindowState, input: WindowInput, params: Windo
   }
 
   return { active, action: active ? params.action : null, nextState };
+}
+
+/**
+ * Le mode de détection à écrire quand le contact d'ouverture change, ou `null` pour n'y pas toucher.
+ *
+ * Désigner un contact le fait servir, comme désigner un détecteur de mouvement active le preset
+ * Activité : laisser la détection sur `off` gardait un capteur choisi exprès sans aucun effet, et
+ * rien à l'écran ne le signalait (retour du forum, septembre 2026). Seul `off` bascule : `auto` est
+ * un choix de l'utilisateur, et un contact ajouté ensuite ne doit pas le défaire en silence.
+ *
+ * Retirer le contact rend `sensor` à `off` pour la même raison en sens inverse : un mode capteur
+ * sans capteur affiche une protection qui n'existe plus.
+ */
+export function windowModeForContact(current: WindowMode, contactId: string | null): WindowMode | null {
+  if (contactId !== null) return current === 'off' ? 'sensor' : null;
+  return current === 'sensor' ? 'off' : null;
 }

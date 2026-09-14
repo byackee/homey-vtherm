@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createWindowState, stepWindow } from '../lib/windowDetector.mjs';
+import { createWindowState, stepWindow, windowModeForContact } from '../lib/windowDetector.mjs';
 import type { WindowInput, WindowParams, WindowState } from '../lib/types.mjs';
 
 const SENSOR_PARAMS: WindowParams = {
@@ -281,4 +281,21 @@ test('mode auto : le désarmement se lève dès que la pente se rétablit', () =
   // Et une VRAIE chute est de nouveau détectée.
   const detected = stepWindow(rearmed.nextState, input({ slopePerHour: -5 }), AUTO_PARAMS, 2_000);
   assert.equal(detected.nextState.phase, 'pending_open');
+});
+
+// --- Le mode suit le contact désigné -----------------------------------------
+
+test('désigner un contact active le mode capteur quand la détection était désactivée', () => {
+  assert.equal(windowModeForContact('off', 'fenetre'), 'sensor');
+  assert.equal(windowModeForContact('sensor', 'autre-fenetre'), null, 'déjà en mode capteur');
+});
+
+test('un contact ajouté ne défait PAS la détection par chute de température choisie à la main', () => {
+  assert.equal(windowModeForContact('auto', 'fenetre'), null);
+});
+
+test('retirer le contact éteint le mode capteur, et lui seul', () => {
+  assert.equal(windowModeForContact('sensor', null), 'off');
+  assert.equal(windowModeForContact('auto', null), null, 'la chute de température vit sans capteur');
+  assert.equal(windowModeForContact('off', null), null);
 });

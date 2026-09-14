@@ -94,6 +94,7 @@ interface VThermInternals {
     data: { id: string };
     store: Record<string, string | string[] | null>;
     capabilities: string[];
+    settings: Record<string, string>;
   }>;
 }
 
@@ -270,6 +271,22 @@ test('`alarm_contact` seulement si une fenêtre est désignée', async () => {
   const avec = await build(driver, { room: 'capteur', emitter: 'vanne', window: 'fenetre' });
   assert.ok(avec.capabilities.includes('alarm_contact'));
   assert.ok(!avec.capabilities.includes('alarm_motion'), 'aucun mouvement désigné');
+});
+
+test('une fenêtre désignée au pairing règle la détection sur le capteur, dès la création', async () => {
+  const fenetre = summaryOf({
+    id: 'fenetre', name: 'Fenêtre salon', deviceClass: 'sensor', capabilities: ['alarm_contact'],
+  });
+  const driver = vthermDriver(newApp([PIECE, VANNE, fenetre]));
+
+  const avec = await build(driver, { room: 'capteur', emitter: 'vanne', window: 'fenetre' });
+  assert.equal(
+    avec.settings.window_mode, 'sensor',
+    'un contact choisi exprès ne doit pas rester sans effet derrière une détection désactivée',
+  );
+
+  const sans = await build(driver, { room: 'capteur', emitter: 'vanne' });
+  assert.equal(sans.settings.window_mode, undefined, 'sans contact, le défaut du manifeste reste maître');
 });
 
 test('sans capteur de pièce ou sans émetteur, il n\'y a pas de thermostat à créer', async () => {
