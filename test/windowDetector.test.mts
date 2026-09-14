@@ -286,16 +286,23 @@ test('mode auto : le désarmement se lève dès que la pente se rétablit', () =
 // --- Le mode suit le contact désigné -----------------------------------------
 
 test('désigner un contact active le mode capteur quand la détection était désactivée', () => {
-  assert.equal(windowModeForContact('off', 'fenetre'), 'sensor');
-  assert.equal(windowModeForContact('sensor', 'autre-fenetre'), null, 'déjà en mode capteur');
+  assert.equal(windowModeForContact('off', null, 'fenetre'), 'sensor');
+  assert.equal(windowModeForContact('off', 'fenetre', 'autre-fenetre'), 'sensor', 'contact remplacé');
+  assert.equal(windowModeForContact('sensor', 'fenetre', 'autre-fenetre'), null, 'déjà en mode capteur');
+});
+
+test('re-désigner le MÊME contact ne défait pas une détection désactivée exprès', () => {
+  // L'assistant de réparation n'avance qu'en cliquant : on reclique le contact déjà lié.
+  assert.equal(windowModeForContact('off', 'fenetre', 'fenetre'), null);
+  assert.equal(windowModeForContact('sensor', null, null), null, 'aucun contact avant ni après');
 });
 
 test('un contact ajouté ne défait PAS la détection par chute de température choisie à la main', () => {
-  assert.equal(windowModeForContact('auto', 'fenetre'), null);
+  assert.equal(windowModeForContact('auto', null, 'fenetre'), null);
 });
 
 test('retirer le contact éteint le mode capteur, et lui seul', () => {
-  assert.equal(windowModeForContact('sensor', null), 'off');
-  assert.equal(windowModeForContact('auto', null), null, 'la chute de température vit sans capteur');
-  assert.equal(windowModeForContact('off', null), null);
+  assert.equal(windowModeForContact('sensor', 'fenetre', null), 'off');
+  assert.equal(windowModeForContact('auto', 'fenetre', null), null, 'la chute de température vit sans capteur');
+  assert.equal(windowModeForContact('off', 'fenetre', null), null);
 });

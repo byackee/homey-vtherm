@@ -144,8 +144,17 @@ export function stepWindow(state: WindowState, input: WindowInput, params: Windo
  *
  * Retirer le contact rend `sensor` à `off` pour la même raison en sens inverse : un mode capteur
  * sans capteur affiche une protection qui n'existe plus.
+ *
+ * Re-désigner le MÊME contact ne change rien : l'assistant de réparation n'avance qu'en cliquant
+ * un appareil, et qui repasse par la page fenêtre pour réparer une vanne reclique celui déjà lié.
+ * Un `off` choisi exprès, contact en place (l'été, un capteur en panne), serait sinon écrasé.
  */
-export function windowModeForContact(current: WindowMode, contactId: string | null): WindowMode | null {
+export function windowModeForContact(
+  current: WindowMode,
+  previousContactId: string | null,
+  contactId: string | null,
+): WindowMode | null {
+  if (contactId === previousContactId) return null;
   if (contactId !== null) return current === 'off' ? 'sensor' : null;
   return current === 'sensor' ? 'off' : null;
 }

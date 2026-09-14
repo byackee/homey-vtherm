@@ -508,17 +508,24 @@ export default class VThermDevice extends Homey.Device {
       return;
     }
 
+    const previousId = this.sourceId(key);
     await this.setStoreValue(SOURCE_STORE_KEYS[key], deviceId);
     void this.refreshLinkedLabels();
 
     // `setSettings` ne rappelle pas `onSettings` : la config du participant est relue plus bas.
+    // Son échec est journalisé sans interrompre : le contact est déjà rangé, et s'arrêter ici le
+    // laisserait sans écouteur jusqu'au prochain redémarrage. Le mode reste alors à régler à la main.
     let windowModeChanged = false;
     if (key === 'window') {
       const current = pick(this.settings, 'window_mode', WINDOW_MODES, DEFAULT_WINDOW.mode);
-      const next = windowModeForContact(current, deviceId);
+      const next = windowModeForContact(current, previousId, deviceId);
       if (next !== null) {
-        await this.setSettings({ window_mode: next });
-        windowModeChanged = true;
+        try {
+          await this.setSettings({ window_mode: next });
+          windowModeChanged = true;
+        } catch (err) {
+          this.error('Bascule du mode de détection d\'ouverture :', err);
+        }
       }
     }
 

@@ -318,7 +318,7 @@ export default class VThermDriver extends Homey.Driver {
     // Un contact choisi à cette étape doit servir dès la création : le réglage « Détection » part
     // sinon de `off`, et la fenêtre ouverte chaufferait sans que rien ne l'indique.
     const settings: Record<string, string> = {};
-    const windowMode = windowModeForContact(DEFAULT_WINDOW.mode, selection.get('window') ?? null);
+    const windowMode = windowModeForContact(DEFAULT_WINDOW.mode, null, selection.get('window') ?? null);
     if (windowMode !== null) settings.window_mode = windowMode;
 
     return {
