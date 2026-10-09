@@ -61,6 +61,24 @@ function world(mode: 'valve' | 'setpoint' | 'switch'): World {
   };
 }
 
+// --- Publication -------------------------------------------------------------
+
+test('une capability ajoutée APRÈS un pas reçoit sa valeur au pas suivant, même inchangée', async () => {
+  const { host, participant } = world('valve');
+  host.missingCapabilities.add('vtherm_presence');
+
+  await participant.tick(0);
+  assert.equal(host.getCapabilityValue('vtherm_presence'), null, 'écriture ignorée faute de tuile');
+
+  // La migration d'un thermostat existant : la tuile arrive, la présence, elle, n'a pas bougé.
+  host.missingCapabilities.delete('vtherm_presence');
+  await participant.tick(60_000);
+  assert.equal(
+    host.getCapabilityValue('vtherm_presence'), true,
+    'mémoriser l\'écriture ignorée laissait la tuile vide jusqu\'au prochain changement',
+  );
+});
+
 // --- Le convecteur : capteur muet ---------------------------------------------
 
 test('capteur muet en mode interrupteur : le relais est COUPÉ, pas figé', async () => {

@@ -37,10 +37,15 @@ export class FakeDeviceHost implements DeviceHost {
     return this.capabilities.get(capabilityId) ?? null;
   }
 
-  async setCapabilityValue(capabilityId: string, value: CapValue): Promise<void> {
+  /** Capabilities que l'appareil n'a pas (encore) : l'écriture est ignorée, comme sur Homey. */
+  readonly missingCapabilities = new Set<string>();
+
+  async setCapabilityValue(capabilityId: string, value: CapValue): Promise<boolean> {
     if (this.failPublishOf === capabilityId) throw new Error(`publication refusée : ${capabilityId}`);
+    if (this.missingCapabilities.has(capabilityId)) return false;
     this.capabilities.set(capabilityId, value);
     this.published.push({ capabilityId, value, nowMs: this.nowMs });
+    return true;
   }
 
   async setWarning(message: string | null): Promise<void> {

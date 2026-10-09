@@ -128,8 +128,9 @@ export default class CentralDevice extends Homey.Device {
         return isCapValue(value) ? value : null;
       },
       setCapabilityValue: async (capabilityId, value) => {
-        if (!this.hasCapability(capabilityId)) return;
+        if (!this.hasCapability(capabilityId)) return false;
         await this.setCapabilityValue(capabilityId, value);
+        return true;
       },
       setWarning: async (message) => {
         await this.setWarning(message);

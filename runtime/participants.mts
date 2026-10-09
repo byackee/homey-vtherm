@@ -134,7 +134,12 @@ export interface DeviceHost {
    */
   translate(key: string): string;
   getCapabilityValue(capabilityId: string): CapValue | null;
-  setCapabilityValue(capabilityId: string, value: CapValue): Promise<void>;
+  /**
+   * `false` quand l'écriture n'a PAS eu lieu faute de capability sur l'appareil. Le participant ne
+   * mémorise alors rien : une tuile ajoutée plus tard recevrait sinon la valeur pour la première
+   * fois seulement quand elle CHANGE — jamais, pour une présence sans capteur.
+   */
+  setCapabilityValue(capabilityId: string, value: CapValue): Promise<boolean>;
   setWarning(message: string | null): Promise<void>;
   getStoreValue(key: string): unknown;
   setStoreValue(key: string, value: unknown): Promise<void>;
@@ -545,8 +550,9 @@ export class VThermParticipant implements Tickable {
     if (this.publishedCaps.get(capabilityId) === value) return;
 
     try {
-      await this.host.setCapabilityValue(capabilityId, value);
-      this.publishedCaps.set(capabilityId, value);
+      if (await this.host.setCapabilityValue(capabilityId, value)) {
+        this.publishedCaps.set(capabilityId, value);
+      }
     } catch (err) {
       // Non mémorisé : la prochaine tentative doit réessayer, sinon une capability qui a échoué
       // une fois resterait figée pour toute la durée de vie de l'app.
@@ -1016,8 +1022,9 @@ export class CentralParticipant {
     if (this.publishedCaps.get(capabilityId) === value) return;
 
     try {
-      await this.host.setCapabilityValue(capabilityId, value);
-      this.publishedCaps.set(capabilityId, value);
+      if (await this.host.setCapabilityValue(capabilityId, value)) {
+        this.publishedCaps.set(capabilityId, value);
+      }
     } catch (err) {
       // Non mémorisé : la prochaine tentative doit réessayer, sinon une capability qui a échoué
       // une fois resterait figée pour toute la durée de vie de l'app.

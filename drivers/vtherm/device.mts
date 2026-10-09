@@ -159,11 +159,6 @@ export default class VThermDevice extends Homey.Device {
 
     if (this.presenceOverride !== 'auto') this.participant.forcePresence(this.presenceOverride);
 
-    // AVANT `registerVTherm`, qui programme le premier pas : le participant mémorise une valeur
-    // publiée même quand l'hôte l'a ignorée faute de capability. Ajoutée après, la tuile resterait
-    // vide tant que la présence ne change pas — c'est-à-dire pour toujours sans capteur.
-    await this.migrateCapabilities();
-
     this.registerListeners();
 
     app.registerVTherm(this.participant);
@@ -180,6 +175,11 @@ export default class VThermDevice extends Homey.Device {
     // Availability). Un thermostat appairé sans émetteur est marqué indisponible plus haut, et cet
     // état survit au redémarrage — l'écriture partait donc dans le vide au démarrage suivant,
     // c'est-à-dire précisément quand l'utilisateur venait de lier son émetteur.
+    // Après `setAvailable()`, pour la même raison que `onoff` ci-dessous. L'ordre vis-à-vis du
+    // premier pas, lui, ne compte pas : une écriture ignorée faute de capability n'est pas
+    // mémorisée par le participant, et le pas suivant la refait.
+    await this.migrateCapabilities();
+
     if (typeof this.getCapabilityValue('onoff') !== 'boolean') {
       await this.setCapabilityValue('onoff', true).catch((err: unknown) => {
         this.error('Initialisation de onoff :', err);
@@ -233,8 +233,9 @@ export default class VThermDevice extends Homey.Device {
         return isCapValue(value) ? value : null;
       },
       setCapabilityValue: async (capabilityId, value) => {
-        if (!this.hasCapability(capabilityId)) return;
+        if (!this.hasCapability(capabilityId)) return false;
         await this.setCapabilityValue(capabilityId, value);
+        return true;
       },
       setWarning: async (message) => {
         await this.setWarning(message);
@@ -408,28 +409,27 @@ export default class VThermDevice extends Homey.Device {
    * Aligne les tuiles d'un thermostat appairé avant `vtherm_presence` : seul le pairing pose les
    * capabilities.
    *
-   * `alarm_motion` était aussi posée pour un détecteur de PRÉSENCE seul, alors qu'elle ne publie que
-   * le mouvement : devenue « Mouvement », elle resterait vide pour toujours. Elle n'est retirée que
-   * si elle n'a JAMAIS reçu de valeur (`null`) : aucun historique à perdre. Un capteur de mouvement
-   * délié depuis garde sa tuile et sa courbe, comme les tuiles d'émetteur.
+   * `alarm_motion` suit la source de mouvement, dans les deux sens. Elle était aussi posée pour un
+   * détecteur de PRÉSENCE seul, et un capteur délié la laissait figée sur sa dernière valeur : sans
+   * source, le noyau ne la publie plus, donc la tuile ment pour toujours. La retirer ne perd pas la
+   * courbe qui compte — celle du détecteur lui-même, dans ses propres Insights. Les tuiles
+   * d'émetteur, elles, portent un historique qui n'existe nulle part ailleurs.
    */
   private async migrateCapabilities(): Promise<void> {
     await this.grantCapability('vtherm_presence');
-    await this.grantMotionCapability();
-    if (
-      this.hasCapability('alarm_motion')
-      && this.sourceId('motion') === null
-      && this.getCapabilityValue('alarm_motion') === null
-    ) {
-      await this.removeCapability('alarm_motion').catch((err: unknown) => {
-        this.error('Retrait de la capability alarm_motion :', err);
-      });
-    }
+    await this.alignMotionCapability();
   }
 
-  /** Un capteur de mouvement lié après le pairing, par réparation, doit avoir sa tuile aussi. */
-  private async grantMotionCapability(): Promise<void> {
-    if (this.sourceId('motion') !== null) await this.grantCapability('alarm_motion');
+  /** Appelée aussi à la re-liaison : un capteur lié ou délié par réparation change la tuile. */
+  private async alignMotionCapability(): Promise<void> {
+    if (this.sourceId('motion') !== null) {
+      await this.grantCapability('alarm_motion');
+      return;
+    }
+    if (!this.hasCapability('alarm_motion')) return;
+    await this.removeCapability('alarm_motion').catch((err: unknown) => {
+      this.error('Retrait de la capability alarm_motion :', err);
+    });
   }
 
   private async grantCapability(capabilityId: string): Promise<void> {
@@ -573,8 +573,7 @@ export default class VThermDevice extends Homey.Device {
     const previousId = this.sourceId(key);
     await this.setStoreValue(SOURCE_STORE_KEYS[key], deviceId);
     void this.refreshLinkedLabels();
-    // Avant le pas que déclenche la nouvelle liaison, pour la même raison que dans `onInit`.
-    if (key === 'motion') await this.grantMotionCapability();
+    if (key === 'motion') await this.alignMotionCapability();
 
     // `setSettings` ne rappelle pas `onSettings` : la config du participant est relue plus bas.
     // Son échec est journalisé sans interrompre : le contact est déjà rangé, et s'arrêter ici le
@@ -830,12 +829,7 @@ export default class VThermDevice extends Homey.Device {
     const probes = await Promise.all(ids.map(async (id) => this.probe(id)));
 
     for (const capabilityId of emitterExtraCapabilities(probes)) {
-      if (this.hasCapability(capabilityId)) continue;
-      try {
-        await this.addCapability(capabilityId);
-      } catch (err) {
-        this.error(`Ajout de la capability ${capabilityId} :`, err);
-      }
+      await this.grantCapability(capabilityId);
     }
   }
 
