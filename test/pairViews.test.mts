@@ -65,10 +65,32 @@ test('chaque vue déclarée dans un driver.compose.json a bien son fichier', () 
       pair?: { id: string; template?: string }[];
       repair?: { id: string; template?: string }[];
     };
-    for (const step of [...(compose.pair ?? []), ...(compose.repair ?? [])]) {
+    // Homey sert les vues de réparation depuis `repair/`, jamais depuis `pair/` : une vue absente
+    // de `repair/` donne `unknown_error_getting_file` à l'ouverture de « Réparer », et rien avant.
+    const steps = [
+      ...(compose.pair ?? []).map((step) => ({ step, dir: 'pair' })),
+      ...(compose.repair ?? []).map((step) => ({ step, dir: 'repair' })),
+    ];
+    for (const { step, dir } of steps) {
       if (step.template !== undefined) continue; // template système, fourni par Homey
-      const file = join(DRIVERS, driverId, 'pair', `${step.id}.html`);
+      const file = join(DRIVERS, driverId, dir, `${step.id}.html`);
       assert.ok(existsSync(file), `${driverId} déclare la vue « ${step.id} » sans fichier ${file}`);
+    }
+  }
+});
+
+test('une vue de réparation est la copie exacte de sa vue de pairing', () => {
+  // Une seule vue sert les deux parcours (elle demande `pair_mode`) ; Homey impose seulement deux
+  // emplacements. Deux copies qui divergent, c'est un correctif appliqué au pairing et oublié dans
+  // la réparation — que personne n'ouvre avant d'en avoir besoin.
+  for (const driverId of driverIds) {
+    const dir = join(DRIVERS, driverId, 'repair');
+    if (!existsSync(dir)) continue;
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.html'))) {
+      const twin = join(DRIVERS, driverId, 'pair', file);
+      assert.ok(existsSync(twin), `${driverId}/repair/${file} n'a pas de jumelle dans pair/`);
+      assert.equal(readFileSync(join(dir, file), 'utf8'), readFileSync(twin, 'utf8'),
+        `${driverId}/repair/${file} a divergé de pair/${file}`);
     }
   }
 });

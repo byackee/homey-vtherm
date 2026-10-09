@@ -108,7 +108,7 @@
     "test_unknown": "De test gaf een onverwacht antwoord.",
     "linked": {
       "none": "Niet ingesteld",
-      "missing": "Apparaat bestaat niet meer — stel het opnieuw in bij de app-instellingen",
+      "missing": "Apparaat bestaat niet meer — kies het opnieuw via Repareren, in de instellingen van dit apparaat",
       "room": "Kamersensor",
       "emitter": "Verwarming",
       "outdoor": "Buiten",
