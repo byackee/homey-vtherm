@@ -561,6 +561,7 @@ Le device `central` reçoit au pairing le device chaudière à commander (capabi
 nb_actifs = nombre d'émetteurs en demande parmi les VTherm marqués "commande la chaudière"
   — régulation par vanne : actif si ouverture > opening_threshold
   — offset de consigne   : actif si l'émetteur est réellement en chauffe (running_state / onoff)
+                           sans aucun état de chauffe exposé : actif si puissance calculée > 0
 
 si nb_actifs >= boiler_threshold (défaut 1) :
     attendre boiler_activation_delay (défaut 0 s), puis chaudière ← ON
@@ -569,6 +570,14 @@ sinon :
 ```
 
 Un `boiler_keepalive` (défaut 0 = désactivé) réémet périodiquement l'ordre d'activation.
+
+**[ÉCART] — émetteur muet sur son état de chauffe.** Une TRVZB appairée sur le Zigbee de Homey n'expose
+que consigne, température et pile : aucune capability ne dit si elle chauffe. La règle « réellement en
+chauffe » rendait alors sa demande inconnue pour toujours, et la chaudière ne démarrait pour aucune
+pièce. Quand l'émetteur est joignable, détecté, et n'expose aucun état de chauffe, la puissance
+calculée par l'app tient lieu de demande. La tête peut rester fermée sur son propre capteur pendant
+que la chaudière tourne : c'est le cas de toute vanne thermostatique, que la chaudière doit encaisser.
+Une capability d'état de chauffe qui existe mais s'est tue reste, elle, une ignorance.
 
 **[ÉCART] — garde-fou anti-pulsation, ASYMÉTRIQUE.** L'installation cible a déjà connu une chaudière
 pulsée ON/OFF en moins d'une seconde à cause de deux Flows opposés sur le même événement. L'app impose

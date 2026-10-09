@@ -388,6 +388,11 @@ export class VThermParticipant implements Tickable {
       motion: readBoolean(this.sources.motion, nowMs, FRESHNESS.motionMs),
       presence: this.resolvePresence(nowMs),
       emitterHeating: this.emitter.readHeating(nowMs),
+      // Joignable ET pourvu d'une consigne : c'est la preuve que la détection a eu lieu. Avant
+      // elle, toutes les capabilities valent faux, et l'absence d'état de chauffe ne prouve rien.
+      emitterLacksHeatingState: this.emitter.available
+        && this.emitter.caps.setpoint
+        && !this.emitter.caps.heatingState,
       emitterHeatingHeads: this.emitter.readHeatingHeads(nowMs),
       emitterMode: this.emitter.mode,
       emitterCount: this.emitter.headCount,

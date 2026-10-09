@@ -506,6 +506,14 @@ export function stepVTherm(
     demand = switchCommanded === true
       ? { kind: 'active', percent: roundTo(onPercent * 100, 1) }
       : { kind: 'inactive' };
+  } else if (emitterHeating === null && inputs.emitterLacksHeatingState === true) {
+    // Mode consigne, émetteur qui ne SAURA jamais dire s'il chauffe : notre propre calcul est la
+    // seule information disponible, et elle porte sur une mesure fraîche. La chaudière peut alors
+    // tourner pendant que la tête, jugeant sur son propre capteur, reste fermée — un circuit fermé
+    // que la chaudière doit savoir encaisser, comme pour toute vanne thermostatique.
+    demand = onPercent > 0
+      ? { kind: 'active', percent: roundTo(onPercent * 100, 1) }
+      : { kind: 'inactive' };
   } else if (emitterHeating === null) {
     // Mode consigne : la demande se lit sur l'émetteur (SPEC §9.2). Sans cette lecture on ne SAIT
     // pas, et `unknown` propage l'ignorance jusqu'à l'agrégateur, qui laisse la chaudière éteinte.

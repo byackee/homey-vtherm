@@ -514,6 +514,48 @@ test('mode consigne, émetteur au repos : demande inactive et non unknown', () =
   assert.deepEqual(outputs.demand, { kind: 'inactive' });
 });
 
+// --- Mode consigne, émetteur incapable de dire s'il chauffe ------------------
+
+test('émetteur sans état de chauffe : la puissance calculée tient lieu de demande', () => {
+  // Une TRVZB appairée sur le Zigbee de Homey n'expose que consigne, température et pile. Sans
+  // cette règle, sa pièce ne comptait jamais pour la chaudière, qui ne démarrait donc jamais.
+  const world = inputs({ emitterMode: 'setpoint', emitterHeating: null, emitterLacksHeatingState: true });
+  const { outputs } = stepVTherm(freshState(), world, CONFIG, 0);
+
+  near(outputs.onPercent, 0.74);
+  assert.deepEqual(outputs.demand, { kind: 'active', percent: 74 });
+});
+
+test('émetteur sans état de chauffe, pièce à température : demande inactive', () => {
+  const world = inputs({
+    emitterMode: 'setpoint', emitterHeating: null, emitterLacksHeatingState: true, roomTemp: reading(22),
+  });
+  const { outputs } = stepVTherm(freshState(), world, CONFIG, 0);
+
+  assert.equal(outputs.onPercent, 0);
+  assert.deepEqual(outputs.demand, { kind: 'inactive' });
+});
+
+test('émetteur sans état de chauffe, capteur de pièce muet : la demande reste unknown', () => {
+  // Rien à déduire : la puissance n'a pas de mesure sur laquelle s'appuyer.
+  const world = inputs({
+    emitterMode: 'setpoint', emitterHeating: null, emitterLacksHeatingState: true, roomTemp: null,
+  });
+  const { outputs } = stepVTherm(freshState(), world, config({ safety: { ...CONFIG.safety, enabled: false } }), 0);
+
+  assert.deepEqual(outputs.demand, { kind: 'unknown' });
+});
+
+test('un état de chauffe qui SAIT répondre l\'emporte toujours sur la puissance', () => {
+  // Drapeau incohérent posé à tort : la lecture réelle reste prioritaire.
+  const world = inputs({
+    emitterMode: 'setpoint', emitterHeating: reading(false), emitterLacksHeatingState: true,
+  });
+  const { outputs } = stepVTherm(freshState(), world, CONFIG, 0);
+
+  assert.deepEqual(outputs.demand, { kind: 'inactive' });
+});
+
 test('un NaN relu du store ne traverse JAMAIS le calcul jusqu\'à la consigne', () => {
   const persistent = migratePersistentState(
     { version: 1, preset: 'comfort', regulation: { accumulatedError: Number.NaN } },

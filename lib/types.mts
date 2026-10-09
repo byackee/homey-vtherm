@@ -601,6 +601,15 @@ export interface VThermInputs {
   presence: Reading<boolean> | null;
   emitterHeating: Reading<boolean> | null;
   /**
+   * Vrai quand l'émetteur, détecté et joignable, n'expose AUCUNE capability d'état de chauffe.
+   *
+   * Distinct de `emitterHeating === null`, qui confond « il ne sait pas le dire » et « sa lecture
+   * s'est tue ». Une TRVZB appairée sur le Zigbee de Homey ne sait pas le dire, jamais : sans ce
+   * drapeau sa demande restait `unknown` à vie, et la chaudière ne démarrait pour aucune pièce.
+   * En mode consigne, la puissance calculée tient alors lieu de demande. Absent = faux.
+   */
+  emitterLacksHeatingState?: boolean;
+  /**
    * L'état de chaque tête, pour la seule détection de divergence en mode interrupteur.
    *
    * `emitterHeating` juste au-dessus est l'agrégat — « cette pièce est-elle chauffée » — et c'est

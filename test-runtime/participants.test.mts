@@ -132,6 +132,38 @@ test('bascule perdue : la demande devient INCONNUE, la chaudière n\'est pas sol
 
 // --- La fenêtre détectée sans capteur ------------------------------------------
 
+test('vanne qui ne sait pas dire si elle chauffe : la puissance calculée sollicite la chaudière', async () => {
+  // Le cas réel : une TRVZB appairée sur le Zigbee de Homey, sans aucune capability d'état de
+  // chauffe. Avant, sa demande restait `unknown` pour toujours et la chaudière ne démarrait jamais.
+  const { emitter, room, participant } = world('setpoint');
+  room.setReading(12, 0);
+
+  await participant.tick(0);
+
+  assert.equal(emitter.caps.heatingState, false);
+  assert.equal(participant.demand.kind, 'active');
+});
+
+test('la puissance ne remplace PAS un état de chauffe qui existe mais s\'est tu', async () => {
+  const { emitter, room, participant } = world('setpoint');
+  emitter.caps.heatingState = true;
+  room.setReading(12, 0);
+
+  await participant.tick(0);
+
+  assert.equal(participant.demand.kind, 'unknown', 'une lecture muette reste de l\'ignorance');
+});
+
+test('un émetteur injoignable ne voit pas sa demande déduite de la puissance', async () => {
+  const { emitter, room, participant } = world('setpoint');
+  emitter.available = false;
+  room.setReading(12, 0);
+
+  await participant.tick(0);
+
+  assert.equal(participant.demand.kind, 'unknown', 'la consigne n\'arrive nulle part : rien ne chauffe');
+});
+
 test('mode « chute de température » : la condition Flow suit la détection RÉELLE, pas la capability', async () => {
   const host = new FakeDeviceHost('salon');
   const emitter = new FakeEmitter('emetteur-salon');
