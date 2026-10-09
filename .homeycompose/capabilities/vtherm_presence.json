@@ -6,9 +6,9 @@
     "nl": "Iemand thuis"
   },
   "desc": {
-    "en": "The presence the thermostat is acting on: the presence sensor, or the state forced by a Flow. Without a sensor or a Flow, the home counts as occupied.",
-    "fr": "La présence sur laquelle le thermostat agit : celle du capteur de présence, ou celle forcée par un Flow. Sans capteur ni Flow, le logement compte comme occupé.",
-    "nl": "De aanwezigheid waarop de thermostaat handelt: die van de aanwezigheidssensor, of die door een Flow geforceerd. Zonder sensor of Flow geldt het huis als bewoond."
+    "en": "Whether someone is home, for this thermostat: the presence sensor, or the state forced by a Flow. Without either, the home counts as occupied. When nobody is home, presets use their away temperature; Manual mode ignores it.",
+    "fr": "Si quelqu'un est là, pour ce thermostat : selon le capteur de présence, ou l'état forcé par un Flow. Sans l'un ni l'autre, le logement compte comme occupé. En absence, les presets passent à leur température d'absence ; le mode Manuel l'ignore.",
+    "nl": "Of er iemand thuis is, voor deze thermostaat: volgens de aanwezigheidssensor, of de door een Flow geforceerde staat. Zonder beide geldt het huis als bewoond. Bij afwezigheid gebruiken presets hun afwezigheidstemperatuur; de handmatige modus negeert dit."
   },
   "getable": true,
   "setable": false,

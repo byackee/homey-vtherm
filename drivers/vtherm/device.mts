@@ -159,6 +159,11 @@ export default class VThermDevice extends Homey.Device {
 
     if (this.presenceOverride !== 'auto') this.participant.forcePresence(this.presenceOverride);
 
+    // AVANT `registerVTherm`, qui programme le premier pas : le participant mémorise une valeur
+    // publiée même quand l'hôte l'a ignorée faute de capability. Ajoutée après, la tuile resterait
+    // vide tant que la présence ne change pas — c'est-à-dire pour toujours sans capteur.
+    await this.migrateCapabilities();
+
     this.registerListeners();
 
     app.registerVTherm(this.participant);
@@ -175,14 +180,6 @@ export default class VThermDevice extends Homey.Device {
     // Availability). Un thermostat appairé sans émetteur est marqué indisponible plus haut, et cet
     // état survit au redémarrage — l'écriture partait donc dans le vide au démarrage suivant,
     // c'est-à-dire précisément quand l'utilisateur venait de lier son émetteur.
-    // Un thermostat appairé avant la tuile de présence ne l'aurait jamais : seul le pairing pose
-    // les capabilities. Même raison que `onoff` pour la placer après `setAvailable()`.
-    if (!this.hasCapability('vtherm_presence')) {
-      await this.addCapability('vtherm_presence').catch((err: unknown) => {
-        this.error('Ajout de la capability vtherm_presence :', err);
-      });
-    }
-
     if (typeof this.getCapabilityValue('onoff') !== 'boolean') {
       await this.setCapabilityValue('onoff', true).catch((err: unknown) => {
         this.error('Initialisation de onoff :', err);
@@ -395,11 +392,51 @@ export default class VThermDevice extends Homey.Device {
     this.requireParticipant().setWindowBypass(bypass);
   }
 
+  /**
+   * Le store D'ABORD : si l'écriture échoue, la carte Flow échoue sans avoir rien changé. Dans
+   * l'autre ordre, elle signalerait une erreur pour un forçage pourtant actif, qui disparaîtrait au
+   * redémarrage suivant.
+   */
   async applyPresenceOverride(override: PresenceOverride): Promise<void> {
     const participant = this.requireParticipant();
+    await this.setStoreValue(PRESENCE_OVERRIDE_STORE_KEY, override);
     this.presenceOverride = override;
     participant.forcePresence(override);
-    await this.setStoreValue(PRESENCE_OVERRIDE_STORE_KEY, override);
+  }
+
+  /**
+   * Aligne les tuiles d'un thermostat appairé avant `vtherm_presence` : seul le pairing pose les
+   * capabilities.
+   *
+   * `alarm_motion` était aussi posée pour un détecteur de PRÉSENCE seul, alors qu'elle ne publie que
+   * le mouvement : devenue « Mouvement », elle resterait vide pour toujours. Elle n'est retirée que
+   * si elle n'a JAMAIS reçu de valeur (`null`) : aucun historique à perdre. Un capteur de mouvement
+   * délié depuis garde sa tuile et sa courbe, comme les tuiles d'émetteur.
+   */
+  private async migrateCapabilities(): Promise<void> {
+    await this.grantCapability('vtherm_presence');
+    await this.grantMotionCapability();
+    if (
+      this.hasCapability('alarm_motion')
+      && this.sourceId('motion') === null
+      && this.getCapabilityValue('alarm_motion') === null
+    ) {
+      await this.removeCapability('alarm_motion').catch((err: unknown) => {
+        this.error('Retrait de la capability alarm_motion :', err);
+      });
+    }
+  }
+
+  /** Un capteur de mouvement lié après le pairing, par réparation, doit avoir sa tuile aussi. */
+  private async grantMotionCapability(): Promise<void> {
+    if (this.sourceId('motion') !== null) await this.grantCapability('alarm_motion');
+  }
+
+  private async grantCapability(capabilityId: string): Promise<void> {
+    if (this.hasCapability(capabilityId)) return;
+    await this.addCapability(capabilityId).catch((err: unknown) => {
+      this.error(`Ajout de la capability ${capabilityId} :`, err);
+    });
   }
 
   private storedPresenceOverride(): PresenceOverride {
@@ -536,6 +573,8 @@ export default class VThermDevice extends Homey.Device {
     const previousId = this.sourceId(key);
     await this.setStoreValue(SOURCE_STORE_KEYS[key], deviceId);
     void this.refreshLinkedLabels();
+    // Avant le pas que déclenche la nouvelle liaison, pour la même raison que dans `onInit`.
+    if (key === 'motion') await this.grantMotionCapability();
 
     // `setSettings` ne rappelle pas `onSettings` : la config du participant est relue plus bas.
     // Son échec est journalisé sans interrompre : le contact est déjà rangé, et s'arrêter ici le
