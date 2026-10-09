@@ -219,6 +219,9 @@ export default class CentralDevice extends Homey.Device {
   /** Re-désigne le relais de chaudière quand il a changé d'identifiant (risque n°12 du PLAN). */
   async rebindBoiler(deviceId: string | null): Promise<void> {
     await this.setStoreValue(BOILER_STORE_KEY, deviceId);
+    // Attendu, et avant toute sortie anticipée : sans ça le réglage garde « introuvable » jusqu'au
+    // prochain démarrage, et une réparation réussie se lit comme une réparation ratée.
+    await this.refreshLinkedLabels();
 
     const participant = this.participant;
     if (participant === null || !this.registered) return;

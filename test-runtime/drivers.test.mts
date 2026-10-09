@@ -478,3 +478,32 @@ test('le premier appareil central est créé, avec le relais désigné', async (
 
   assert.equal(created.store.boilerId, 'relais');
 });
+
+// --- Appareil central : la réparation ---------------------------------------------
+
+const { default: CentralDevice } = await import('../drivers/central/device.mjs');
+
+test('la réparation du relais met à jour le libellé « Liens » sans attendre un redémarrage', async () => {
+  const relais = summaryOf({
+    id: 'relais-neuf', name: 'Chaudière contact', deviceClass: 'socket', capabilities: ['onoff'], setable: ['onoff'],
+  });
+  const app = newApp([relais]);
+  const store: Record<string, unknown> = { boilerId: 'relais-disparu' };
+  const written: Record<string, unknown>[] = [];
+  const device = withHomey(Object.create(CentralDevice.prototype) as object, app, {
+    participant: null,
+    getStoreValue: (key: string) => store[key],
+    setStoreValue: async (key: string, value: unknown) => { store[key] = value; },
+    setSettings: async (settings: Record<string, unknown>) => { written.push(settings); },
+    error: () => {},
+  }) as unknown as { rebindBoiler(deviceId: string | null): Promise<void> };
+
+  await device.rebindBoiler('relais-neuf');
+
+  assert.equal(store.boilerId, 'relais-neuf');
+  assert.deepEqual(
+    written.at(-1),
+    { linked_devices: 'settings.linked.boiler : Chaudière contact' },
+    'sans ça le réglage affiche « introuvable » jusqu\'au prochain démarrage de l\'app : la réparation a l\'air ratée',
+  );
+});
