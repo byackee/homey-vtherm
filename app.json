@@ -1116,7 +1116,8 @@
         "vtherm_regulated_setpoint",
         "vtherm_power_percent",
         "vtherm_valve_open",
-        "vtherm_slope"
+        "vtherm_slope",
+        "vtherm_presence"
       ],
       "capabilitiesOptions": {
         "target_temperature": {
@@ -1146,9 +1147,9 @@
         },
         "alarm_motion": {
           "title": {
-            "en": "Presence",
-            "fr": "Présence",
-            "nl": "Aanwezigheid"
+            "en": "Motion",
+            "fr": "Mouvement",
+            "nl": "Beweging"
           }
         }
       },
@@ -1361,9 +1362,9 @@
                 "nl": "Gebruikt als niemand thuis is"
               },
               "hint": {
-                "en": "When the presence sensor reports an empty home, each preset falls back to the temperature below instead of its normal one. The preset shown on the tile does not change — only what the thermostat aims for. Without a presence sensor, these values are never used.",
-                "fr": "Quand le capteur de présence indique un logement vide, chaque preset se rabat sur la température ci-dessous au lieu de la sienne. Le preset affiché sur la tuile ne change pas — seule la cible change. Sans capteur de présence, ces valeurs ne servent jamais.",
-                "nl": "Als de aanwezigheidssensor een leeg huis meldt, valt elk preset terug op de onderstaande temperatuur. Het getoonde preset verandert niet. Zonder aanwezigheidssensor blijven deze ongebruikt."
+                "en": "When nobody is home — reported by the presence sensor, or forced by the Flow card “Force the presence state” — each preset falls back to the temperature below instead of its normal one. The preset shown on the tile does not change — only what the thermostat aims for, and the “Someone home” tile. Manual mode keeps its own setpoint and ignores absence.",
+                "fr": "Quand personne n'est là — selon le capteur de présence, ou forcé par la carte Flow « Forcer l'état de présence » —, chaque preset se rabat sur la température ci-dessous au lieu de la sienne. Le preset affiché sur la tuile ne change pas — seules la cible et la tuile « Quelqu'un présent » changent. Le mode Manuel garde sa propre consigne et ignore l'absence.",
+                "nl": "Als niemand thuis is — volgens de aanwezigheidssensor, of geforceerd met de Flow-kaart „Aanwezigheid forceren” — valt elk preset terug op de onderstaande temperatuur. Het getoonde preset verandert niet, alleen het doel en de tegel „Iemand thuis”. De handmatige modus houdt zijn eigen setpoint en negeert afwezigheid."
               }
             },
             {
@@ -1379,8 +1380,8 @@
               "max": 30,
               "step": 0.5,
               "hint": {
-                "en": "Used instead of the preset temperature when the presence sensor reports nobody home. The preset shown does not change.",
-                "fr": "Utilisée à la place de la température du preset quand le capteur de présence indique une absence. Le preset affiché ne change pas.",
+                "en": "Used instead of the preset temperature when nobody is home, by sensor or by Flow. The preset shown does not change.",
+                "fr": "Utilisée à la place de la température du preset en cas d'absence, par capteur ou par Flow. Le preset affiché ne change pas.",
                 "nl": "Gebruikt in plaats van de preset-temperatuur wanneer niemand thuis is. Het getoonde preset verandert niet."
               },
               "units": {
@@ -2732,6 +2733,34 @@
       "decimals": 0,
       "insights": true,
       "icon": "/assets/capabilities/vtherm_power_percent.svg"
+    },
+    "vtherm_presence": {
+      "type": "boolean",
+      "title": {
+        "en": "Someone home",
+        "fr": "Quelqu'un présent",
+        "nl": "Iemand thuis"
+      },
+      "desc": {
+        "en": "The presence the thermostat is acting on: the presence sensor, or the state forced by a Flow. Without a sensor or a Flow, the home counts as occupied.",
+        "fr": "La présence sur laquelle le thermostat agit : celle du capteur de présence, ou celle forcée par un Flow. Sans capteur ni Flow, le logement compte comme occupé.",
+        "nl": "De aanwezigheid waarop de thermostaat handelt: die van de aanwezigheidssensor, of die door een Flow geforceerd. Zonder sensor of Flow geldt het huis als bewoond."
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "insights": true,
+      "insightsTitleTrue": {
+        "en": "Someone came home",
+        "fr": "Quelqu'un est arrivé",
+        "nl": "Iemand kwam thuis"
+      },
+      "insightsTitleFalse": {
+        "en": "Everyone left",
+        "fr": "Tout le monde est parti",
+        "nl": "Iedereen is vertrokken"
+      },
+      "icon": "/assets/capabilities/vtherm_presence.svg"
     },
     "vtherm_preset": {
       "type": "enum",

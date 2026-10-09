@@ -62,6 +62,13 @@ const RESTART_ONLY_SETTINGS: readonly string[] = ['regulation_dtemp', 'regulatio
 
 const MS_PER_MINUTE = 60_000;
 
+/**
+ * Le forçage de présence survit au redémarrage : un « absent » posé par un Flow de départ en
+ * vacances qui s'évapore à la mise à jour de l'app rallumerait le chauffage d'une maison vide, et
+ * le Flow de retour, lui, ne viendrait pas avant des jours.
+ */
+const PRESENCE_OVERRIDE_STORE_KEY = 'presenceOverride';
+
 export default class VThermDevice extends Homey.Device {
 
   private participant: VThermParticipant | null = null;
@@ -103,6 +110,7 @@ export default class VThermDevice extends Homey.Device {
     const app = this.app;
     const hub = app.hub;
     const config = this.readConfig();
+    this.presenceOverride = this.storedPresenceOverride();
     const settings = this.settings;
 
     for (const key of ['room', 'outdoor', 'window', 'motion', 'presence'] as const) {
@@ -149,6 +157,8 @@ export default class VThermDevice extends Homey.Device {
       nowMs: Date.now(),
     });
 
+    if (this.presenceOverride !== 'auto') this.participant.forcePresence(this.presenceOverride);
+
     this.registerListeners();
 
     app.registerVTherm(this.participant);
@@ -165,6 +175,14 @@ export default class VThermDevice extends Homey.Device {
     // Availability). Un thermostat appairé sans émetteur est marqué indisponible plus haut, et cet
     // état survit au redémarrage — l'écriture partait donc dans le vide au démarrage suivant,
     // c'est-à-dire précisément quand l'utilisateur venait de lier son émetteur.
+    // Un thermostat appairé avant la tuile de présence ne l'aurait jamais : seul le pairing pose
+    // les capabilities. Même raison que `onoff` pour la placer après `setAvailable()`.
+    if (!this.hasCapability('vtherm_presence')) {
+      await this.addCapability('vtherm_presence').catch((err: unknown) => {
+        this.error('Ajout de la capability vtherm_presence :', err);
+      });
+    }
+
     if (typeof this.getCapabilityValue('onoff') !== 'boolean') {
       await this.setCapabilityValue('onoff', true).catch((err: unknown) => {
         this.error('Initialisation de onoff :', err);
@@ -377,9 +395,16 @@ export default class VThermDevice extends Homey.Device {
     this.requireParticipant().setWindowBypass(bypass);
   }
 
-  applyPresenceOverride(override: PresenceOverride): void {
+  async applyPresenceOverride(override: PresenceOverride): Promise<void> {
+    const participant = this.requireParticipant();
     this.presenceOverride = override;
-    this.requireParticipant().forcePresence(override);
+    participant.forcePresence(override);
+    await this.setStoreValue(PRESENCE_OVERRIDE_STORE_KEY, override);
+  }
+
+  private storedPresenceOverride(): PresenceOverride {
+    const value: unknown = this.getStoreValue(PRESENCE_OVERRIDE_STORE_KEY);
+    return value === 'home' || value === 'away' ? value : 'auto';
   }
 
   /**

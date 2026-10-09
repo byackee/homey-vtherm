@@ -273,7 +273,7 @@ export default class VThermDriver extends Homey.Driver {
   private static readonly BASE_CAPABILITIES = [
     'onoff', 'target_temperature', 'measure_temperature',
     'vtherm_preset', 'vtherm_state',
-    'vtherm_regulated_setpoint', 'vtherm_power_percent', 'vtherm_slope',
+    'vtherm_regulated_setpoint', 'vtherm_power_percent', 'vtherm_slope', 'vtherm_presence',
   ] as const;
 
   private async buildDevice(
@@ -305,7 +305,8 @@ export default class VThermDriver extends Homey.Driver {
 
     const capabilities: string[] = [...VThermDriver.BASE_CAPABILITIES];
     if (selection.get('window')) capabilities.push('alarm_contact');
-    if (selection.get('motion') || selection.get('presence')) capabilities.push('alarm_motion');
+    // Le mouvement seul : la présence a sa propre tuile, `vtherm_presence`, sur tout thermostat.
+    if (selection.get('motion')) capabilities.push('alarm_motion');
 
     // La pile n'est affichée que si une tête en rapporte une, l'ouverture que si une tête peut en
     // avoir une : un radiateur sur secteur n'a pas de pile, et une tuile vide sur un appareil
@@ -402,7 +403,7 @@ export default class VThermDriver extends Homey.Driver {
       async (args: { device: VThermDevice; presence: string }) => {
         const override = PRESENCE_OVERRIDES.find((value) => value === args.presence);
         if (override === undefined) throw new Error(this.homey.__('flow.error.unknown_presence'));
-        args.device.applyPresenceOverride(override);
+        await args.device.applyPresenceOverride(override);
       },
     );
 

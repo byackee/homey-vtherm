@@ -714,6 +714,10 @@ export function stepVTherm(
   if (config.motion.enabled) {
     capabilities.alarm_motion = motionState.confirmed;
   }
+  // Toujours publiée, capteur ou non : un forçage par Flow marche sans capteur de présence, et
+  // c'était la seule chose qu'il changeait sans le montrer nulle part. `null` (ni capteur ni
+  // forçage) vaut présent, comme pour la consigne : la tuile dit ce sur quoi la régulation agit.
+  capabilities.vtherm_presence = presence !== false;
 
   // === 16. Avertissement ===================================================
   //

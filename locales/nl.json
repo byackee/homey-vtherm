@@ -123,7 +123,7 @@
     },
     "test_host_has_credentials": "Zet geen gebruikersnaam of wachtwoord in het adres. Gebruik de twee velden hieronder: alleen die houden het wachtwoord uit het logboek.",
     "explain": {
-      "away_hint": "Als de aanwezigheidssensor een leeg huis meldt, valt elk preset terug op de onderstaande temperatuur. Het getoonde preset verandert niet. Zonder aanwezigheidssensor blijven deze ongebruikt.",
+      "away_hint": "Als niemand thuis is — volgens de aanwezigheidssensor, of geforceerd met de Flow-kaart „Aanwezigheid forceren” — valt elk preset terug op de onderstaande temperatuur. Het getoonde preset verandert niet, alleen het doel en de tegel „Iemand thuis”. De handmatige modus houdt zijn eigen setpoint en negeert afwezigheid.",
       "boiler_hint": "De app telt hoeveel verwarmingen warmte vragen en schakelt het relais. Een ketel die tegen gesloten kranen draait, bouwt druk op — controleer de eigen beveiligingen.",
       "central_hint": "Het apparaat CV-ketel heeft één schakelaar voor het hele huis en het relais dat uw ketel start. De twee instellingen hieronder bepalen of deze thermostaat die schakelaar volgt, en of zijn vraag meetelt om de ketel te starten.",
       "emitter_hint": "De app stuurt aan wat kan: een setpoint, een klepopening of een schakelaar. De klepinstellingen gelden alleen met de Zigbee2MQTT-backend.",

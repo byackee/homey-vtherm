@@ -1,0 +1,28 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Someone home",
+    "fr": "Quelqu'un présent",
+    "nl": "Iemand thuis"
+  },
+  "desc": {
+    "en": "The presence the thermostat is acting on: the presence sensor, or the state forced by a Flow. Without a sensor or a Flow, the home counts as occupied.",
+    "fr": "La présence sur laquelle le thermostat agit : celle du capteur de présence, ou celle forcée par un Flow. Sans capteur ni Flow, le logement compte comme occupé.",
+    "nl": "De aanwezigheid waarop de thermostaat handelt: die van de aanwezigheidssensor, of die door een Flow geforceerd. Zonder sensor of Flow geldt het huis als bewoond."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "insights": true,
+  "insightsTitleTrue": {
+    "en": "Someone came home",
+    "fr": "Quelqu'un est arrivé",
+    "nl": "Iemand kwam thuis"
+  },
+  "insightsTitleFalse": {
+    "en": "Everyone left",
+    "fr": "Tout le monde est parti",
+    "nl": "Iedereen is vertrokken"
+  },
+  "icon": "/assets/capabilities/vtherm_presence.svg"
+}
