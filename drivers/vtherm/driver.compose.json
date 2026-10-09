@@ -14,7 +14,8 @@
     "vtherm_regulated_setpoint",
     "vtherm_power_percent",
     "vtherm_valve_open",
-    "vtherm_slope"
+    "vtherm_slope",
+    "vtherm_presence"
   ],
   "capabilitiesOptions": {
     "target_temperature": {
@@ -44,9 +45,9 @@
     },
     "alarm_motion": {
       "title": {
-        "en": "Presence",
-        "fr": "Présence",
-        "nl": "Aanwezigheid"
+        "en": "Motion",
+        "fr": "Mouvement",
+        "nl": "Beweging"
       }
     }
   },

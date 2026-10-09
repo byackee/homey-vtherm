@@ -796,6 +796,18 @@ test('alarm_contact et alarm_motion ne sont publiées que si la source existe', 
   assert.equal(wired.capabilities.alarm_motion, false);
 });
 
+test('vtherm_presence publie la présence sur laquelle la régulation agit, capteur ou non', () => {
+  const publish = (presence: Reading<boolean> | null): unknown =>
+    stepVTherm(freshState(), inputs({ presence }), CONFIG, 0).outputs.capabilities.vtherm_presence;
+
+  // Ni capteur ni forçage : le logement compte comme occupé — la tuile doit exister quand même,
+  // c'est là qu'un forçage par Flow sans capteur devient visible.
+  assert.equal(publish(null), true);
+  assert.equal(publish(reading(false)), false, 'absent, par capteur ou par Flow');
+  assert.equal(publish(reading(true)), true);
+  assert.equal(publish(reading(false, 0, true)), true, 'une absence périmée ne vide pas le logement');
+});
+
 /** Série de mesures régulières à +0,6 °C/h : quatre points, le minimum pour publier une pente. */
 function climb(state: VThermState): VThermState {
   let current = state;

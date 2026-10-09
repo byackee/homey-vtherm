@@ -271,6 +271,18 @@ test('`alarm_contact` seulement si une fenêtre est désignée', async () => {
   const avec = await build(driver, { room: 'capteur', emitter: 'vanne', window: 'fenetre' });
   assert.ok(avec.capabilities.includes('alarm_contact'));
   assert.ok(!avec.capabilities.includes('alarm_motion'), 'aucun mouvement désigné');
+  assert.ok(sans.capabilities.includes('vtherm_presence'), 'un forçage par Flow marche sans capteur');
+});
+
+test('un détecteur de présence seul n\'ajoute pas la tuile « Mouvement »', async () => {
+  const mmwave = summaryOf({
+    id: 'mmwave', name: 'mmWave salon', deviceClass: 'sensor', capabilities: ['alarm_presence'],
+  });
+  const driver = vthermDriver(newApp([PIECE, VANNE, mmwave]));
+
+  const built = await build(driver, { room: 'capteur', emitter: 'vanne', presence: 'mmwave' });
+  assert.ok(!built.capabilities.includes('alarm_motion'), 'elle ne publie que le mouvement');
+  assert.ok(built.capabilities.includes('vtherm_presence'));
 });
 
 test('une fenêtre désignée au pairing règle la détection sur le capteur, dès la création', async () => {

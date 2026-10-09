@@ -1,0 +1,28 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Someone home",
+    "fr": "Quelqu'un présent",
+    "nl": "Iemand thuis"
+  },
+  "desc": {
+    "en": "Whether someone is home, for this thermostat: the presence sensor, or the state forced by a Flow. Without either, the home counts as occupied. What absence changes is set by the away temperatures in the device settings.",
+    "fr": "Si quelqu'un est là, pour ce thermostat : selon le capteur de présence, ou l'état forcé par un Flow. Sans l'un ni l'autre, le logement compte comme occupé. Ce que change l'absence se règle dans les températures d'absence de l'appareil.",
+    "nl": "Of er iemand thuis is, voor deze thermostaat: volgens de aanwezigheidssensor, of de door een Flow geforceerde staat. Zonder beide geldt het huis als bewoond. Wat afwezigheid verandert, stelt u in bij de afwezigheidstemperaturen van het apparaat."
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "insights": true,
+  "insightsTitleTrue": {
+    "en": "Someone came home",
+    "fr": "Quelqu'un est arrivé",
+    "nl": "Iemand kwam thuis"
+  },
+  "insightsTitleFalse": {
+    "en": "Everyone left",
+    "fr": "Tout le monde est parti",
+    "nl": "Iedereen is vertrokken"
+  },
+  "icon": "/assets/capabilities/vtherm_presence.svg"
+}

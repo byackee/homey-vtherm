@@ -62,6 +62,13 @@ const RESTART_ONLY_SETTINGS: readonly string[] = ['regulation_dtemp', 'regulatio
 
 const MS_PER_MINUTE = 60_000;
 
+/**
+ * Le forçage de présence survit au redémarrage : un « absent » posé par un Flow de départ en
+ * vacances qui s'évapore à la mise à jour de l'app rallumerait le chauffage d'une maison vide, et
+ * le Flow de retour, lui, ne viendrait pas avant des jours.
+ */
+const PRESENCE_OVERRIDE_STORE_KEY = 'presenceOverride';
+
 export default class VThermDevice extends Homey.Device {
 
   private participant: VThermParticipant | null = null;
@@ -103,6 +110,7 @@ export default class VThermDevice extends Homey.Device {
     const app = this.app;
     const hub = app.hub;
     const config = this.readConfig();
+    this.presenceOverride = this.storedPresenceOverride();
     const settings = this.settings;
 
     for (const key of ['room', 'outdoor', 'window', 'motion', 'presence'] as const) {
@@ -149,6 +157,8 @@ export default class VThermDevice extends Homey.Device {
       nowMs: Date.now(),
     });
 
+    if (this.presenceOverride !== 'auto') this.participant.forcePresence(this.presenceOverride);
+
     this.registerListeners();
 
     app.registerVTherm(this.participant);
@@ -165,6 +175,11 @@ export default class VThermDevice extends Homey.Device {
     // Availability). Un thermostat appairé sans émetteur est marqué indisponible plus haut, et cet
     // état survit au redémarrage — l'écriture partait donc dans le vide au démarrage suivant,
     // c'est-à-dire précisément quand l'utilisateur venait de lier son émetteur.
+    // Après `setAvailable()`, pour la même raison que `onoff` ci-dessous. L'ordre vis-à-vis du
+    // premier pas, lui, ne compte pas : une écriture ignorée faute de capability n'est pas
+    // mémorisée par le participant, et le pas suivant la refait.
+    await this.migrateCapabilities();
+
     if (typeof this.getCapabilityValue('onoff') !== 'boolean') {
       await this.setCapabilityValue('onoff', true).catch((err: unknown) => {
         this.error('Initialisation de onoff :', err);
@@ -218,8 +233,9 @@ export default class VThermDevice extends Homey.Device {
         return isCapValue(value) ? value : null;
       },
       setCapabilityValue: async (capabilityId, value) => {
-        if (!this.hasCapability(capabilityId)) return;
+        if (!this.hasCapability(capabilityId)) return false;
         await this.setCapabilityValue(capabilityId, value);
+        return true;
       },
       setWarning: async (message) => {
         await this.setWarning(message);
@@ -377,9 +393,55 @@ export default class VThermDevice extends Homey.Device {
     this.requireParticipant().setWindowBypass(bypass);
   }
 
-  applyPresenceOverride(override: PresenceOverride): void {
+  /**
+   * Le store D'ABORD : si l'écriture échoue, la carte Flow échoue sans avoir rien changé. Dans
+   * l'autre ordre, elle signalerait une erreur pour un forçage pourtant actif, qui disparaîtrait au
+   * redémarrage suivant.
+   */
+  async applyPresenceOverride(override: PresenceOverride): Promise<void> {
+    const participant = this.requireParticipant();
+    await this.setStoreValue(PRESENCE_OVERRIDE_STORE_KEY, override);
     this.presenceOverride = override;
-    this.requireParticipant().forcePresence(override);
+    participant.forcePresence(override);
+  }
+
+  /**
+   * Aligne les tuiles d'un thermostat appairé avant `vtherm_presence` : seul le pairing pose les
+   * capabilities.
+   *
+   * `alarm_motion` suit la source de mouvement, dans les deux sens. Elle était aussi posée pour un
+   * détecteur de PRÉSENCE seul, et un capteur délié la laissait figée sur sa dernière valeur : sans
+   * source, le noyau ne la publie plus, donc la tuile ment pour toujours. La retirer ne perd pas la
+   * courbe qui compte — celle du détecteur lui-même, dans ses propres Insights. Les tuiles
+   * d'émetteur, elles, portent un historique qui n'existe nulle part ailleurs.
+   */
+  private async migrateCapabilities(): Promise<void> {
+    await this.grantCapability('vtherm_presence');
+    await this.alignMotionCapability();
+  }
+
+  /** Appelée aussi à la re-liaison : un capteur lié ou délié par réparation change la tuile. */
+  private async alignMotionCapability(): Promise<void> {
+    if (this.sourceId('motion') !== null) {
+      await this.grantCapability('alarm_motion');
+      return;
+    }
+    if (!this.hasCapability('alarm_motion')) return;
+    await this.removeCapability('alarm_motion').catch((err: unknown) => {
+      this.error('Retrait de la capability alarm_motion :', err);
+    });
+  }
+
+  private async grantCapability(capabilityId: string): Promise<void> {
+    if (this.hasCapability(capabilityId)) return;
+    await this.addCapability(capabilityId).catch((err: unknown) => {
+      this.error(`Ajout de la capability ${capabilityId} :`, err);
+    });
+  }
+
+  private storedPresenceOverride(): PresenceOverride {
+    const value: unknown = this.getStoreValue(PRESENCE_OVERRIDE_STORE_KEY);
+    return value === 'home' || value === 'away' ? value : 'auto';
   }
 
   /**
@@ -511,6 +573,7 @@ export default class VThermDevice extends Homey.Device {
     const previousId = this.sourceId(key);
     await this.setStoreValue(SOURCE_STORE_KEYS[key], deviceId);
     void this.refreshLinkedLabels();
+    if (key === 'motion') await this.alignMotionCapability();
 
     // `setSettings` ne rappelle pas `onSettings` : la config du participant est relue plus bas.
     // Son échec est journalisé sans interrompre : le contact est déjà rangé, et s'arrêter ici le
@@ -766,12 +829,7 @@ export default class VThermDevice extends Homey.Device {
     const probes = await Promise.all(ids.map(async (id) => this.probe(id)));
 
     for (const capabilityId of emitterExtraCapabilities(probes)) {
-      if (this.hasCapability(capabilityId)) continue;
-      try {
-        await this.addCapability(capabilityId);
-      } catch (err) {
-        this.error(`Ajout de la capability ${capabilityId} :`, err);
-      }
+      await this.grantCapability(capabilityId);
     }
   }
 
