@@ -65,13 +65,15 @@ export const SOURCE_CAPABILITIES: Record<SourceKey, readonly string[]> = {
  *
  * Sur l'installation de référence, 38 appareils portent `onoff` — toutes les lampes comprises. Sans
  * ce filtre, la liste des émetteurs deviendrait un annuaire de la maison, dans lequel les quelques
- * appareils qui chauffent seraient introuvables. Seules ces quatre classes peuvent chauffer une
- * pièce : `socket` couvre les prises commutées, et `other` les relais que leur app ne classe pas.
+ * appareils qui chauffent seraient introuvables. Seules ces cinq classes peuvent chauffer une
+ * pièce : `socket` couvre les prises commutées, `other` les relais que leur app ne classe pas, et
+ * `remote` ceux que leur app classe comme télécommande, comme les commutateurs de l'app KNX
+ * d'Athom (`org.knx`).
  *
  * Une classe de trop est bien moins grave qu'une classe manquante — un émetteur absent de la liste
  * est inatteignable, alors qu'un intrus se contente d'occuper une ligne.
  */
-export const EMITTER_CLASSES: readonly string[] = ['thermostat', 'heater', 'socket', 'other'];
+export const EMITTER_CLASSES: readonly string[] = ['thermostat', 'heater', 'socket', 'other', 'remote'];
 
 // --- Groupe d'émetteurs ------------------------------------------------------
 
