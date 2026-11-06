@@ -40,6 +40,7 @@ laquelle. Un test dont on ne sait pas nommer la panne ne défend rien.
 | Fichier | Panne principale gardée |
 |---|---|
 | `hub.test.mts` | l'écriture avalée : `false` ne doit signifier QUE la déduplication |
+| `hubRealtime.test.mts` | la source désabonnée sans bruit par une reconnexion. Sur la vraie classe `Device` de `homey-api`, avec de vraies attentes très courtes : la panne vit dans ses promesses |
 | `centralParticipant.test.mts` | la chaudière jamais recommandée après un ordre perdu au démarrage |
 | `participants.test.mts` | le convecteur figé sur une mesure morte, le relais dévié jamais rallumé, la vanne figée après une coupure de dorsale, deux pas concurrents |
 | `emitter.test.mts` | la consigne écrite dans le vide, l'emballement par écho, la sortie qui laisse un convecteur allumé |

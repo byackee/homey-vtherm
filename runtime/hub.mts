@@ -65,6 +65,9 @@ const START_RETRY_MAX_MS = 5 * 60_000;
  */
 const REFRESH_MIN_INTERVAL_MS = 60_000;
 
+/** Délai avant de relâcher l'instance d'une liaison détruite, voir `Binding.destroy`. */
+const BINDING_RELEASE_DELAY_MS = 1_000;
+
 // --- Surface utilisée de homey-api ----------------------------------------
 
 interface ApiCapabilityObj {
@@ -326,7 +329,13 @@ class Binding implements SourceBinding {
     if (this.destroyed) return;
     this.destroyed = true;
     this.clearResubscribeTimer();
-    this.dropInstance();
+    /*
+     * Relâchée un peu plus tard, pas tout de suite : `destroy` puis `bind` sur le même appareil
+     * (source réparée, émetteur re-résolu) rejouerait sinon la panne décrite dans `attach`, et les
+     * deux liaisons ne se connaissent pas. La nouvelle instance a le temps de s'installer.
+     */
+    const lingering = setTimeout(() => this.dropInstance(), BINDING_RELEASE_DELAY_MS);
+    lingering.unref?.();
     this.device = null;
     this.hub.forget(this);
   }
@@ -340,12 +349,21 @@ class Binding implements SourceBinding {
 
     if (this.destroyed) return;
 
-    this.dropInstance();
-    this.device = device;
-
+    /*
+     * La nouvelle instance AVANT de détruire l'ancienne, jamais l'inverse.
+     *
+     * Détruire la dernière instance d'un appareil le désabonne. L'abonnement que demande aussitôt
+     * l'instance suivante voit alors celui qui se ferme encore, le croit valable et rend la main :
+     * l'appareil reste désabonné pour de bon, sans erreur. Or `reattachAll` repasse ici à chaque
+     * reconnexion. Un capteur dont on n'écoute qu'une capability — un contact, typiquement — ne
+     * prévenait plus de rien, et sa valeur n'arrivait plus qu'au recalcul périodique du thermostat
+     * (retour du forum, novembre 2026 : une fenêtre vue cinq minutes plus tard, ou pas du tout).
+     */
     const instance = device.makeCapabilityInstance(this.capabilityId, (value) => {
       this.onCapabilityValue(value);
     });
+    this.dropInstance();
+    this.device = device;
 
     // `DeviceCapability` s'auto-détruit en silence quand son device disparaît (app tierce
     // redémarrée, device ré-appairé) et émet `'destroy'` AVANT de retirer ses listeners : c'est
@@ -362,6 +380,9 @@ class Binding implements SourceBinding {
   }
 
   private onCapabilityValue(value: CapValue | null): void {
+    // L'instance survit un instant à la liaison, voir `destroy` : son appelant n'écoute plus.
+    if (this.destroyed) return;
+
     // Seul endroit du hub qui lit l'horloge : l'événement arrive hors de tout tick, il n'y a donc
     // pas de `nowMs` à recevoir. `runtime/` a le droit de lire l'horloge, `lib/` non.
     const firedAtMs = Date.now();

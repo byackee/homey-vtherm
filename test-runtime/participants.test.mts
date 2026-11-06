@@ -38,6 +38,7 @@ function noSources(room: FakeBinding): VThermSourceBindings {
 function world(
   mode: 'valve' | 'setpoint' | 'switch',
   extra: Partial<VThermSourceBindings> = {},
+  requestTick: (reason: string) => void = () => undefined,
 ): World {
   const host = new FakeDeviceHost('salon');
   const emitter = new FakeEmitter('emetteur-salon');
@@ -54,7 +55,7 @@ function world(
     syncMode: 'off',
     controlsBoiler: true,
     centralMode: () => 'auto',
-    requestTick: () => undefined,
+    requestTick,
     defaults: DEFAULTS,
     nowMs: 0,
   });
@@ -450,6 +451,55 @@ test('un pas en vol n\'en laisse pas démarrer un second sur le même appareil',
 
   assert.equal(emitter.switches.length, 1, 'une seule commande est partie');
   assert.equal(emitter.lastSwitch, true, 'celle du pas qui avait commencé');
+});
+
+test('un pas abandonné pendant une écriture lente est relancé, la fenêtre n\'attend pas le cycle', async () => {
+  const contact = new FakeBinding();
+  const ticks: string[] = [];
+  const { host, emitter, room, participant } = world('switch', { windowContact: contact }, (reason) => ticks.push(reason));
+  participant.updateConfig({ ...CONFIG, window: { ...CONFIG.window, mode: 'sensor', delaySec: 0 } });
+  ticks.length = 0;
+  contact.setReading(false, 0);
+  room.setReading(10, 0);
+
+  const reprendre = emitter.pause();
+  const premier = participant.tick(0);
+  await FakeHomey.flush();
+
+  // La fenêtre s'ouvre pendant que le relais met du temps à répondre : son pas est abandonné.
+  contact.setReading(true, 10_000);
+  await participant.tick(10_000);
+  assert.ok(host.logs.some((line) => line.includes('abandonné')));
+  assert.deepEqual(ticks, [], 'rien à relancer tant que l\'écriture n\'a pas rendu la main');
+
+  reprendre();
+  await premier;
+  assert.deepEqual(ticks, ['window-after-abandoned-tick'], 'la fenêtre est revue tout de suite');
+
+  // Les pas qui suivent voient la fenêtre, et n'en réclament pas d'autre : pas de boucle.
+  await participant.tick(11_000);
+  await participant.tick(12_000);
+  assert.equal(participant.windowOpen, true);
+  assert.deepEqual(ticks, ['window-after-abandoned-tick']);
+});
+
+test('un pas abandonné sans fenêtre qui bouge ne relance rien : une vanne morte n\'est pas réécrite', async () => {
+  const contact = new FakeBinding();
+  const ticks: string[] = [];
+  const { emitter, room, participant } = world('switch', { windowContact: contact }, (reason) => ticks.push(reason));
+  contact.setReading(false, 0);
+  room.setReading(10, 0);
+
+  const reprendre = emitter.pause();
+  const premier = participant.tick(0);
+  await FakeHomey.flush();
+
+  room.setReading(11, 10_000);
+  await participant.tick(10_000);
+
+  reprendre();
+  await premier;
+  assert.deepEqual(ticks, []);
 });
 
 // --- Sortie propre ---------------------------------------------------------------
