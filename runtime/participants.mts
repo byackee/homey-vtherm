@@ -348,6 +348,8 @@ export class VThermParticipant implements Tickable {
 
   /** Vrai pendant qu'un pas est en vol. Garde de réentrance, voir `tick`. */
   private ticking = false;
+  /** Un pas a été abandonné pendant que celui-ci écrivait : il est à relancer à la fin. */
+  private tickAbandoned = false;
 
   constructor(options: VThermParticipantOptions) {
     this.tickId = options.host.id;
@@ -420,8 +422,13 @@ export class VThermParticipant implements Tickable {
     // démarre, dix secondes plus tard. Les deux liraient puis écraseraient `this.state`,
     // `dutyCycle`, `lastWrite` et `lastPublished` : le second réécrirait par-dessus les décisions
     // du premier, et le premier viendrait ensuite ressusciter un état déjà périmé.
+    //
+    // Abandonné, pas oublié : ce pas portait peut-être une fenêtre qui vient de s'ouvrir, et son
+    // motif est déjà consommé. Sans relance, elle attendait le prochain cycle, cinq minutes par
+    // défaut, derrière une écriture lente vers un émetteur.
     if (this.ticking) {
       this.host.log('Pas précédent encore en cours : celui-ci est abandonné.');
+      this.tickAbandoned = true;
       return;
     }
     this.ticking = true;
@@ -429,6 +436,10 @@ export class VThermParticipant implements Tickable {
       await this.runTick(nowMs);
     } finally {
       this.ticking = false;
+      if (this.tickAbandoned) {
+        this.tickAbandoned = false;
+        this.requestTick('tick-abandoned');
+      }
     }
   }
 

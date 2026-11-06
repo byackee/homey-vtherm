@@ -95,6 +95,8 @@ interface ApiDevice {
   available: boolean;
   /** Dernier message reçu de l'appareil. Rafraîchi par `refresh()`, voir `SEEN_STABLE_MAX_MS`. */
   lastSeenAt?: unknown;
+  /** Idempotent : réutilise la souscription en place, ou la rétablit si elle a été perdue. */
+  connect(): Promise<void>;
   makeCapabilityInstance(
     capabilityId: string,
     listener: (value: CapValue | null) => void,
@@ -340,12 +342,21 @@ class Binding implements SourceBinding {
 
     if (this.destroyed) return;
 
-    this.dropInstance();
-    this.device = device;
-
+    /*
+     * La nouvelle instance AVANT de détruire l'ancienne, jamais l'inverse.
+     *
+     * Détruire la dernière instance d'un appareil le désabonne. L'abonnement que demande aussitôt
+     * l'instance suivante voit alors celui qui se ferme encore, le croit valable et rend la main :
+     * l'appareil reste désabonné pour de bon, sans erreur. Or `reattachAll` repasse ici à chaque
+     * reconnexion. Un capteur dont on n'écoute qu'une capability — un contact, typiquement — ne
+     * prévenait plus de rien, et sa valeur n'arrivait plus qu'au recalcul périodique du thermostat
+     * (retour du forum, novembre 2026 : une fenêtre vue cinq minutes plus tard, ou pas du tout).
+     */
     const instance = device.makeCapabilityInstance(this.capabilityId, (value) => {
       this.onCapabilityValue(value);
     });
+    this.dropInstance();
+    this.device = device;
 
     // `DeviceCapability` s'auto-détruit en silence quand son device disparaît (app tierce
     // redémarrée, device ré-appairé) et émet `'destroy'` AVANT de retirer ses listeners : c'est
@@ -359,6 +370,17 @@ class Binding implements SourceBinding {
 
     this.instance = instance;
     this.resubscribeDelayMs = RESUBSCRIBE_MIN_MS;
+  }
+
+  /**
+   * Rétablit l'abonnement de l'appareil s'il a été perdu. Sans effet quand il tient : `connect()`
+   * réutilise la souscription en place. C'est le filet de ce que l'ordre d'`attach` ne couvre pas,
+   * une ancienne liaison qui se désabonne pendant qu'une nouvelle s'abonne (contact re-désigné à la
+   * réparation) : aucune des deux ne connaît l'autre.
+   */
+  async reaffirmSubscription(): Promise<void> {
+    if (this.destroyed || this.instance === null) return;
+    await this.device?.connect();
   }
 
   private onCapabilityValue(value: CapValue | null): void {
@@ -724,6 +746,7 @@ export class HomeyApiHub {
       try {
         await api.devices.getDevices({ $cache: false, $updateCache: true });
         await this.reattachOrphans();
+        await Promise.allSettled([...this.bindings].map((binding) => binding.reaffirmSubscription()));
       } catch (err) {
         this.logError('refresh() a échoué :', err);
       }
