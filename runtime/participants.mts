@@ -348,8 +348,10 @@ export class VThermParticipant implements Tickable {
 
   /** Vrai pendant qu'un pas est en vol. Garde de réentrance, voir `tick`. */
   private ticking = false;
-  /** Un pas a été abandonné pendant que celui-ci écrivait : il est à relancer à la fin. */
-  private tickAbandoned = false;
+  /** Instant du dernier pas abandonné pendant que celui en vol écrivait, `null` s'il n'y en a pas. */
+  private abandonedAtMs: number | null = null;
+  /** Le contact de fenêtre tel que le dernier pas l'a lu. */
+  private windowContactSeen: boolean | undefined;
 
   constructor(options: VThermParticipantOptions) {
     this.tickId = options.host.id;
@@ -423,12 +425,10 @@ export class VThermParticipant implements Tickable {
     // `dutyCycle`, `lastWrite` et `lastPublished` : le second réécrirait par-dessus les décisions
     // du premier, et le premier viendrait ensuite ressusciter un état déjà périmé.
     //
-    // Abandonné, pas oublié : ce pas portait peut-être une fenêtre qui vient de s'ouvrir, et son
-    // motif est déjà consommé. Sans relance, elle attendait le prochain cycle, cinq minutes par
-    // défaut, derrière une écriture lente vers un émetteur.
+    // Une fenêtre qui a bougé pendant ce temps est relancée à la fin, voir `requestTickIfWindowMoved`.
     if (this.ticking) {
       this.host.log('Pas précédent encore en cours : celui-ci est abandonné.');
-      this.tickAbandoned = true;
+      this.abandonedAtMs = nowMs;
       return;
     }
     this.ticking = true;
@@ -436,11 +436,24 @@ export class VThermParticipant implements Tickable {
       await this.runTick(nowMs);
     } finally {
       this.ticking = false;
-      if (this.tickAbandoned) {
-        this.tickAbandoned = false;
-        this.requestTick('tick-abandoned');
-      }
+      this.requestTickIfWindowMoved();
     }
+  }
+
+  /**
+   * Le motif du pas abandonné est déjà consommé : sans relance, une fenêtre ouverte derrière une
+   * écriture lente attendait le prochain cycle, cinq minutes par défaut.
+   *
+   * Seul le contact relance, pas n'importe quel pas abandonné : une vanne morte qui met vingt
+   * secondes à échouer serait sinon réécrite dès qu'une sonde remonte une mesure, et sa demande
+   * retomberait à `unknown` d'autant plus souvent, ce qui peut couper la chaudière.
+   */
+  private requestTickIfWindowMoved(): void {
+    const atMs = this.abandonedAtMs;
+    if (atMs === null) return;
+    this.abandonedAtMs = null;
+    const value = readBoolean(this.sources.windowContact, atMs, FRESHNESS.windowContactMs)?.value;
+    if (value !== undefined && value !== this.windowContactSeen) this.requestTick('window-after-abandoned-tick');
   }
 
   private async runTick(nowMs: number): Promise<void> {
@@ -470,6 +483,7 @@ export class VThermParticipant implements Tickable {
     const roomTemp = readNumber(this.sources.room, nowMs, FRESHNESS.roomTempMs);
     const presence = this.resolvePresence(nowMs);
     const inputs = this.collectInputs(roomTemp, presence.reading, nowMs);
+    this.windowContactSeen = inputs.windowContact?.value;
 
     const { outputs, nextState } = stepVTherm(this.state, inputs, this.config, nowMs);
     this.state = nextState;

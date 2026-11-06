@@ -65,6 +65,9 @@ const START_RETRY_MAX_MS = 5 * 60_000;
  */
 const REFRESH_MIN_INTERVAL_MS = 60_000;
 
+/** Délai avant de relâcher l'instance d'une liaison détruite, voir `Binding.destroy`. */
+const BINDING_RELEASE_DELAY_MS = 1_000;
+
 // --- Surface utilisée de homey-api ----------------------------------------
 
 interface ApiCapabilityObj {
@@ -95,8 +98,6 @@ interface ApiDevice {
   available: boolean;
   /** Dernier message reçu de l'appareil. Rafraîchi par `refresh()`, voir `SEEN_STABLE_MAX_MS`. */
   lastSeenAt?: unknown;
-  /** Idempotent : réutilise la souscription en place, ou la rétablit si elle a été perdue. */
-  connect(): Promise<void>;
   makeCapabilityInstance(
     capabilityId: string,
     listener: (value: CapValue | null) => void,
@@ -328,7 +329,13 @@ class Binding implements SourceBinding {
     if (this.destroyed) return;
     this.destroyed = true;
     this.clearResubscribeTimer();
-    this.dropInstance();
+    /*
+     * Relâchée un peu plus tard, pas tout de suite : `destroy` puis `bind` sur le même appareil
+     * (source réparée, émetteur re-résolu) rejouerait sinon la panne décrite dans `attach`, et les
+     * deux liaisons ne se connaissent pas. La nouvelle instance a le temps de s'installer.
+     */
+    const lingering = setTimeout(() => this.dropInstance(), BINDING_RELEASE_DELAY_MS);
+    lingering.unref?.();
     this.device = null;
     this.hub.forget(this);
   }
@@ -372,18 +379,10 @@ class Binding implements SourceBinding {
     this.resubscribeDelayMs = RESUBSCRIBE_MIN_MS;
   }
 
-  /**
-   * Rétablit l'abonnement de l'appareil s'il a été perdu. Sans effet quand il tient : `connect()`
-   * réutilise la souscription en place. C'est le filet de ce que l'ordre d'`attach` ne couvre pas,
-   * une ancienne liaison qui se désabonne pendant qu'une nouvelle s'abonne (contact re-désigné à la
-   * réparation) : aucune des deux ne connaît l'autre.
-   */
-  async reaffirmSubscription(): Promise<void> {
-    if (this.destroyed || this.instance === null) return;
-    await this.device?.connect();
-  }
-
   private onCapabilityValue(value: CapValue | null): void {
+    // L'instance survit un instant à la liaison, voir `destroy` : son appelant n'écoute plus.
+    if (this.destroyed) return;
+
     // Seul endroit du hub qui lit l'horloge : l'événement arrive hors de tout tick, il n'y a donc
     // pas de `nowMs` à recevoir. `runtime/` a le droit de lire l'horloge, `lib/` non.
     const firedAtMs = Date.now();
@@ -746,7 +745,6 @@ export class HomeyApiHub {
       try {
         await api.devices.getDevices({ $cache: false, $updateCache: true });
         await this.reattachOrphans();
-        await Promise.allSettled([...this.bindings].map((binding) => binding.reaffirmSubscription()));
       } catch (err) {
         this.logError('refresh() a échoué :', err);
       }

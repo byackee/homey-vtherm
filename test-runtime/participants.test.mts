@@ -474,13 +474,32 @@ test('un pas abandonné pendant une écriture lente est relancé, la fenêtre n\
 
   reprendre();
   await premier;
-  assert.deepEqual(ticks, ['tick-abandoned'], 'la fenêtre est revue tout de suite');
+  assert.deepEqual(ticks, ['window-after-abandoned-tick'], 'la fenêtre est revue tout de suite');
 
   // Les pas qui suivent voient la fenêtre, et n'en réclament pas d'autre : pas de boucle.
   await participant.tick(11_000);
   await participant.tick(12_000);
   assert.equal(participant.windowOpen, true);
-  assert.deepEqual(ticks, ['tick-abandoned']);
+  assert.deepEqual(ticks, ['window-after-abandoned-tick']);
+});
+
+test('un pas abandonné sans fenêtre qui bouge ne relance rien : une vanne morte n\'est pas réécrite', async () => {
+  const contact = new FakeBinding();
+  const ticks: string[] = [];
+  const { emitter, room, participant } = world('switch', { windowContact: contact }, (reason) => ticks.push(reason));
+  contact.setReading(false, 0);
+  room.setReading(10, 0);
+
+  const reprendre = emitter.pause();
+  const premier = participant.tick(0);
+  await FakeHomey.flush();
+
+  room.setReading(11, 10_000);
+  await participant.tick(10_000);
+
+  reprendre();
+  await premier;
+  assert.deepEqual(ticks, []);
 });
 
 // --- Sortie propre ---------------------------------------------------------------

@@ -37,13 +37,17 @@ const live = new Set<Handlers>();
 let contact: RealDevice;
 const socketHandlers = new Map<string, () => void>();
 
-/** Le désabonnement fait un aller-retour réseau : c'est pendant ce temps que se joue la course. */
+/** Le registre réel se désabonne d'un coup ; un aller-retour réseau élargit la fenêtre de la course. */
+let slowUnsubscribe = true;
+/** Au-delà du délai de relâche de `Binding.destroy`. */
+const RELEASE_ELAPSED_MS = 1_100;
+
 const fakeHomeyApi = {
   async subscribe(_uri: string, handlers: Handlers): Promise<{ unsubscribe(): Promise<void> }> {
     live.add(handlers);
     return {
       async unsubscribe(): Promise<void> {
-        await new Promise((resolve) => setTimeout(resolve, 1));
+        if (slowUnsubscribe) await new Promise((resolve) => setTimeout(resolve, 1));
         live.delete(handlers);
       },
     };
@@ -152,23 +156,41 @@ test('plusieurs reconnexions de suite ne perdent ni n\'empilent d\'abonnement', 
   await hub.stop();
 });
 
-test('un abonnement perdu malgré tout est rétabli par le prochain rafraîchissement', async () => {
+for (const unsubscribe of ['synchrone', 'avec un aller-retour'] as const) {
+  test(`re-désigner le même contact le laisse abonné (désabonnement ${unsubscribe})`, async () => {
+    slowUnsubscribe = unsubscribe !== 'synchrone';
+    const hub = await startedHub();
+    // Source réparée : l'ancienne liaison est détruite, puis la nouvelle créée dans la foulée, et
+    // aucune des deux ne connaît l'autre.
+    const staleSeen: unknown[] = [];
+    const first = hub.bind('contact-1', 'alarm_contact', (reading) => staleSeen.push(reading.value));
+    await settle();
+    const seen: unknown[] = [];
+    first.destroy();
+    hub.bind('contact-1', 'alarm_contact', (reading) => seen.push(reading.value));
+    await settle(RELEASE_ELAPSED_MS);
+
+    assert.equal(live.size, 1, 'toujours abonné, une fois l\'ancienne instance relâchée');
+    contactMoves(true);
+    assert.deepEqual(seen, [true]);
+    assert.deepEqual(staleSeen, [], 'la liaison détruite ne prévient plus personne');
+
+    await hub.stop();
+  });
+}
+
+test('la dernière liaison détruite finit par désabonner l\'appareil : aucun abonnement ne fuit', async () => {
   const hub = await startedHub();
-  // Retirer le contact puis le re-désigner, à la réparation : l'ancienne liaison se désabonne
-  // pendant que la nouvelle s'abonne, et aucune des deux ne connaît l'autre.
-  const first = hub.bind('contact-1', 'alarm_contact');
-  await settle();
   const seen: unknown[] = [];
-  first.destroy();
-  hub.bind('contact-1', 'alarm_contact', (reading) => seen.push(reading.value));
+  const binding = hub.bind('contact-1', 'alarm_contact', (reading) => seen.push(reading.value));
   await settle();
 
-  await hub.refresh(Date.now());
-  await settle();
-
-  assert.equal(live.size, 1, 'de nouveau abonné');
+  binding.destroy();
   contactMoves(true);
-  assert.deepEqual(seen, [true]);
+  assert.deepEqual(seen, [], 'plus d\'avis dès la destruction, même si l\'instance survit un instant');
+
+  await settle(RELEASE_ELAPSED_MS);
+  assert.equal(live.size, 0);
 
   await hub.stop();
 });
