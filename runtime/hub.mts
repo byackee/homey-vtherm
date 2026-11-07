@@ -22,7 +22,7 @@ import {
 import { PolledFeed } from './polledFeed.mjs';
 
 import { computeStale, deviceReportedAtMs, resolveTimestamp, toEpochMs } from '../lib/freshness.mjs';
-import { valueFromHomey, valueToHomey } from '../lib/temperatureUnits.mjs';
+import { isFahrenheit, isTemperatureCapability, valueFromHomey, valueToHomey } from '../lib/temperatureUnits.mjs';
 import { shouldWrite } from '../lib/writePolicy.mjs';
 import type { CapValue, LastWrite, WriteOptions } from '../lib/writePolicy.mjs';
 import type { Reading } from '../lib/types.mjs';
@@ -245,6 +245,8 @@ class Binding implements SourceBinding {
   private detaching = false;
   private resubscribeTimer: NodeJS.Timeout | null = null;
   private resubscribeDelayMs = RESUBSCRIBE_MIN_MS;
+  /** Dernière unité déclarée, voir `declaredUnits`. */
+  private units: string | null | undefined;
 
   constructor(
     private readonly hub: HomeyApiHub,
@@ -295,7 +297,7 @@ class Binding implements SourceBinding {
         deviceSeenAtMs: toEpochMs(device.lastSeenAt),
       });
 
-      return { value: valueFromHomey(rawValue, capObj?.units), atMs: resolved.atMs, stale };
+      return { value: valueFromHomey(rawValue, this.declaredUnits(device)), atMs: resolved.atMs, stale };
     } catch {
       return null;
     }
@@ -316,7 +318,7 @@ class Binding implements SourceBinding {
 
     // `DeviceCapability.setValue` met aussi à jour `capabilitiesObj` en place, donc la lecture
     // suivante voit la valeur écrite sans attendre l'écho du websocket.
-    const sent = valueToHomey(value, device.capabilitiesObj?.[this.capabilityId]?.units);
+    const sent = valueToHomey(value, this.declaredUnits(device));
     if (this.instance !== null) {
       await this.instance.setValue(sent);
     } else {
@@ -327,6 +329,26 @@ class Binding implements SourceBinding {
     // une panne transitoire bloquerait la prochaine tentative pendant tout `minIntervalMs`.
     this.lastWrite = { value, atMs: opts.nowMs };
     return true;
+  }
+
+  /**
+   * L'unité que l'app de l'appareil DÉCLARE, pas celle de l'utilisateur : d'après le SDK, Homey ne
+   * convertit l'affichage que si `units` vaut `°C`, ce qui n'a de sens que si le champ décrit la
+   * valeur stockée. Non vérifié sur un compte impérial à ce jour, d'où la ligne de journal.
+   *
+   * Mémorisée parce que `capabilitiesObj` peut manquer un instant autour d'une reconnexion : écrire
+   * 20,5 vers un appareil en °F, c'est lui demander -6 °C.
+   */
+  private declaredUnits(device: ApiDevice): string | null | undefined {
+    if (!isTemperatureCapability(this.capabilityId)) return undefined;
+    const declared = device.capabilitiesObj?.[this.capabilityId]?.units;
+    if (declared !== undefined && declared !== this.units) {
+      this.units = declared;
+      if (isFahrenheit(declared)) {
+        this.hub.log(`${this.deviceId}/${this.capabilityId} déclaré en ${declared} : converti en °C.`);
+      }
+    }
+    return this.units;
   }
 
   destroy(): void {

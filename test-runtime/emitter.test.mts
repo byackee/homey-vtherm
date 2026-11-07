@@ -241,6 +241,11 @@ test('une valeur relue égale à la dernière envoyée est notre propre écho, p
   // Passée la fenêtre, une valeur différente est bien une consigne posée par quelqu'un d'autre.
   binding.setReading(21, ECHO_WINDOW_MS + 1_000);
   assert.equal(emitter.readSetpoint(ECHO_WINDOW_MS + 1_000)?.value, 21);
+
+  // Un thermostat en °F au degré entier garde 69 °F quand on lui envoie 20,5 °C. Sans tolérance,
+  // cet arrondi passait pour une divergence, réécrite toutes les 5 min sans jamais converger.
+  binding.setReading(20.56, ECHO_WINDOW_MS + 2_000);
+  assert.equal(emitter.readSetpoint(ECHO_WINDOW_MS + 2_000), null);
 });
 
 // --- Réaffirmer une consigne que la tête n'a pas gardée -------------------------

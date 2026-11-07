@@ -299,6 +299,45 @@ test('un appareil en °F est lu et commandé en °C, sans que le reste de l\'app
   }
 });
 
+test('l\'unité reste connue quand capabilitiesObj manque un instant', async () => {
+  const nowMs = 60_000;
+  relay.capabilities.push('target_temperature');
+  relay.capabilitiesObj.target_temperature = { value: 68, lastUpdated: nowMs, setable: true, units: '°F' };
+
+  const hub = newHub();
+  const setpoint = hub.bind(relay.id, 'target_temperature');
+  await hub.start();
+
+  try {
+    assert.equal(setpoint.read(nowMs, 60_000)?.value, 20);
+    delete relay.capabilitiesObj.target_temperature;
+    await setpoint.write(20.5, { nowMs });
+    assert.equal(relay.capabilitiesObj.target_temperature?.value, 68.9, 'jamais 20,5 vers un appareil en °F');
+  } finally {
+    await hub.stop();
+    relay.capabilities.splice(relay.capabilities.indexOf('target_temperature'), 1);
+    delete relay.capabilitiesObj.target_temperature;
+  }
+});
+
+test('une capability qui n\'est pas une température n\'est jamais convertie', async () => {
+  const nowMs = 60_000;
+  relay.capabilities.push('measure_battery');
+  relay.capabilitiesObj.measure_battery = { value: 50, lastUpdated: nowMs, setable: false, units: 'F' };
+
+  const hub = newHub();
+  const battery = hub.bind(relay.id, 'measure_battery');
+  await hub.start();
+
+  try {
+    assert.equal(battery.read(nowMs, 60_000)?.value, 50);
+  } finally {
+    await hub.stop();
+    relay.capabilities.splice(relay.capabilities.indexOf('measure_battery'), 1);
+    delete relay.capabilitiesObj.measure_battery;
+  }
+});
+
 test('un appareil en °C reste lu et commandé tel quel', async () => {
   const nowMs = 60_000;
   relay.capabilities.push('target_temperature');

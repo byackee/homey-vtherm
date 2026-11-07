@@ -1,13 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isFahrenheit, valueFromHomey, valueToHomey } from '../lib/temperatureUnits.mjs';
+import { isFahrenheit, isTemperatureCapability, valueFromHomey, valueToHomey } from '../lib/temperatureUnits.mjs';
 
 test('les graphies du degré Fahrenheit sont reconnues, et rien d\'autre', () => {
-  for (const units of ['°F', '°f', ' °F ', '° F', 'ºF', '℉', 'F', 'fahrenheit']) {
+  for (const units of ['°F', '°f', ' °F ', '° F', 'ºF', '˚F', '℉', 'F', 'fahrenheit']) {
     assert.equal(isFahrenheit(units), true, String(units));
   }
   for (const units of ['°C', 'C', '℃', '%', 'W', '', null, undefined, 42]) {
     assert.equal(isFahrenheit(units), false, String(units));
+  }
+});
+
+test('seules les capabilities de température sont concernées', () => {
+  for (const id of ['measure_temperature', 'measure_temperature.local', 'target_temperature', 'target_temperature.local']) {
+    assert.equal(isTemperatureCapability(id), true, id);
+  }
+  for (const id of ['measure_temperature_offset', 'measure_battery', 'onoff', 'measure_capacitance']) {
+    assert.equal(isTemperatureCapability(id), false, id);
   }
 });
 
