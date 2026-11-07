@@ -312,7 +312,7 @@ test('l\'unité reste connue quand capabilitiesObj manque un instant', async () 
     assert.equal(setpoint.read(nowMs, 60_000)?.value, 20);
     delete relay.capabilitiesObj.target_temperature;
     await setpoint.write(20.5, { nowMs });
-    assert.equal(relay.capabilitiesObj.target_temperature?.value, 68.9, 'jamais 20,5 vers un appareil en °F');
+    assert.equal(relay.commutations.at(-1), 68.9, 'jamais 20,5 vers un appareil en °F');
   } finally {
     await hub.stop();
     relay.capabilities.splice(relay.capabilities.indexOf('target_temperature'), 1);
