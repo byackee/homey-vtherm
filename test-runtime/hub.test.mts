@@ -30,7 +30,7 @@ class FakeRelay {
   readonly zone = 'z1';
   readonly class = 'socket';
   readonly capabilities = ['onoff'];
-  readonly capabilitiesObj: Record<string, { value?: unknown; lastUpdated?: unknown; setable?: boolean }> = {
+  readonly capabilitiesObj: Record<string, { value?: unknown; lastUpdated?: unknown; setable?: boolean; units?: string }> = {
     onoff: { value: false, lastUpdated: new Date(0).toISOString(), setable: true },
   };
 
@@ -59,7 +59,12 @@ class FakeRelay {
   }
 
   private apply(capabilityId: string, value: CapValue): void {
-    this.capabilitiesObj[capabilityId] = { value, lastUpdated: new Date(0).toISOString(), setable: true };
+    this.capabilitiesObj[capabilityId] = {
+      ...this.capabilitiesObj[capabilityId],
+      value,
+      lastUpdated: new Date(0).toISOString(),
+      setable: true,
+    };
     this.commutations.push(value);
   }
 
@@ -259,6 +264,58 @@ test('`stop()` annule la reprise : rien ne redémarre après un arrêt', async (
   } finally {
     mock.timers.reset();
     failNextCreates = 0;
+  }
+});
+
+// --- Unités -----------------------------------------------------------------
+
+test('un appareil en °F est lu et commandé en °C, sans que le reste de l\'app le voie', async () => {
+  // Retour du forum : 72,8 °F pris pour 72,8 °C, un thermostat qui ne chauffe plus et affiche 163°.
+  const nowMs = 60_000;
+  relay.capabilities.push('measure_temperature', 'target_temperature');
+  relay.capabilitiesObj.measure_temperature = { value: 72.8, lastUpdated: nowMs, setable: false, units: '°F' };
+  relay.capabilitiesObj.target_temperature = { value: 68, lastUpdated: nowMs, setable: true, units: '°F' };
+
+  const hub = newHub();
+  const room = hub.bind(relay.id, 'measure_temperature');
+  const setpoint = hub.bind(relay.id, 'target_temperature');
+  await hub.start();
+
+  try {
+    assert.equal(room.read(nowMs, 60_000)?.value, 22.67);
+    assert.equal(setpoint.read(nowMs, 60_000)?.value, 20);
+
+    await setpoint.write(20.5, { nowMs });
+    assert.equal(relay.capabilitiesObj.target_temperature?.value, 68.9, 'l\'appareil reçoit des °F');
+    // Le faux appareil date ses écritures de l'époque 0, que le hub refuse de dater à raison.
+    relay.capabilitiesObj.target_temperature = { value: 68.9, lastUpdated: nowMs, setable: true, units: '°F' };
+    assert.equal(setpoint.read(nowMs, 60_000)?.value, 20.5, 'et l\'app relit ce qu\'elle a écrit');
+  } finally {
+    await hub.stop();
+    for (const id of ['measure_temperature', 'target_temperature']) {
+      relay.capabilities.splice(relay.capabilities.indexOf(id), 1);
+      delete relay.capabilitiesObj[id];
+    }
+  }
+});
+
+test('un appareil en °C reste lu et commandé tel quel', async () => {
+  const nowMs = 60_000;
+  relay.capabilities.push('target_temperature');
+  relay.capabilitiesObj.target_temperature = { value: 19, lastUpdated: nowMs, setable: true, units: '°C' };
+
+  const hub = newHub();
+  const setpoint = hub.bind(relay.id, 'target_temperature');
+  await hub.start();
+
+  try {
+    assert.equal(setpoint.read(nowMs, 60_000)?.value, 19);
+    await setpoint.write(20.5, { nowMs });
+    assert.equal(relay.capabilitiesObj.target_temperature?.value, 20.5);
+  } finally {
+    await hub.stop();
+    relay.capabilities.splice(relay.capabilities.indexOf('target_temperature'), 1);
+    delete relay.capabilitiesObj.target_temperature;
   }
 });
 

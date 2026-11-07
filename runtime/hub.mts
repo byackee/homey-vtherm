@@ -22,6 +22,7 @@ import {
 import { PolledFeed } from './polledFeed.mjs';
 
 import { computeStale, deviceReportedAtMs, resolveTimestamp, toEpochMs } from '../lib/freshness.mjs';
+import { valueFromHomey, valueToHomey } from '../lib/temperatureUnits.mjs';
 import { shouldWrite } from '../lib/writePolicy.mjs';
 import type { CapValue, LastWrite, WriteOptions } from '../lib/writePolicy.mjs';
 import type { Reading } from '../lib/types.mjs';
@@ -76,6 +77,8 @@ interface ApiCapabilityObj {
   lastUpdated?: unknown;
   setable?: boolean;
   getable?: boolean;
+  /** L'unité déclarée par l'app de l'appareil, voir `lib/temperatureUnits.mts`. */
+  units?: string | null;
 }
 
 interface ApiDeviceCapability {
@@ -292,7 +295,7 @@ class Binding implements SourceBinding {
         deviceSeenAtMs: toEpochMs(device.lastSeenAt),
       });
 
-      return { value: rawValue, atMs: resolved.atMs, stale };
+      return { value: valueFromHomey(rawValue, capObj?.units), atMs: resolved.atMs, stale };
     } catch {
       return null;
     }
@@ -313,10 +316,11 @@ class Binding implements SourceBinding {
 
     // `DeviceCapability.setValue` met aussi à jour `capabilitiesObj` en place, donc la lecture
     // suivante voit la valeur écrite sans attendre l'écho du websocket.
+    const sent = valueToHomey(value, device.capabilitiesObj?.[this.capabilityId]?.units);
     if (this.instance !== null) {
-      await this.instance.setValue(value);
+      await this.instance.setValue(sent);
     } else {
-      await device.setCapabilityValue({ capabilityId: this.capabilityId, value });
+      await device.setCapabilityValue({ capabilityId: this.capabilityId, value: sent });
     }
 
     // Enregistré APRÈS l'appel : un échec ne doit pas armer le garde-fou d'intervalle, sans quoi
