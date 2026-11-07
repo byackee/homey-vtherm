@@ -110,6 +110,11 @@ supplément, pas une béquille.
 | Capteur de mouvement | non | `alarm_motion` — preset Activité |
 | Capteur de présence | non | `alarm_presence`/`alarm_occupancy`/`alarm_motion` global au logement ; ou **Présence de Homey** (voir sous le tableau) |
 
+**Unités.** Tout le noyau raisonne en °C. Une capability dont l'app déclare `units` en °F est
+convertie par le hub, à la lecture comme à l'écriture : le reste de l'app ne le voit pas. Une app qui
+publie des °F sans le déclarer reste indiscernable d'une pièce très chaude. Code :
+`lib/temperatureUnits.mts`, `runtime/hub.mts`.
+
 **Météo de Homey.** La liste du capteur extérieur propose en tête « Météo de Homey (internet) » :
 la température de `ManagerWeather.getWeather()` pour l'emplacement du Homey. Elle est stockée sous
 l'identifiant réservé `homey:weather` et liée par le hub comme un capteur `measure_temperature` —

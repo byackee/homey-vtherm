@@ -187,6 +187,13 @@ export const SETPOINT_REASSERT_MIN_MS = 5 * 60_000;
 /** Chaque canal a sa propre mémoire d'écriture : un écho de consigne n'est pas un écho de vanne. */
 type WriteChannel = 'setpoint' | 'valve' | 'externalTemp' | 'calibration' | 'switch';
 
+/**
+ * Écart sous lequel une consigne relue reste notre écho. Un thermostat en °F arrondit souvent au degré
+ * entier : 20,5 °C partent en 68,9 °F, reviennent en 69 °F, soit 20,56 °C. Une égalité stricte y
+ * voyait une divergence, réécrite toutes les 5 min sans jamais converger. Reste sous le pas de 0,5 °C.
+ */
+const SETPOINT_ECHO_TOLERANCE_C = 0.3;
+
 /** Ordre de préférence : la sous-capability d'abord, l'identifiant nu en repli. */
 const SETPOINT_CANDIDATES = ['target_temperature.local', 'target_temperature'] as const;
 const SWITCH_CANDIDATES = ['onoff'] as const;
@@ -632,7 +639,7 @@ export class HomeyEmitterAdapter implements EmitterAdapter {
 
     const last = this.lastSent.get('setpoint');
     if (last !== undefined) {
-      if (last.value === reading.value) return null;
+      if (typeof last.value === 'number' && Math.abs(last.value - reading.value) < SETPOINT_ECHO_TOLERANCE_C) return null;
       if (nowMs - last.atMs < ECHO_WINDOW_MS) return null;
     }
     return reading;
